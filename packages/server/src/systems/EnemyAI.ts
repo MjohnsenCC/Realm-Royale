@@ -3,13 +3,14 @@ import { Enemy } from "../schemas/Enemy";
 import { Player } from "../schemas/Player";
 import { ShootingPatternSystem } from "./ShootingPatternSystem";
 import {
+  EnemyType,
   EnemyAIState,
-  ARENA_WIDTH,
-  ARENA_HEIGHT,
+  ShootingPatternType,
   ENEMY_DEFS,
   distanceBetween,
   angleBetween,
   clamp,
+  getZoneDimensions,
 } from "@rotmg-lite/shared";
 import type { EnemyDefinition } from "@rotmg-lite/shared";
 
@@ -29,6 +30,14 @@ export class EnemyAI {
 
       const def = ENEMY_DEFS[enemy.enemyType];
       if (!def) return;
+
+      // Boss phase transitions
+      if (enemy.isBoss && enemy.bossPhase === 1) {
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio <= 0.5) {
+          enemy.bossPhase = 2;
+        }
+      }
 
       switch (enemy.aiState) {
         case EnemyAIState.Idle:
@@ -72,13 +81,11 @@ export class EnemyAI {
     );
 
     if (distToIdleTarget < 10) {
-      // Reached idle target — pause and pick new one
       enemy.idlePauseTimer = 1000 + Math.random() * 2000;
       this.pickNewIdleTarget(enemy);
       return;
     }
 
-    // Move toward idle target at 30% speed
     const angle = angleBetween(
       enemy.x,
       enemy.y,
@@ -87,27 +94,27 @@ export class EnemyAI {
     );
     enemy.x += Math.cos(angle) * def.speed * 0.3 * dt;
     enemy.y += Math.sin(angle) * def.speed * 0.3 * dt;
-    this.clampToArena(enemy, def);
+    this.clampToZone(enemy, def);
   }
 
   private updateAggro(
     enemy: Enemy,
     def: EnemyDefinition,
     dt: number,
-    deltaTimeMs: number,
+    _deltaTimeMs: number,
     state: GameState,
     shootingSystem: ShootingPatternSystem
   ): void {
     const target = state.players.get(enemy.targetPlayerId);
 
-    // Validate target
-    if (!target || !target.alive || target.zone !== "hostile") {
+    // Validate target — must be alive and in same zone
+    if (!target || !target.alive || target.zone !== enemy.zone) {
       enemy.aiState = EnemyAIState.Returning;
       enemy.targetPlayerId = "";
       return;
     }
 
-    // Check leash range (distance from spawn)
+    // Check leash range
     const distFromSpawn = distanceBetween(
       enemy.x,
       enemy.y,
@@ -120,20 +127,23 @@ export class EnemyAI {
       return;
     }
 
-    // Move toward target — maintain some distance for shooting
+    // Get effective def (boss phase overrides)
+    const effectiveDef = this.getBossOverrideDef(enemy, def);
+
+    // Move toward target
     const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
-    if (distToTarget > def.aggroRange * 0.5) {
+    if (distToTarget > effectiveDef.aggroRange * 0.5) {
       const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
-      enemy.x += Math.cos(angle) * def.speed * dt;
-      enemy.y += Math.sin(angle) * def.speed * dt;
-      this.clampToArena(enemy, def);
+      enemy.x += Math.cos(angle) * effectiveDef.speed * dt;
+      enemy.y += Math.sin(angle) * effectiveDef.speed * dt;
+      this.clampToZone(enemy, def);
     }
 
     // Shoot
     const now = Date.now();
-    if (now - enemy.lastShootTime >= def.shootCooldown) {
+    if (now - enemy.lastShootTime >= effectiveDef.shootCooldown) {
       enemy.lastShootTime = now;
-      shootingSystem.executePattern(enemy, target, def, state);
+      shootingSystem.executePattern(enemy, target, effectiveDef, state);
     }
   }
 
@@ -158,7 +168,6 @@ export class EnemyAI {
       return;
     }
 
-    // Check for re-aggro while returning
     const target = this.findPlayerInRange(enemy, def.aggroRange * 0.7, state);
     if (target) {
       enemy.aiState = EnemyAIState.Aggro;
@@ -166,11 +175,10 @@ export class EnemyAI {
       return;
     }
 
-    // Move toward spawn at full speed
     const angle = angleBetween(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
     enemy.x += Math.cos(angle) * def.speed * dt;
     enemy.y += Math.sin(angle) * def.speed * dt;
-    this.clampToArena(enemy, def);
+    this.clampToZone(enemy, def);
   }
 
   private findPlayerInRange(
@@ -182,7 +190,7 @@ export class EnemyAI {
     let nearestDist = Infinity;
 
     state.players.forEach((player) => {
-      if (!player.alive || player.zone !== "hostile") return;
+      if (!player.alive || player.zone !== enemy.zone) return;
       const dist = distanceBetween(enemy.x, enemy.y, player.x, player.y);
       if (dist < range && dist < nearestDist) {
         nearestDist = dist;
@@ -200,9 +208,10 @@ export class EnemyAI {
     enemy.idleTargetY = enemy.spawnY + Math.sin(angle) * dist;
   }
 
-  private clampToArena(enemy: Enemy, def: EnemyDefinition): void {
-    enemy.x = clamp(enemy.x, def.radius, ARENA_WIDTH - def.radius);
-    enemy.y = clamp(enemy.y, def.radius, ARENA_HEIGHT - def.radius);
+  private clampToZone(enemy: Enemy, def: EnemyDefinition): void {
+    const dims = getZoneDimensions(enemy.zone);
+    enemy.x = clamp(enemy.x, def.radius, dims.width - def.radius);
+    enemy.y = clamp(enemy.y, def.radius, dims.height - def.radius);
   }
 
   private isNearAnyPlayer(
@@ -213,11 +222,58 @@ export class EnemyAI {
     let near = false;
     state.players.forEach((player) => {
       if (near) return;
-      if (!player.alive || player.zone !== "hostile") return;
+      if (!player.alive || player.zone !== enemy.zone) return;
       if (distanceBetween(enemy.x, enemy.y, player.x, player.y) < range) {
         near = true;
       }
     });
     return near;
+  }
+
+  /** Override enemy definition for bosses based on their current phase. */
+  private getBossOverrideDef(
+    enemy: Enemy,
+    baseDef: EnemyDefinition
+  ): EnemyDefinition {
+    if (!enemy.isBoss || enemy.bossPhase === 0) return baseDef;
+
+    if (enemy.enemyType === EnemyType.MoltenWyrm) {
+      if (enemy.bossPhase === 1) {
+        const useSpiral =
+          Math.floor(enemy.spiralAngleOffset * 3) % 2 === 0;
+        return {
+          ...baseDef,
+          shootingPattern: useSpiral
+            ? ShootingPatternType.Spiral5
+            : ShootingPatternType.BurstRing12,
+        };
+      } else {
+        return {
+          ...baseDef,
+          shootCooldown: 500,
+          shootingPattern: ShootingPatternType.BurstRing16,
+          projectileDamage: 28,
+          speed: 55,
+        };
+      }
+    }
+
+    if (enemy.enemyType === EnemyType.TheArchitect) {
+      if (enemy.bossPhase === 1) {
+        return {
+          ...baseDef,
+          shootingPattern: ShootingPatternType.Spiral8,
+        };
+      } else {
+        return {
+          ...baseDef,
+          shootCooldown: 650,
+          shootingPattern: ShootingPatternType.BurstRing16,
+          projectileDamage: 30,
+        };
+      }
+    }
+
+    return baseDef;
   }
 }

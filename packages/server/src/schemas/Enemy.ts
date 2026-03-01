@@ -19,4 +19,10 @@ export class Enemy extends Schema {
   idlePauseTimer: number = 0;
   spiralAngleOffset: number = 0;
   lastShootTime: number = 0;
+
+  // Zone and boss tracking (server-only)
+  zone: string = "hostile";
+  bossPhase: number = 0; // 0=not boss, 1=phase1, 2=phase2
+  isBoss: boolean = false;
+  lastMinionSpawnTime: number = 0;
 }

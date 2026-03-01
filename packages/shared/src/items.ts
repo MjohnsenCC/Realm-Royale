@@ -1,5 +1,6 @@
 import {
   ItemCategory,
+  ItemTier,
   WeaponSubtype,
   AbilitySubtype,
   BagRarity,
@@ -36,6 +37,8 @@ export interface WeaponStats {
   shootCooldown: number;
   projectileSpeed: number;
   projectileSize: number;
+  projectileCount?: number;
+  spreadAngle?: number;
 }
 
 export interface AbilityStats {
@@ -46,10 +49,13 @@ export interface AbilityStats {
   manaCost: number;
   cooldown: number;
   piercing: boolean;
+  speedBoostAmount?: number;
+  speedBoostDuration?: number;
 }
 
 export interface ArmorStats {
   maxHpBonus: number;
+  manaRegenBonus?: number;
 }
 
 export interface RingStats {
@@ -58,6 +64,7 @@ export interface RingStats {
   hpRegenBonus: number;
   maxHpBonus: number;
   maxManaBonus: number;
+  projSpeedBonus?: number;
 }
 
 export interface ItemDefinition {
@@ -84,10 +91,15 @@ const TIER_COLORS: Record<number, number> = {
   4: 0xcc44cc, // Purple
   5: 0xffaa22, // Orange
   6: 0xffdd00, // Gold
+  7: 0x00ffff, // Cyan (UT)
 };
 
 export function getTierColor(tier: number): number {
   return TIER_COLORS[tier] ?? 0x888888;
+}
+
+export function isUTItem(itemId: number): boolean {
+  return getItemTier(itemId) === ItemTier.UT;
 }
 
 // --- Item Definitions ---
@@ -282,6 +294,40 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "A fragment of a fallen star.",
     ringStats: { speedBonus: 22, damageBonus: 16, hpRegenBonus: 4.0, maxHpBonus: 40, maxManaBonus: 40 },
   },
+
+  // ===== UT ITEMS (tier=7, unique) =====
+  [makeItemId(0, 0, 7)]: {
+    id: 7, name: "Doom Blade", category: 0, subtype: 0, tier: 7,
+    color: 0x00cccc, tierColor: TIER_COLORS[7],
+    description: "An accursed blade that fractures reality into three slashes.",
+    weaponStats: {
+      damage: 55, range: 170, shootCooldown: 350,
+      projectileSpeed: 420, projectileSize: 14,
+      projectileCount: 3, spreadAngle: Math.PI / 6,
+    },
+  },
+  [makeItemId(1, 0, 7)]: {
+    id: 107, name: "Phantom Quiver", category: 1, subtype: 0, tier: 7,
+    color: 0x00cccc, tierColor: TIER_COLORS[7],
+    description: "Spectral arrows grant otherworldly swiftness.",
+    abilityStats: {
+      damage: 120, range: 500, projectileSpeed: 700, projectileSize: 14,
+      manaCost: 45, cooldown: 1200, piercing: true,
+      speedBoostAmount: 80, speedBoostDuration: 3000,
+    },
+  },
+  [makeItemId(2, 0, 7)]: {
+    id: 207, name: "Ethereal Shroud", category: 2, subtype: 0, tier: 7,
+    color: 0x00cccc, tierColor: TIER_COLORS[7],
+    description: "Woven from ether, it feeds your magic at the cost of protection.",
+    armorStats: { maxHpBonus: 50, manaRegenBonus: 8 },
+  },
+  [makeItemId(3, 0, 7)]: {
+    id: 307, name: "Ring of the Void", category: 3, subtype: 0, tier: 7,
+    color: 0x00cccc, tierColor: TIER_COLORS[7],
+    description: "The void amplifies power but offers no shelter.",
+    ringStats: { speedBonus: 30, damageBonus: 25, hpRegenBonus: 0, maxHpBonus: 0, maxManaBonus: 0, projSpeedBonus: 100 },
+  },
 };
 
 // --- Category display names ---
@@ -347,7 +393,17 @@ const BIOME_TIER_RANGES: Record<
  * Generate item contents for a loot bag of the given rarity in the given biome.
  * Returns an array of encoded item IDs.
  */
+/** All UT item IDs (tier 7). */
+const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
+  .map(Number)
+  .filter((id) => getItemTier(id) === ItemTier.UT);
+
 export function rollBagLoot(bagRarity: number, biome: number): number[] {
+  // Black bags always drop exactly 1 random UT item
+  if (bagRarity === BagRarity.Black) {
+    return [pickRandom(UT_ITEM_IDS)];
+  }
+
   const tierRanges = BIOME_TIER_RANGES[biome];
   if (!tierRanges) return [];
 
@@ -362,10 +418,6 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
     case BagRarity.Red:
       tierRange = tierRanges.red;
       itemCount = 1 + Math.floor(Math.random() * 2); // 1-2
-      break;
-    case BagRarity.Black:
-      tierRange = tierRanges.black;
-      itemCount = 1;
       break;
     default:
       return [];
@@ -395,4 +447,39 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
   }
 
   return items;
+}
+
+/**
+ * Roll loot for a boss kill. Bosses always drop a Red or Black bag.
+ */
+export function rollBossLoot(_dungeonType: number): {
+  bagRarity: number;
+  items: number[];
+} {
+  const isBlack = Math.random() < 0.3;
+  const bagRarity = isBlack ? BagRarity.Black : BagRarity.Red;
+
+  if (bagRarity === BagRarity.Black) {
+    return { bagRarity, items: [pickRandom(UT_ITEM_IDS)] };
+  }
+
+  const itemCount = 1 + Math.floor(Math.random() * 2); // 1-2
+  const categories = [
+    ItemCategory.Weapon,
+    ItemCategory.Ability,
+    ItemCategory.Armor,
+    ItemCategory.Ring,
+  ];
+  const items: number[] = [];
+  for (let i = 0; i < itemCount; i++) {
+    const category = pickRandom(categories);
+    const tier = Math.random() < 0.5 ? 5 : 6;
+    let subtype = 0;
+    if (category === ItemCategory.Weapon) {
+      subtype =
+        Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+    }
+    items.push(makeItemId(category, subtype, tier));
+  }
+  return { bagRarity, items };
 }

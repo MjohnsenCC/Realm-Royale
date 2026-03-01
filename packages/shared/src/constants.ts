@@ -86,3 +86,20 @@ export const DEFAULT_WEAPON = 11; // Bow T1
 export const DEFAULT_ABILITY = 101; // Quiver T1
 export const DEFAULT_ARMOR = 201; // Armor T1
 export const DEFAULT_RING = 301; // Ring T1
+
+// Dungeons
+export const DUNGEON_WIDTH = 400;
+export const DUNGEON_HEIGHT = 2000;
+export const DUNGEON_SPAWN_X = 200;
+export const DUNGEON_SPAWN_Y = 1800;
+export const DUNGEON_BOSS_X = 200;
+export const DUNGEON_BOSS_Y = 200;
+
+// Dungeon portals
+export const DUNGEON_PORTAL_RADIUS = 35;
+export const DUNGEON_PORTAL_LIFETIME = 30000; // 30s
+export const DUNGEON_PORTAL_INTERACT_RADIUS = 50;
+
+// Dungeon portal drop chances (per kill)
+export const INFERNAL_PORTAL_CHANCE = 0.02;
+export const VOID_PORTAL_CHANCE = 0.015;

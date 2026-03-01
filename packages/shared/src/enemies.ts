@@ -1,6 +1,8 @@
 import {
   EnemyType,
   BiomeType,
+  DungeonType,
+  PlayerZone,
   ShootingPatternType,
 } from "./types";
 import { ARENA_WIDTH, ARENA_HEIGHT } from "./constants";
@@ -427,4 +429,278 @@ export function getEnemyTypesForBiome(biome: number): number[] {
   return Object.values(ENEMY_DEFS)
     .filter((def) => def.biome === biome)
     .map((def) => def.type);
+}
+
+// --- Dungeon Biome Types (separate ID space from overworld) ---
+
+export const DungeonBiomeType = {
+  InfernalPit: 100,
+  VoidSanctum: 101,
+} as const;
+
+// --- Dungeon Enemy Definitions ---
+
+export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
+  // ===== THE INFERNAL PIT =====
+  [EnemyType.InfernalHound]: {
+    type: EnemyType.InfernalHound,
+    biome: DungeonBiomeType.InfernalPit,
+    name: "Infernal Hound",
+    hp: 100,
+    speed: 80,
+    radius: 14,
+    aggroRange: 350,
+    leashRange: 800,
+    shootCooldown: 1000,
+    projectileDamage: 15,
+    projectileSpeed: 300,
+    projectileRange: 400,
+    shootingPattern: ShootingPatternType.Spread3,
+    xpValue: 40,
+    shape: "triangle",
+    color: 0xff4400,
+  },
+  [EnemyType.MagmaSerpent]: {
+    type: EnemyType.MagmaSerpent,
+    biome: DungeonBiomeType.InfernalPit,
+    name: "Magma Serpent",
+    hp: 150,
+    speed: 50,
+    radius: 16,
+    aggroRange: 300,
+    leashRange: 800,
+    shootCooldown: 1200,
+    projectileDamage: 18,
+    projectileSpeed: 280,
+    projectileRange: 420,
+    shootingPattern: ShootingPatternType.Spiral5,
+    xpValue: 50,
+    shape: "hexagon",
+    color: 0xff6600,
+  },
+  [EnemyType.CinderWraith]: {
+    type: EnemyType.CinderWraith,
+    biome: DungeonBiomeType.InfernalPit,
+    name: "Cinder Wraith",
+    hp: 80,
+    speed: 100,
+    radius: 12,
+    aggroRange: 400,
+    leashRange: 800,
+    shootCooldown: 600,
+    projectileDamage: 12,
+    projectileSpeed: 380,
+    projectileRange: 380,
+    shootingPattern: ShootingPatternType.DoubleSingle,
+    xpValue: 35,
+    shape: "diamond",
+    color: 0xffaa22,
+  },
+  // BOSS
+  [EnemyType.MoltenWyrm]: {
+    type: EnemyType.MoltenWyrm,
+    biome: DungeonBiomeType.InfernalPit,
+    name: "Molten Wyrm",
+    hp: 1500,
+    speed: 40,
+    radius: 30,
+    aggroRange: 600,
+    leashRange: 1200,
+    shootCooldown: 800,
+    projectileDamage: 20,
+    projectileSpeed: 280,
+    projectileRange: 500,
+    shootingPattern: ShootingPatternType.BurstRing12,
+    xpValue: 500,
+    shape: "star",
+    color: 0xff4400,
+  },
+
+  // ===== THE VOID SANCTUM =====
+  [EnemyType.VoidAcolyte]: {
+    type: EnemyType.VoidAcolyte,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "Void Acolyte",
+    hp: 120,
+    speed: 60,
+    radius: 14,
+    aggroRange: 350,
+    leashRange: 800,
+    shootCooldown: 900,
+    projectileDamage: 18,
+    projectileSpeed: 320,
+    projectileRange: 420,
+    shootingPattern: ShootingPatternType.BurstRing8,
+    xpValue: 50,
+    shape: "circle",
+    color: 0x6622cc,
+  },
+  [EnemyType.ShadowWeaver]: {
+    type: EnemyType.ShadowWeaver,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "Shadow Weaver",
+    hp: 90,
+    speed: 90,
+    radius: 12,
+    aggroRange: 380,
+    leashRange: 800,
+    shootCooldown: 700,
+    projectileDamage: 15,
+    projectileSpeed: 350,
+    projectileRange: 400,
+    shootingPattern: ShootingPatternType.Spread5,
+    xpValue: 45,
+    shape: "diamond",
+    color: 0x8844cc,
+  },
+  [EnemyType.AbyssalSentry]: {
+    type: EnemyType.AbyssalSentry,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "Abyssal Sentry",
+    hp: 200,
+    speed: 35,
+    radius: 20,
+    aggroRange: 300,
+    leashRange: 800,
+    shootCooldown: 1500,
+    projectileDamage: 25,
+    projectileSpeed: 250,
+    projectileRange: 450,
+    shootingPattern: ShootingPatternType.BurstRing12,
+    xpValue: 60,
+    shape: "square",
+    color: 0x4400aa,
+  },
+  // BOSS
+  [EnemyType.TheArchitect]: {
+    type: EnemyType.TheArchitect,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "The Architect",
+    hp: 2500,
+    speed: 30,
+    radius: 35,
+    aggroRange: 700,
+    leashRange: 1200,
+    shootCooldown: 1000,
+    projectileDamage: 22,
+    projectileSpeed: 300,
+    projectileRange: 550,
+    shootingPattern: ShootingPatternType.Spiral8,
+    xpValue: 800,
+    shape: "star",
+    color: 0x6600cc,
+  },
+  // ADD (spawned by The Architect)
+  [EnemyType.VoidMinion]: {
+    type: EnemyType.VoidMinion,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "Void Minion",
+    hp: 40,
+    speed: 80,
+    radius: 10,
+    aggroRange: 400,
+    leashRange: 1000,
+    shootCooldown: 1200,
+    projectileDamage: 10,
+    projectileSpeed: 280,
+    projectileRange: 350,
+    shootingPattern: ShootingPatternType.SingleAimed,
+    xpValue: 10,
+    shape: "circle",
+    color: 0x9944ff,
+  },
+};
+
+// Merge dungeon defs into main ENEMY_DEFS for lookup
+Object.assign(ENEMY_DEFS, DUNGEON_ENEMY_DEFS);
+
+// --- Dungeon Visuals ---
+
+export const DUNGEON_VISUALS: Record<
+  number,
+  { groundFill: number; tileLineColor: number; tileLineAlpha: number; name: string }
+> = {
+  [DungeonBiomeType.InfernalPit]: {
+    groundFill: 0x2e0a0a,
+    tileLineColor: 0x4e1a0a,
+    tileLineAlpha: 0.4,
+    name: "The Infernal Pit",
+  },
+  [DungeonBiomeType.VoidSanctum]: {
+    groundFill: 0x0a0a2e,
+    tileLineColor: 0x1a0a4e,
+    tileLineAlpha: 0.4,
+    name: "The Void Sanctum",
+  },
+};
+
+// --- Dungeon Layouts (pre-placed enemy positions) ---
+
+export interface DungeonEnemyPlacement {
+  enemyType: number;
+  x: number;
+  y: number;
+}
+
+export const DUNGEON_LAYOUTS: Record<number, DungeonEnemyPlacement[]> = {
+  [DungeonType.InfernalPit]: [
+    // Group 1: Near entrance
+    { enemyType: EnemyType.InfernalHound, x: 100, y: 1600 },
+    { enemyType: EnemyType.CinderWraith, x: 200, y: 1550 },
+    { enemyType: EnemyType.InfernalHound, x: 300, y: 1600 },
+    // Group 2: Mid-path
+    { enemyType: EnemyType.MagmaSerpent, x: 100, y: 1200 },
+    { enemyType: EnemyType.InfernalHound, x: 200, y: 1200 },
+    { enemyType: EnemyType.CinderWraith, x: 300, y: 1200 },
+    // Group 3: Pre-boss
+    { enemyType: EnemyType.MagmaSerpent, x: 100, y: 700 },
+    { enemyType: EnemyType.MagmaSerpent, x: 300, y: 700 },
+    { enemyType: EnemyType.CinderWraith, x: 200, y: 600 },
+    { enemyType: EnemyType.InfernalHound, x: 80, y: 600 },
+    { enemyType: EnemyType.InfernalHound, x: 320, y: 600 },
+  ],
+  [DungeonType.VoidSanctum]: [
+    // Group 1: Near entrance
+    { enemyType: EnemyType.VoidAcolyte, x: 100, y: 1600 },
+    { enemyType: EnemyType.VoidAcolyte, x: 300, y: 1600 },
+    { enemyType: EnemyType.ShadowWeaver, x: 200, y: 1550 },
+    // Group 2: Mid-path
+    { enemyType: EnemyType.AbyssalSentry, x: 200, y: 1200 },
+    { enemyType: EnemyType.ShadowWeaver, x: 80, y: 1250 },
+    { enemyType: EnemyType.ShadowWeaver, x: 320, y: 1250 },
+    { enemyType: EnemyType.VoidAcolyte, x: 150, y: 1150 },
+    // Group 3: Pre-boss
+    { enemyType: EnemyType.AbyssalSentry, x: 80, y: 700 },
+    { enemyType: EnemyType.AbyssalSentry, x: 320, y: 700 },
+    { enemyType: EnemyType.ShadowWeaver, x: 200, y: 600 },
+    { enemyType: EnemyType.VoidAcolyte, x: 120, y: 550 },
+    { enemyType: EnemyType.VoidAcolyte, x: 280, y: 550 },
+  ],
+};
+
+// --- Dungeon Lookup Maps ---
+
+export const DUNGEON_BOSS_TYPE: Record<number, number> = {
+  [DungeonType.InfernalPit]: EnemyType.MoltenWyrm,
+  [DungeonType.VoidSanctum]: EnemyType.TheArchitect,
+};
+
+export const ZONE_TO_DUNGEON: Record<string, number> = {
+  [PlayerZone.DungeonInfernal]: DungeonType.InfernalPit,
+  [PlayerZone.DungeonVoid]: DungeonType.VoidSanctum,
+};
+
+export const DUNGEON_TO_ZONE: Record<number, string> = {
+  [DungeonType.InfernalPit]: PlayerZone.DungeonInfernal,
+  [DungeonType.VoidSanctum]: PlayerZone.DungeonVoid,
+};
+
+// --- Dungeon Helpers ---
+
+export function isDungeonZone(zone: string): boolean {
+  return zone === PlayerZone.DungeonInfernal || zone === PlayerZone.DungeonVoid;
+}
+
+export function isBossEnemy(enemyType: number): boolean {
+  return enemyType === EnemyType.MoltenWyrm || enemyType === EnemyType.TheArchitect;
 }

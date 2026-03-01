@@ -7,22 +7,15 @@ import {
   getCategoryName,
 } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
+import { getUIScale } from "./UIScale";
 
-const SLOT_SIZE = 36;
-const SLOT_GAP = 4;
+const BASE_SLOT_SIZE = 36;
+const BASE_SLOT_GAP = 4;
 const COLS = 4;
 const ROWS = 2;
-const PADDING = 8;
-const PANEL_WIDTH = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
-const INV_PANEL_HEIGHT =
-  ROWS * SLOT_SIZE + (ROWS - 1) * SLOT_GAP + PADDING * 2 + 18; // +18 for header
-
-// Equipment row sits above the inventory panel
-const EQ_ROW_HEIGHT = SLOT_SIZE + PADDING * 2 + 18; // one row + header + padding
-const EQ_GAP = 4; // gap between equipment and inventory panels
-
-// Total area for isOverPanel
-const TOTAL_HEIGHT = INV_PANEL_HEIGHT + EQ_GAP + EQ_ROW_HEIGHT;
+const BASE_PADDING = 8;
+const BASE_HEADER = 18;
+const BASE_EQ_GAP = 4;
 
 const EQ_SLOT_LABELS = ["Wpn", "Abl", "Arm", "Rng"];
 
@@ -48,18 +41,41 @@ export class InventoryUI {
   // Tooltip
   private tooltip: ItemTooltip;
 
-  // Expose panel dimensions for LootBagUI positioning
-  static readonly PANEL_WIDTH = PANEL_WIDTH;
-  static readonly PANEL_HEIGHT = INV_PANEL_HEIGHT;
-  static readonly TOTAL_HEIGHT = TOTAL_HEIGHT;
+  // Scaled dimensions (instance-level)
+  private S: number;
+  private slotSize: number;
+  private slotGap: number;
+  private padding: number;
+  private header: number;
+  private eqGap: number;
+  private panelWidth: number;
+  private invPanelHeight: number;
+  private eqRowHeight: number;
+  private totalHeight: number;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.tooltip = new ItemTooltip(scene);
 
+    // Compute scaled dimensions
+    this.S = getUIScale();
+    const S = this.S;
+    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
+    this.slotGap = Math.round(BASE_SLOT_GAP * S);
+    this.padding = Math.round(BASE_PADDING * S);
+    this.header = Math.round(BASE_HEADER * S);
+    this.eqGap = Math.round(BASE_EQ_GAP * S);
+    this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
+    this.invPanelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
+    this.eqRowHeight = this.slotSize + this.padding * 2 + this.header;
+    this.totalHeight = this.invPanelHeight + this.eqGap + this.eqRowHeight;
+
     const panelX = 16;
-    const invPanelY = scene.scale.height - INV_PANEL_HEIGHT - 16;
-    const eqPanelY = invPanelY - EQ_GAP - EQ_ROW_HEIGHT;
+    const invPanelY = scene.scale.height - this.invPanelHeight - 16;
+    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
+
+    const headerFontSize = `${Math.round(12 * S)}px`;
+    const slotFontSize = `${Math.round(8 * S)}px`;
 
     this.container = scene.add
       .container(0, 0)
@@ -69,14 +85,14 @@ export class InventoryUI {
     // --- Equipment panel background ---
     this.eqPanelBg = scene.add.graphics();
     this.eqPanelBg.fillStyle(0x111122, 0.85);
-    this.eqPanelBg.fillRoundedRect(panelX, eqPanelY, PANEL_WIDTH, EQ_ROW_HEIGHT, 6);
+    this.eqPanelBg.fillRoundedRect(panelX, eqPanelY, this.panelWidth, this.eqRowHeight, 6);
     this.eqPanelBg.lineStyle(1, 0x666688, 1);
-    this.eqPanelBg.strokeRoundedRect(panelX, eqPanelY, PANEL_WIDTH, EQ_ROW_HEIGHT, 6);
+    this.eqPanelBg.strokeRoundedRect(panelX, eqPanelY, this.panelWidth, this.eqRowHeight, 6);
     this.container.add(this.eqPanelBg);
 
     this.eqHeaderText = scene.add
-      .text(panelX + PADDING, eqPanelY + 4, "Equipment", {
-        fontSize: "12px",
+      .text(panelX + this.padding, eqPanelY + 4, "Equipment", {
+        fontSize: headerFontSize,
         color: "#cccc88",
         fontFamily: "monospace",
       });
@@ -87,11 +103,11 @@ export class InventoryUI {
 
     // Equipment slot zones and texts
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
-      const sx = panelX + PADDING + i * (SLOT_SIZE + SLOT_GAP);
-      const sy = eqPanelY + 18 + PADDING;
+      const sx = panelX + this.padding + i * (this.slotSize + this.slotGap);
+      const sy = eqPanelY + this.header + this.padding;
 
       const zone = scene.add
-        .zone(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2, SLOT_SIZE, SLOT_SIZE)
+        .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
         .setScrollFactor(0)
         .setDepth(102)
         .setInteractive({ useHandCursor: true });
@@ -99,7 +115,7 @@ export class InventoryUI {
       zone.on("pointerover", () => {
         const itemId = this.currentEquipment[i];
         if (itemId >= 0) {
-          this.tooltip.show(itemId, sx, eqPanelY - 8);
+          this.tooltip.show(itemId, sx, eqPanelY - Math.round(8 * S));
         }
       });
       zone.on("pointerout", () => {
@@ -109,8 +125,8 @@ export class InventoryUI {
       this.eqSlotZones.push(zone);
 
       const text = scene.add
-        .text(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2, EQ_SLOT_LABELS[i], {
-          fontSize: "8px",
+        .text(sx + this.slotSize / 2, sy + this.slotSize / 2, EQ_SLOT_LABELS[i], {
+          fontSize: slotFontSize,
           color: "#666666",
           fontFamily: "monospace",
           align: "center",
@@ -118,21 +134,21 @@ export class InventoryUI {
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(102)
-        .setWordWrapWidth(SLOT_SIZE - 4);
+        .setWordWrapWidth(this.slotSize - 4);
       this.eqItemTexts.push(text);
     }
 
     // --- Inventory panel background ---
     this.panelBg = scene.add.graphics();
     this.panelBg.fillStyle(0x111122, 0.85);
-    this.panelBg.fillRoundedRect(panelX, invPanelY, PANEL_WIDTH, INV_PANEL_HEIGHT, 6);
+    this.panelBg.fillRoundedRect(panelX, invPanelY, this.panelWidth, this.invPanelHeight, 6);
     this.panelBg.lineStyle(1, 0x444466, 1);
-    this.panelBg.strokeRoundedRect(panelX, invPanelY, PANEL_WIDTH, INV_PANEL_HEIGHT, 6);
+    this.panelBg.strokeRoundedRect(panelX, invPanelY, this.panelWidth, this.invPanelHeight, 6);
     this.container.add(this.panelBg);
 
     this.headerText = scene.add
-      .text(panelX + PADDING, invPanelY + 4, "Inventory", {
-        fontSize: "12px",
+      .text(panelX + this.padding, invPanelY + 4, "Inventory", {
+        fontSize: headerFontSize,
         color: "#aaaacc",
         fontFamily: "monospace",
       });
@@ -145,11 +161,11 @@ export class InventoryUI {
     for (let i = 0; i < INVENTORY_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
-      const sx = panelX + PADDING + col * (SLOT_SIZE + SLOT_GAP);
-      const sy = invPanelY + 18 + PADDING + row * (SLOT_SIZE + SLOT_GAP);
+      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
+      const sy = invPanelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
 
       const zone = scene.add
-        .zone(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2, SLOT_SIZE, SLOT_SIZE)
+        .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
         .setScrollFactor(0)
         .setDepth(102)
         .setInteractive({ useHandCursor: true });
@@ -165,7 +181,7 @@ export class InventoryUI {
       zone.on("pointerover", () => {
         const itemId = this.currentInventory[i];
         if (itemId >= 0) {
-          this.tooltip.show(itemId, sx, invPanelY - 8);
+          this.tooltip.show(itemId, sx, invPanelY - Math.round(8 * S));
         }
       });
       zone.on("pointerout", () => {
@@ -175,8 +191,8 @@ export class InventoryUI {
       this.slotZones.push(zone);
 
       const text = scene.add
-        .text(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2, "", {
-          fontSize: "8px",
+        .text(sx + this.slotSize / 2, sy + this.slotSize / 2, "", {
+          fontSize: slotFontSize,
           color: "#ffffff",
           fontFamily: "monospace",
           align: "center",
@@ -184,7 +200,7 @@ export class InventoryUI {
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(102)
-        .setWordWrapWidth(SLOT_SIZE - 4);
+        .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
     }
 
@@ -198,6 +214,14 @@ export class InventoryUI {
 
   getTooltip(): ItemTooltip {
     return this.tooltip;
+  }
+
+  getPanelWidth(): number {
+    return this.panelWidth;
+  }
+
+  getInvPanelHeight(): number {
+    return this.invPanelHeight;
   }
 
   updateInventory(inventory: number[]): void {
@@ -231,13 +255,13 @@ export class InventoryUI {
   private drawSlots(): void {
     this.slotGraphics.clear();
     const panelX = 16;
-    const panelY = this.scene.scale.height - INV_PANEL_HEIGHT - 16;
+    const panelY = this.scene.scale.height - this.invPanelHeight - 16;
 
     for (let i = 0; i < INVENTORY_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
-      const sx = panelX + PADDING + col * (SLOT_SIZE + SLOT_GAP);
-      const sy = panelY + 18 + PADDING + row * (SLOT_SIZE + SLOT_GAP);
+      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
+      const sy = panelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
 
       const itemType = this.currentInventory[i];
       const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
@@ -248,12 +272,12 @@ export class InventoryUI {
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
-      this.slotGraphics.fillRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
       // Border: use tier color if item present
       const borderColor = def ? def.tierColor : 0x333344;
       this.slotGraphics.lineStyle(1, borderColor, 1);
-      this.slotGraphics.strokeRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
       // Update text
       if (def) {
@@ -266,19 +290,19 @@ export class InventoryUI {
       }
 
       // Update zone position
-      this.slotZones[i].setPosition(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2);
+      this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
   }
 
   private drawEquipmentSlots(): void {
     this.eqSlotGraphics.clear();
     const panelX = 16;
-    const invPanelY = this.scene.scale.height - INV_PANEL_HEIGHT - 16;
-    const eqPanelY = invPanelY - EQ_GAP - EQ_ROW_HEIGHT;
+    const invPanelY = this.scene.scale.height - this.invPanelHeight - 16;
+    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
 
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
-      const sx = panelX + PADDING + i * (SLOT_SIZE + SLOT_GAP);
-      const sy = eqPanelY + 18 + PADDING;
+      const sx = panelX + this.padding + i * (this.slotSize + this.slotGap);
+      const sy = eqPanelY + this.header + this.padding;
 
       const itemId = this.currentEquipment[i];
       const def = itemId >= 0 ? ITEM_DEFS[itemId] : null;
@@ -289,12 +313,12 @@ export class InventoryUI {
       } else {
         this.eqSlotGraphics.fillStyle(0x222233, 0.6);
       }
-      this.eqSlotGraphics.fillRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
       // Border: tier color
       const borderColor = def ? def.tierColor : 0x444455;
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
-      this.eqSlotGraphics.strokeRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
       // Text
       if (def) {
@@ -307,7 +331,7 @@ export class InventoryUI {
         this.eqItemTexts[i].setColor("#666666");
       }
 
-      this.eqSlotZones[i].setPosition(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2);
+      this.eqSlotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
   }
 
@@ -326,13 +350,13 @@ export class InventoryUI {
   /** Returns true if the given screen coordinates are over either panel */
   isOverPanel(screenX: number, screenY: number): boolean {
     const panelX = 16;
-    const invPanelY = this.scene.scale.height - INV_PANEL_HEIGHT - 16;
-    const eqPanelY = invPanelY - EQ_GAP - EQ_ROW_HEIGHT;
+    const invPanelY = this.scene.scale.height - this.invPanelHeight - 16;
+    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
     return (
       screenX >= panelX &&
-      screenX <= panelX + PANEL_WIDTH &&
+      screenX <= panelX + this.panelWidth &&
       screenY >= eqPanelY &&
-      screenY <= invPanelY + INV_PANEL_HEIGHT
+      screenY <= invPanelY + this.invPanelHeight
     );
   }
 }

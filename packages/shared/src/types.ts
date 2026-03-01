@@ -8,7 +8,7 @@ export interface PlayerInput {
   dt: number; // accumulated delta time (ms) the client predicted with
 }
 
-// 15 enemy types across 5 biomes
+// 15 overworld enemy types + 9 dungeon enemy types
 export const EnemyType = {
   // Shoreline (Tier 1)
   Crab: 0,
@@ -30,6 +30,17 @@ export const EnemyType = {
   FallenGod: 12,
   VoidWraith: 13,
   Leviathan: 14,
+  // Dungeon: The Infernal Pit
+  InfernalHound: 15,
+  MagmaSerpent: 16,
+  CinderWraith: 17,
+  MoltenWyrm: 18, // Boss
+  // Dungeon: The Void Sanctum
+  VoidAcolyte: 19,
+  ShadowWeaver: 20,
+  AbyssalSentry: 21,
+  TheArchitect: 22, // Boss
+  VoidMinion: 23, // Spawned add
 } as const;
 export type EnemyType = (typeof EnemyType)[keyof typeof EnemyType];
 
@@ -74,8 +85,24 @@ export type EntityType = (typeof EntityType)[keyof typeof EntityType];
 export const PlayerZone = {
   Nexus: "nexus",
   Hostile: "hostile",
+  DungeonInfernal: "dungeon_infernal",
+  DungeonVoid: "dungeon_void",
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
+
+export const DungeonType = {
+  InfernalPit: 0,
+  VoidSanctum: 1,
+} as const;
+export type DungeonType = (typeof DungeonType)[keyof typeof DungeonType];
+
+export const PortalType = {
+  NexusToHostile: 0,
+  InfernalPitEntrance: 1,
+  VoidSanctumEntrance: 2,
+  DungeonExit: 3,
+} as const;
+export type PortalType = (typeof PortalType)[keyof typeof PortalType];
 
 // Item category (determines which equipment slot it uses)
 export const ItemCategory = {
@@ -108,6 +135,7 @@ export const ItemTier = {
   T4: 4,
   T5: 5,
   T6: 6,
+  UT: 7,
 } as const;
 export type ItemTier = (typeof ItemTier)[keyof typeof ItemTier];
 
@@ -135,6 +163,7 @@ export const ServerMessage = {
   BagOpened: "bagOpened",
   BagClosed: "bagClosed",
   BagUpdated: "bagUpdated",
+  PortalPrompt: "portalPrompt",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -146,5 +175,6 @@ export const ClientMessage = {
   DropItem: "dropItem",
   EquipItem: "equipItem",
   UseAbility: "useAbility",
+  InteractPortal: "interactPortal",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

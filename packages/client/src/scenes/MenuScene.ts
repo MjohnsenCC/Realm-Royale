@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
+import { getUISize, setUISize, UISize } from "../ui/UIScale";
 
 interface Particle {
   graphics: Phaser.GameObjects.Graphics;
@@ -57,6 +58,49 @@ export class MenuScene extends Phaser.Scene {
         fontFamily: "monospace",
       })
       .setOrigin(0.5);
+
+    // UI Scale selector
+    this.add
+      .text(width / 2, height / 2 - 80, "UI Scale", {
+        fontSize: "12px",
+        color: "#666688",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5);
+
+    const sizes: UISize[] = ["small", "medium", "large"];
+    const sizeLabels = ["Small", "Medium", "Large"];
+    const currentSize = getUISize();
+    const sizeButtons: Phaser.GameObjects.Text[] = [];
+    const totalBtnWidth = 180;
+    const btnSpacing = totalBtnWidth / sizes.length;
+    const startX = width / 2 - totalBtnWidth / 2 + btnSpacing / 2;
+
+    for (let i = 0; i < sizes.length; i++) {
+      const btn = this.add
+        .text(startX + i * btnSpacing, height / 2 - 60, sizeLabels[i], {
+          fontSize: "16px",
+          color: sizes[i] === currentSize ? "#4488ff" : "#555566",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+
+      btn.on("pointerdown", () => {
+        setUISize(sizes[i]);
+        for (let j = 0; j < sizeButtons.length; j++) {
+          sizeButtons[j].setColor(j === i ? "#4488ff" : "#555566");
+        }
+      });
+      btn.on("pointerover", () => {
+        if (getUISize() !== sizes[i]) btn.setColor("#8888aa");
+      });
+      btn.on("pointerout", () => {
+        btn.setColor(getUISize() === sizes[i] ? "#4488ff" : "#555566");
+      });
+
+      sizeButtons.push(btn);
+    }
 
     // Name input (HTML via Phaser DOM)
     const inputHTML = `

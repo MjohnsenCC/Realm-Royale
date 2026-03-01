@@ -18,10 +18,20 @@ import {
   PLAYER_RADIUS,
   TICK_INTERVAL,
   ServerMessage,
+  ClientMessage,
   PlayerInput,
+  PortalType,
   applyMovement,
   getBiomeAtPosition,
+  getZoneDimensions,
+  isDungeonZone,
   BIOME_VISUALS,
+  DUNGEON_VISUALS,
+  ZONE_TO_DUNGEON,
+  DUNGEON_WIDTH,
+  DUNGEON_HEIGHT,
+  DUNGEON_PORTAL_RADIUS,
+  DUNGEON_PORTAL_INTERACT_RADIUS,
 } from "@rotmg-lite/shared";
 
 // Colyseus schema decoded types (client-side generic)
@@ -53,6 +63,7 @@ interface DecodedState {
   enemies: MapSchemaInstance;
   projectiles: MapSchemaInstance;
   lootBags: MapSchemaInstance;
+  dungeonPortals: MapSchemaInstance;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -69,6 +80,7 @@ export class GameScene extends Phaser.Scene {
     S: Phaser.Input.Keyboard.Key;
     D: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
+    E: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
   };
 
@@ -76,12 +88,25 @@ export class GameScene extends Phaser.Scene {
   private groundGraphics!: Phaser.GameObjects.Graphics;
   private portalGraphics!: Phaser.GameObjects.Graphics;
   private nexusLabels: Phaser.GameObjects.Text[] = [];
+  private decodedState!: DecodedState;
 
   // Zone tracking
   private localZone: string = "nexus";
 
+  // Dungeon portal sprites
+  private dungeonPortalSprites = new Map<
+    string,
+    { graphics: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text; x: number; y: number; portalType: number }
+  >();
+
+  // "Press E" proximity prompt
+  private pressEText!: Phaser.GameObjects.Text;
+
   // Q key cooldown to prevent spam
   private returnToNexusCooldown: number = 0;
+
+  // E key (portal interact) cooldown
+  private portalInteractCooldown: number = 0;
 
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
@@ -99,6 +124,7 @@ export class GameScene extends Phaser.Scene {
   private lastSentMY: number = 0;
   private lastSentAimAngle: number = 0;
   private lastSentShooting: boolean = false;
+  private lastSentUseAbility: boolean = false;
 
   // Track XP/level changes for visual effects
   private lastKnownXp: number = 0;
@@ -137,6 +163,7 @@ export class GameScene extends Phaser.Scene {
         S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
         D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
         Q: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+        E: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       };
     }
@@ -149,6 +176,7 @@ export class GameScene extends Phaser.Scene {
 
     // Listen to state changes
     const state = room.state as unknown as DecodedState;
+    this.decodedState = state;
     this.setupStateListeners(state);
 
     // Listen for zone change
@@ -165,6 +193,22 @@ export class GameScene extends Phaser.Scene {
         localSprite.setVisible(true);
       }
     });
+
+    // "Press E" floating prompt (hidden until near a portal)
+    this.pressEText = this.add
+      .text(0, 0, "Press E", {
+        fontSize: "14px",
+        color: "#ffffff",
+        fontFamily: "monospace",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(150)
+      .setVisible(false);
+
+    // Listen for dungeon portal state changes
+    this.setupDungeonPortalListeners(state);
 
     // Set room on inventory/loot bag UIs so they can send messages
     this.hud.inventoryUI.setRoom(room);
@@ -233,14 +277,26 @@ export class GameScene extends Phaser.Scene {
     this.groundGraphics.clear();
     this.portalGraphics.clear();
     this.clearNexusLabels();
+    this.clearDungeonPortalSprites();
     this.drawGround();
 
-    if (zone === "hostile") {
-      this.cameras.main.setBackgroundColor("#1a1a2e");
-    } else {
+    if (zone === "nexus") {
       this.drawPortal();
       this.cameras.main.setBackgroundColor("#1a2a1a");
+    } else if (isDungeonZone(zone)) {
+      const dungeonType = ZONE_TO_DUNGEON[zone];
+      const visual = DUNGEON_VISUALS[dungeonType];
+      if (visual) {
+        const hex = "#" + visual.groundFill.toString(16).padStart(6, "0");
+        this.cameras.main.setBackgroundColor(hex);
+      } else {
+        this.cameras.main.setBackgroundColor("#1a1a1a");
+      }
+    } else {
+      this.cameras.main.setBackgroundColor("#1a1a2e");
     }
+
+    this.rebuildDungeonPortals();
   }
 
   private clearNexusLabels(): void {
@@ -255,6 +311,8 @@ export class GameScene extends Phaser.Scene {
 
     if (this.localZone === "nexus") {
       this.drawNexusGround();
+    } else if (isDungeonZone(this.localZone)) {
+      this.drawDungeonGround();
     }
     // Hostile ground is drawn per-frame in update() (viewport-based)
   }
@@ -433,15 +491,6 @@ export class GameScene extends Phaser.Scene {
     this.portalGraphics.fillStyle(0xaa66ff, 0.25);
     this.portalGraphics.fillCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS / 2);
 
-    // Portal label
-    const label = this.add
-      .text(PORTAL_X, PORTAL_Y - PORTAL_RADIUS - 20, "Enter Realm", {
-        fontSize: "12px",
-        color: "#aa66ff",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5);
-    this.nexusLabels.push(label);
   }
 
   private setupStateListeners(state: DecodedState): void {
@@ -493,10 +542,9 @@ export class GameScene extends Phaser.Scene {
             (input) => input.seq > lastProcessed
           );
 
-          const reconW =
-            this.localZone === "nexus" ? NEXUS_WIDTH : ARENA_WIDTH;
-          const reconH =
-            this.localZone === "nexus" ? NEXUS_HEIGHT : ARENA_HEIGHT;
+          const reconDims = getZoneDimensions(this.localZone);
+          const reconW = reconDims.width;
+          const reconH = reconDims.height;
 
           const reconSpeed = (player.cachedSpeed as number) ?? 200;
           for (const input of this.pendingInputs) {
@@ -652,8 +700,9 @@ export class GameScene extends Phaser.Scene {
     const localSprite = this.playerSprites.get(sessionId);
 
     // Zone-appropriate bounds
-    const zoneW = this.localZone === "nexus" ? NEXUS_WIDTH : ARENA_WIDTH;
-    const zoneH = this.localZone === "nexus" ? NEXUS_HEIGHT : ARENA_HEIGHT;
+    const zoneDims = getZoneDimensions(this.localZone);
+    const zoneW = zoneDims.width;
+    const zoneH = zoneDims.height;
 
     // Block all input while dead
     let mx = 0;
@@ -670,17 +719,29 @@ export class GameScene extends Phaser.Scene {
         if (this.keys.W.isDown) my -= 1;
         if (this.keys.S.isDown) my += 1;
 
-        // Q key — return to nexus
+        // Q key — return to nexus (works from hostile and dungeons)
         if (this.returnToNexusCooldown > 0) {
           this.returnToNexusCooldown -= delta;
         }
         if (
           this.keys.Q.isDown &&
-          this.localZone === "hostile" &&
+          this.localZone !== "nexus" &&
           this.returnToNexusCooldown <= 0
         ) {
           this.network.sendReturnToNexus();
           this.returnToNexusCooldown = 1000;
+        }
+
+        // E key — interact with portals
+        if (this.portalInteractCooldown > 0) {
+          this.portalInteractCooldown -= delta;
+        }
+        if (
+          this.keys.E.isDown &&
+          this.portalInteractCooldown <= 0
+        ) {
+          this.network.sendInteractPortal();
+          this.portalInteractCooldown = 500;
         }
       }
 
@@ -697,8 +758,8 @@ export class GameScene extends Phaser.Scene {
         );
       }
 
-      // Space key — use ability
-      if (this.keys.SPACE.isDown && this.localZone === "hostile") {
+      // Space key — use ability (hostile + dungeons)
+      if (this.keys.SPACE.isDown && this.localZone !== "nexus") {
         useAbility = true;
       }
 
@@ -747,9 +808,10 @@ export class GameScene extends Phaser.Scene {
         mx !== this.lastSentMX ||
         my !== this.lastSentMY ||
         shooting !== this.lastSentShooting ||
+        useAbility !== this.lastSentUseAbility ||
         Math.abs(aimAngle - this.lastSentAimAngle) > 0.01;
 
-      if (hasChanged || mx !== 0 || my !== 0 || shooting) {
+      if (hasChanged || mx !== 0 || my !== 0 || shooting || useAbility) {
         this.inputSequence++;
         // Each iteration consumes at most one tick's worth of dt
         const sendDt = Math.min(this.accumulatedDt, TICK_INTERVAL);
@@ -782,6 +844,7 @@ export class GameScene extends Phaser.Scene {
         this.lastSentMY = my;
         this.lastSentAimAngle = aimAngle;
         this.lastSentShooting = shooting;
+        this.lastSentUseAbility = useAbility;
       } else {
         // Idle: discard accumulated dt so next movement start doesn't carry stale time
         this.accumulatedDt = 0;
@@ -796,10 +859,16 @@ export class GameScene extends Phaser.Scene {
     // Zone-based visibility filtering
     const inNexus = this.localZone === "nexus";
 
-    // Enemies, projectiles, bags only visible in hostile zone
+    // Enemies, projectiles, bags visible in hostile + dungeon zones (not nexus)
     this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
     this.projectileSprites.forEach((sprite) => sprite.setVisible(!inNexus));
     this.bagSprites.forEach((sprite) => sprite.setVisible(!inNexus));
+
+    // Dungeon portal sprites: always visible (server filterChildren handles zone filtering)
+    this.dungeonPortalSprites.forEach((ps) => {
+      ps.graphics.setVisible(true);
+      ps.label.setVisible(true);
+    });
 
     // Players: only show players in the same zone
     this.playerSprites.forEach((sprite) => {
@@ -815,9 +884,12 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
-    if (!inNexus) {
+    if (this.localZone === "hostile") {
       this.drawHostileGround();
     }
+
+    // Update "Press E" proximity prompt
+    this.updatePressEPrompt(localSprite);
 
     // Update HUD
     if (localPlayer) {
@@ -886,6 +958,8 @@ export class GameScene extends Phaser.Scene {
     this.bagSprites.forEach((s) => s.destroy());
     this.bagSprites.clear();
     this.clearNexusLabels();
+    this.clearDungeonPortalSprites();
+    this.pressEText?.destroy();
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.inputSendTimer = 0;
@@ -894,10 +968,224 @@ export class GameScene extends Phaser.Scene {
     this.lastSentMY = 0;
     this.lastSentAimAngle = 0;
     this.lastSentShooting = false;
+    this.lastSentUseAbility = false;
     this.isDead = false;
     this.lastKnownXp = 0;
     this.lastKnownLevel = 1;
     this.hud.hideDeathScreen();
     this.hud.lootBagUI.hide();
+  }
+
+  // --- Dungeon Portal Methods ---
+
+  private setupDungeonPortalListeners(state: DecodedState): void {
+    state.dungeonPortals.onAdd((portal, id) => {
+      const px = portal.x as number;
+      const py = portal.y as number;
+      const pType = portal.portalType as number;
+
+      const graphics = this.add.graphics().setDepth(5);
+      this.drawDungeonPortalGraphics(graphics, px, py, pType);
+
+      let labelText = "Dungeon Portal";
+      let labelColor = "#ffffff";
+      if (pType === PortalType.InfernalPitEntrance) {
+        labelText = "The Infernal Pit";
+        labelColor = "#ff4400";
+      } else if (pType === PortalType.VoidSanctumEntrance) {
+        labelText = "The Void Sanctum";
+        labelColor = "#6600cc";
+      } else if (pType === PortalType.DungeonExit) {
+        labelText = "Exit";
+        labelColor = "#44ff44";
+      }
+
+      const label = this.add
+        .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
+          fontSize: "11px",
+          color: labelColor,
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setDepth(6);
+
+      this.dungeonPortalSprites.set(id, { graphics, label, x: px, y: py, portalType: pType });
+    });
+
+    state.dungeonPortals.onRemove((_portal, id) => {
+      const ps = this.dungeonPortalSprites.get(id);
+      if (ps) {
+        ps.graphics.destroy();
+        ps.label.destroy();
+        this.dungeonPortalSprites.delete(id);
+      }
+    });
+  }
+
+  private drawDungeonPortalGraphics(
+    graphics: Phaser.GameObjects.Graphics,
+    x: number,
+    y: number,
+    portalType: number
+  ): void {
+    let color = 0xffffff;
+    let glowColor = 0xaaaaaa;
+    if (portalType === PortalType.InfernalPitEntrance) {
+      color = 0xff4400;
+      glowColor = 0xff6622;
+    } else if (portalType === PortalType.VoidSanctumEntrance) {
+      color = 0x6600cc;
+      glowColor = 0x8833ee;
+    } else if (portalType === PortalType.DungeonExit) {
+      color = 0x44ff44;
+      glowColor = 0x66ff66;
+    }
+
+    // Outer glow
+    graphics.lineStyle(4, glowColor, 0.3);
+    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS + 10);
+
+    // Mid ring
+    graphics.lineStyle(3, color, 0.5);
+    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS + 3);
+
+    // Main ring
+    graphics.lineStyle(3, color, 0.8);
+    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS);
+
+    // Inner fill
+    graphics.fillStyle(color, 0.25);
+    graphics.fillCircle(x, y, DUNGEON_PORTAL_RADIUS - 4);
+
+    // Bright core
+    graphics.fillStyle(color, 0.15);
+    graphics.fillCircle(x, y, DUNGEON_PORTAL_RADIUS / 2);
+  }
+
+  private clearDungeonPortalSprites(): void {
+    this.dungeonPortalSprites.forEach((ps) => {
+      ps.graphics.destroy();
+      ps.label.destroy();
+    });
+    this.dungeonPortalSprites.clear();
+  }
+
+  private rebuildDungeonPortals(): void {
+    if (!this.decodedState) return;
+    this.decodedState.dungeonPortals.forEach((portal, id) => {
+      if (this.dungeonPortalSprites.has(id)) return;
+      // Only rebuild portals belonging to the current zone
+      if ((portal.zone as string) !== this.localZone) return;
+      const px = portal.x as number;
+      const py = portal.y as number;
+      const pType = portal.portalType as number;
+
+      const graphics = this.add.graphics().setDepth(5);
+      this.drawDungeonPortalGraphics(graphics, px, py, pType);
+
+      let labelText = "Dungeon Portal";
+      let labelColor = "#ffffff";
+      if (pType === PortalType.InfernalPitEntrance) {
+        labelText = "The Infernal Pit";
+        labelColor = "#ff4400";
+      } else if (pType === PortalType.VoidSanctumEntrance) {
+        labelText = "The Void Sanctum";
+        labelColor = "#6600cc";
+      } else if (pType === PortalType.DungeonExit) {
+        labelText = "Exit";
+        labelColor = "#44ff44";
+      }
+
+      const label = this.add
+        .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
+          fontSize: "11px",
+          color: labelColor,
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setDepth(6);
+
+      this.dungeonPortalSprites.set(id, { graphics, label, x: px, y: py, portalType: pType });
+    });
+  }
+
+  private drawDungeonGround(): void {
+    const dungeonType = ZONE_TO_DUNGEON[this.localZone];
+    const visual = DUNGEON_VISUALS[dungeonType];
+    if (!visual) return;
+
+    // Solid fill
+    this.groundGraphics.fillStyle(visual.groundFill, 1);
+    this.groundGraphics.fillRect(0, 0, DUNGEON_WIDTH, DUNGEON_HEIGHT);
+
+    // Tile grid
+    this.groundGraphics.lineStyle(1, visual.tileLineColor, visual.tileLineAlpha);
+    for (let x = 0; x <= DUNGEON_WIDTH; x += TILE_SIZE) {
+      this.groundGraphics.lineBetween(x, 0, x, DUNGEON_HEIGHT);
+    }
+    for (let y = 0; y <= DUNGEON_HEIGHT; y += TILE_SIZE) {
+      this.groundGraphics.lineBetween(0, y, DUNGEON_WIDTH, y);
+    }
+
+    // Border
+    this.groundGraphics.lineStyle(3, visual.tileLineColor, 0.8);
+    this.groundGraphics.strokeRect(0, 0, DUNGEON_WIDTH, DUNGEON_HEIGHT);
+
+    // Dungeon name label
+    this.clearNexusLabels();
+    const label = this.add
+      .text(DUNGEON_WIDTH / 2, DUNGEON_HEIGHT - 60, `~ ${visual.name} ~`, {
+        fontSize: "18px",
+        color: "#" + visual.tileLineColor.toString(16).padStart(6, "0"),
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.5);
+    this.nexusLabels.push(label);
+  }
+
+  private updatePressEPrompt(localSprite: PlayerSprite | undefined): void {
+    if (!localSprite || this.isDead) {
+      this.pressEText.setVisible(false);
+      return;
+    }
+
+    const px = localSprite.x;
+    const py = localSprite.y;
+    let nearPortal = false;
+    let portalX = 0;
+    let portalY = 0;
+
+    // Check nexus portal
+    if (this.localZone === "nexus") {
+      const dx = px - PORTAL_X;
+      const dy = py - PORTAL_Y;
+      if (dx * dx + dy * dy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
+        nearPortal = true;
+        portalX = PORTAL_X;
+        portalY = PORTAL_Y;
+      }
+    }
+
+    // Check dungeon portals
+    if (!nearPortal) {
+      this.dungeonPortalSprites.forEach((ps) => {
+        if (nearPortal) return;
+        const dx = px - ps.x;
+        const dy = py - ps.y;
+        if (dx * dx + dy * dy < DUNGEON_PORTAL_INTERACT_RADIUS * DUNGEON_PORTAL_INTERACT_RADIUS) {
+          nearPortal = true;
+          portalX = ps.x;
+          portalY = ps.y;
+        }
+      });
+    }
+
+    if (nearPortal) {
+      this.pressEText.setPosition(portalX, portalY + DUNGEON_PORTAL_RADIUS + 20);
+      this.pressEText.setVisible(true);
+    } else {
+      this.pressEText.setVisible(false);
+    }
   }
 }

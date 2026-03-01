@@ -19,4 +19,5 @@ export class Projectile extends Schema {
   piercing: boolean = false;
   collisionRadius: number = 5;
   hitEnemies: Set<string> = new Set();
+  zone: string = "hostile";
 }

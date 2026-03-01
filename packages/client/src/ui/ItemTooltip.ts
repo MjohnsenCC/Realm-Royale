@@ -1,8 +1,9 @@
 import Phaser from "phaser";
 import { ITEM_DEFS, getCategoryName } from "@rotmg-lite/shared";
+import { getUIScale } from "./UIScale";
 
-const TOOLTIP_WIDTH = 160;
-const TOOLTIP_PADDING = 8;
+const BASE_TOOLTIP_WIDTH = 160;
+const BASE_TOOLTIP_PADDING = 8;
 
 export class ItemTooltip {
   private scene: Phaser.Scene;
@@ -13,8 +14,22 @@ export class ItemTooltip {
   private statsText: Phaser.GameObjects.Text;
   private descText: Phaser.GameObjects.Text;
 
+  private S: number;
+  private tooltipWidth: number;
+  private tooltipPadding: number;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
+
+    this.S = getUIScale();
+    const S = this.S;
+    this.tooltipWidth = Math.round(BASE_TOOLTIP_WIDTH * S);
+    this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
+
+    const nameFontSize = `${Math.round(12 * S)}px`;
+    const tierFontSize = `${Math.round(10 * S)}px`;
+    const statsFontSize = `${Math.round(10 * S)}px`;
+    const descFontSize = `${Math.round(9 * S)}px`;
 
     this.container = scene.add
       .container(0, 0)
@@ -26,40 +41,42 @@ export class ItemTooltip {
     this.container.add(this.bg);
 
     this.nameText = scene.add
-      .text(TOOLTIP_PADDING, TOOLTIP_PADDING, "", {
-        fontSize: "12px",
+      .text(this.tooltipPadding, this.tooltipPadding, "", {
+        fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
         fontStyle: "bold",
       })
-      .setWordWrapWidth(TOOLTIP_WIDTH - TOOLTIP_PADDING * 2);
+      .setWordWrapWidth(this.tooltipWidth - this.tooltipPadding * 2);
     this.container.add(this.nameText);
 
-    this.tierText = scene.add.text(TOOLTIP_PADDING, 24, "", {
-      fontSize: "10px",
+    const tierY = this.tooltipPadding + Math.round(16 * S);
+    this.tierText = scene.add.text(this.tooltipPadding, tierY, "", {
+      fontSize: tierFontSize,
       color: "#aaaaaa",
       fontFamily: "monospace",
     });
     this.container.add(this.tierText);
 
+    const statsY = tierY + Math.round(16 * S);
     this.statsText = scene.add
-      .text(TOOLTIP_PADDING, 40, "", {
-        fontSize: "10px",
+      .text(this.tooltipPadding, statsY, "", {
+        fontSize: statsFontSize,
         color: "#aaffaa",
         fontFamily: "monospace",
         lineSpacing: 2,
       })
-      .setWordWrapWidth(TOOLTIP_WIDTH - TOOLTIP_PADDING * 2);
+      .setWordWrapWidth(this.tooltipWidth - this.tooltipPadding * 2);
     this.container.add(this.statsText);
 
     this.descText = scene.add
-      .text(TOOLTIP_PADDING, 40, "", {
-        fontSize: "9px",
+      .text(this.tooltipPadding, statsY, "", {
+        fontSize: descFontSize,
         color: "#888899",
         fontFamily: "monospace",
         fontStyle: "italic",
       })
-      .setWordWrapWidth(TOOLTIP_WIDTH - TOOLTIP_PADDING * 2);
+      .setWordWrapWidth(this.tooltipWidth - this.tooltipPadding * 2);
     this.container.add(this.descText);
   }
 
@@ -70,18 +87,25 @@ export class ItemTooltip {
       return;
     }
 
+    const S = this.S;
+    const statsStartY = this.tooltipPadding + Math.round(32 * S);
+
     // Name (colored by tier)
     this.nameText.setText(def.name);
     const tierHex = "#" + def.tierColor.toString(16).padStart(6, "0");
     this.nameText.setColor(tierHex);
 
     // Tier + category
-    this.tierText.setText(`T${def.tier} ${getCategoryName(def.category)}`);
+    const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+    this.tierText.setText(`${tierLabel} ${getCategoryName(def.category)}`);
 
     // Stats
     const statsLines: string[] = [];
     if (def.weaponStats) {
       statsLines.push(`Damage: ${def.weaponStats.damage}`);
+      if (def.weaponStats.projectileCount && def.weaponStats.projectileCount > 1) {
+        statsLines.push(`Projectiles: ${def.weaponStats.projectileCount}`);
+      }
       statsLines.push(`Range: ${def.weaponStats.range}`);
       statsLines.push(
         `Fire Rate: ${(1000 / def.weaponStats.shootCooldown).toFixed(1)}/s`
@@ -90,9 +114,16 @@ export class ItemTooltip {
       statsLines.push(`Damage: ${def.abilityStats.damage}`);
       statsLines.push(`Mana Cost: ${def.abilityStats.manaCost}`);
       statsLines.push(`Range: ${def.abilityStats.range}`);
-      statsLines.push(`Piercing: Yes`);
+      if (def.abilityStats.piercing) statsLines.push(`Piercing: Yes`);
+      if (def.abilityStats.speedBoostAmount) {
+        statsLines.push(`Speed Boost: +${def.abilityStats.speedBoostAmount}`);
+        statsLines.push(`Boost Duration: ${(def.abilityStats.speedBoostDuration! / 1000).toFixed(1)}s`);
+      }
     } else if (def.armorStats) {
       statsLines.push(`+${def.armorStats.maxHpBonus} Max HP`);
+      if (def.armorStats.manaRegenBonus) {
+        statsLines.push(`+${def.armorStats.manaRegenBonus} Mana Regen`);
+      }
     } else if (def.ringStats) {
       const r = def.ringStats;
       if (r.speedBonus) statsLines.push(`+${r.speedBonus} Speed`);
@@ -100,23 +131,25 @@ export class ItemTooltip {
       if (r.hpRegenBonus) statsLines.push(`+${r.hpRegenBonus} HP Regen`);
       if (r.maxHpBonus) statsLines.push(`+${r.maxHpBonus} Max HP`);
       if (r.maxManaBonus) statsLines.push(`+${r.maxManaBonus} Max Mana`);
+      if (r.projSpeedBonus) statsLines.push(`+${r.projSpeedBonus} Proj Speed`);
     }
     this.statsText.setText(statsLines.join("\n"));
+    this.statsText.setY(statsStartY);
 
     // Description
-    const statsBottom = 40 + this.statsText.height + 4;
+    const statsBottom = statsStartY + this.statsText.height + 4;
     this.descText.setY(statsBottom);
     this.descText.setText(def.description);
 
     // Calculate total height
-    const totalHeight = statsBottom + this.descText.height + TOOLTIP_PADDING;
+    const totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
 
     // Draw background
     this.bg.clear();
     this.bg.fillStyle(0x111122, 0.95);
-    this.bg.fillRoundedRect(0, 0, TOOLTIP_WIDTH, totalHeight, 4);
+    this.bg.fillRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
     this.bg.lineStyle(1, def.tierColor, 0.8);
-    this.bg.strokeRoundedRect(0, 0, TOOLTIP_WIDTH, totalHeight, 4);
+    this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
 
     // Position: above the given point, clamped to screen
     let tx = screenX;
@@ -124,10 +157,9 @@ export class ItemTooltip {
 
     // Clamp to screen bounds
     const sw = this.scene.scale.width;
-    const sh = this.scene.scale.height;
-    if (tx + TOOLTIP_WIDTH > sw) tx = sw - TOOLTIP_WIDTH - 4;
+    if (tx + this.tooltipWidth > sw) tx = sw - this.tooltipWidth - 4;
     if (tx < 4) tx = 4;
-    if (ty < 4) ty = screenY + 40; // flip below if too high
+    if (ty < 4) ty = screenY + Math.round(40 * S); // flip below if too high
 
     this.container.setPosition(tx, ty);
     this.container.setVisible(true);

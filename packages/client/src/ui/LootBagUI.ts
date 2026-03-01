@@ -1,14 +1,14 @@
 import Phaser from "phaser";
 import { BAG_SIZE, BagRarity, ITEM_DEFS, ClientMessage } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
+import { getUIScale } from "./UIScale";
 
-const SLOT_SIZE = 36;
-const SLOT_GAP = 4;
+const BASE_SLOT_SIZE = 36;
+const BASE_SLOT_GAP = 4;
 const COLS = 4;
 const ROWS = 2;
-const PADDING = 8;
-const PANEL_WIDTH = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
-const PANEL_HEIGHT = ROWS * SLOT_SIZE + (ROWS - 1) * SLOT_GAP + PADDING * 2 + 18;
+const BASE_PADDING = 8;
+const BASE_HEADER = 18;
 
 const BAG_HEADER_COLORS: Record<number, string> = {
   [BagRarity.Green]: "#44aa44",
@@ -43,9 +43,33 @@ export class LootBagUI {
   private currentBagRarity: number = 0;
   private tooltip: ItemTooltip;
 
-  constructor(scene: Phaser.Scene, tooltip: ItemTooltip) {
+  // Scaled dimensions
+  private S: number;
+  private slotSize: number;
+  private slotGap: number;
+  private padding: number;
+  private header: number;
+  private panelWidth: number;
+  private panelHeight: number;
+  private invPanelWidth: number;
+
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invPanelWidth: number) {
     this.scene = scene;
     this.tooltip = tooltip;
+
+    // Compute scaled dimensions
+    this.S = getUIScale();
+    const S = this.S;
+    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
+    this.slotGap = Math.round(BASE_SLOT_GAP * S);
+    this.padding = Math.round(BASE_PADDING * S);
+    this.header = Math.round(BASE_HEADER * S);
+    this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
+    this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
+    this.invPanelWidth = invPanelWidth;
+
+    const headerFontSize = `${Math.round(12 * S)}px`;
+    const slotFontSize = `${Math.round(8 * S)}px`;
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
@@ -56,7 +80,7 @@ export class LootBagUI {
     // Header
     this.headerText = scene.add
       .text(0, 0, "Loot Bag", {
-        fontSize: "12px",
+        fontSize: headerFontSize,
         color: "#44aa44",
         fontFamily: "monospace",
       });
@@ -69,7 +93,7 @@ export class LootBagUI {
     // Create slot zones and texts
     for (let i = 0; i < BAG_SIZE; i++) {
       const zone = scene.add
-        .zone(0, 0, SLOT_SIZE, SLOT_SIZE)
+        .zone(0, 0, this.slotSize, this.slotSize)
         .setScrollFactor(0)
         .setDepth(102)
         .setInteractive({ useHandCursor: true });
@@ -83,10 +107,9 @@ export class LootBagUI {
       zone.on("pointerover", () => {
         const itemId = this.currentItems[i];
         if (itemId >= 0) {
-          const invPanelWidth = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
-          const panelX = 16 + invPanelWidth + 8;
-          const panelY = this.scene.scale.height - PANEL_HEIGHT - 16;
-          this.tooltip.show(itemId, panelX, panelY - 8);
+          const panelX = 16 + this.invPanelWidth + 8;
+          const panelY = this.scene.scale.height - this.panelHeight - 16;
+          this.tooltip.show(itemId, panelX, panelY - Math.round(8 * S));
         }
       });
       zone.on("pointerout", () => {
@@ -97,7 +120,7 @@ export class LootBagUI {
 
       const text = scene.add
         .text(0, 0, "", {
-          fontSize: "8px",
+          fontSize: slotFontSize,
           color: "#ffffff",
           fontFamily: "monospace",
           align: "center",
@@ -105,7 +128,7 @@ export class LootBagUI {
         .setOrigin(0.5)
         .setScrollFactor(0)
         .setDepth(102)
-        .setWordWrapWidth(SLOT_SIZE - 4);
+        .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
     }
 
@@ -128,6 +151,7 @@ export class LootBagUI {
 
   hide(): void {
     this.currentBagId = "";
+    this.tooltip.hide();
     this.setVisible(false);
   }
 
@@ -171,32 +195,31 @@ export class LootBagUI {
 
   private redraw(): void {
     // Position: next to inventory panel (to the right of it)
-    const invPanelWidth = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
-    const panelX = 16 + invPanelWidth + 8;
-    const panelY = this.scene.scale.height - PANEL_HEIGHT - 16;
+    const panelX = 16 + this.invPanelWidth + 8;
+    const panelY = this.scene.scale.height - this.panelHeight - 16;
 
     // Background
     this.panelBg.clear();
     const borderColor = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
     this.panelBg.fillStyle(0x111122, 0.9);
-    this.panelBg.fillRoundedRect(panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT, 6);
+    this.panelBg.fillRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
     this.panelBg.lineStyle(2, borderColor, 1);
-    this.panelBg.strokeRoundedRect(panelX, panelY, PANEL_WIDTH, PANEL_HEIGHT, 6);
+    this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
 
     // Header
     const headerColor = BAG_HEADER_COLORS[this.currentBagRarity] ?? "#44aa44";
     const headerName = BAG_HEADER_NAMES[this.currentBagRarity] ?? "Loot Bag";
     this.headerText.setText(headerName);
     this.headerText.setColor(headerColor);
-    this.headerText.setPosition(panelX + PADDING, panelY + 4);
+    this.headerText.setPosition(panelX + this.padding, panelY + 4);
 
     // Slots
     this.slotGraphics.clear();
     for (let i = 0; i < BAG_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
-      const sx = panelX + PADDING + col * (SLOT_SIZE + SLOT_GAP);
-      const sy = panelY + 18 + PADDING + row * (SLOT_SIZE + SLOT_GAP);
+      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
+      const sy = panelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
 
       const itemType = this.currentItems[i];
       const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
@@ -206,12 +229,12 @@ export class LootBagUI {
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
-      this.slotGraphics.fillRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
       // Use tier color for border
       const slotBorder = def ? def.tierColor : 0x333344;
       this.slotGraphics.lineStyle(1, slotBorder, 1);
-      this.slotGraphics.strokeRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
+      this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
       if (def) {
         const shortName = def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
@@ -220,8 +243,8 @@ export class LootBagUI {
       } else {
         this.itemTexts[i].setText("");
       }
-      this.itemTexts[i].setPosition(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2);
-      this.slotZones[i].setPosition(sx + SLOT_SIZE / 2, sy + SLOT_SIZE / 2);
+      this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
   }
 
@@ -237,14 +260,13 @@ export class LootBagUI {
   /** Returns true if the given screen coordinates are over the loot bag panel */
   isOverPanel(screenX: number, screenY: number): boolean {
     if (!this.visible) return false;
-    const invPanelWidth = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
-    const panelX = 16 + invPanelWidth + 8;
-    const panelY = this.scene.scale.height - PANEL_HEIGHT - 16;
+    const panelX = 16 + this.invPanelWidth + 8;
+    const panelY = this.scene.scale.height - this.panelHeight - 16;
     return (
       screenX >= panelX &&
-      screenX <= panelX + PANEL_WIDTH &&
+      screenX <= panelX + this.panelWidth &&
       screenY >= panelY &&
-      screenY <= panelY + PANEL_HEIGHT
+      screenY <= panelY + this.panelHeight
     );
   }
 }

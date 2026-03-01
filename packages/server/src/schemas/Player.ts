@@ -62,6 +62,15 @@ export class Player extends Schema {
   cachedWeaponProjSpeed: number = 500;
   cachedWeaponProjSize: number = 5;
 
+  // Speed boost from UT ability (server-only)
+  speedBoostUntil: number = 0;
+  speedBoostAmount: number = 0;
+
   // Server-only: ID of the loot bag currently open for this player (empty = none)
   openBagId: string = "";
+
+  // Server-only: dungeon return position and zone
+  dungeonReturnX: number = 0;
+  dungeonReturnY: number = 0;
+  dungeonReturnZone: string = "";
 }

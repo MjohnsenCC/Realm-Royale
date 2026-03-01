@@ -4,8 +4,6 @@ import { Enemy } from "../schemas/Enemy";
 import {
   EntityType,
   PLAYER_RADIUS,
-  ARENA_WIDTH,
-  ARENA_HEIGHT,
   XP_SHARE_RADIUS,
   ENEMY_DEFS,
   getBiomeAtPosition,
@@ -13,6 +11,7 @@ import {
   circlesOverlap,
   getPlayerLevel,
   computePlayerStats,
+  getZoneDimensions,
 } from "@rotmg-lite/shared";
 
 export interface CombatEvent {
@@ -22,6 +21,8 @@ export interface CombatEvent {
   enemyX?: number;
   enemyY?: number;
   enemyType?: number;
+  enemyZone?: string;
+  isBoss?: boolean;
 }
 
 export class CombatSystem {
@@ -53,12 +54,13 @@ export class CombatSystem {
         return;
       }
 
-      // Check if out of bounds
+      // Check if out of bounds (zone-aware)
+      const dims = getZoneDimensions(proj.zone);
       if (
         proj.x < 0 ||
-        proj.x > ARENA_WIDTH ||
+        proj.x > dims.width ||
         proj.y < 0 ||
-        proj.y > ARENA_HEIGHT
+        proj.y > dims.height
       ) {
         projectilesToRemove.push(id);
         return;
@@ -68,6 +70,8 @@ export class CombatSystem {
         // Player projectile → check enemy collisions using spatial grid
         const nearby = this.enemyGrid.query(proj.x, proj.y, 50);
         for (const enemy of nearby) {
+          // Only collide with enemies in the same zone
+          if (enemy.zone !== proj.zone) continue;
           // Skip enemies already hit by this piercing projectile
           if (proj.piercing && proj.hitEnemies.has(enemy.id)) continue;
 
@@ -83,13 +87,13 @@ export class CombatSystem {
             }
 
             if (enemy.hp <= 0) {
-              // Award XP directly to all nearby alive players
+              // Award XP directly to all nearby alive players in same zone
               const xpValue = def ? def.xpValue : 10;
               const enemyX = enemy.x;
               const enemyY = enemy.y;
 
               state.players.forEach((player) => {
-                if (!player.alive || player.zone !== "hostile") return;
+                if (!player.alive || player.zone !== enemy.zone) return;
                 if (distanceBetween(player.x, player.y, enemyX, enemyY) > XP_SHARE_RADIUS) return;
                 player.xp += xpValue;
                 const newLevel = getPlayerLevel(player.xp);
@@ -113,12 +117,11 @@ export class CombatSystem {
                   player.cachedWeaponRange = stats.weaponRange;
                   player.cachedWeaponProjSpeed = stats.weaponProjSpeed;
                   player.cachedWeaponProjSize = stats.weaponProjSize;
-                  // Heal the HP increase so leveling doesn't leave you at low %
                   player.hp = Math.min(player.hp + (stats.maxHp - oldMaxHp), player.maxHp);
                 }
               });
 
-              // Report enemy kill with biome for respawn and loot drop
+              // Report enemy kill with zone and boss info
               const biome = getBiomeAtPosition(enemy.spawnX, enemy.spawnY);
               this.events.push({
                 type: "enemyKilled",
@@ -126,19 +129,21 @@ export class CombatSystem {
                 enemyX: enemy.x,
                 enemyY: enemy.y,
                 enemyType: enemy.enemyType,
+                enemyZone: enemy.zone,
+                isBoss: enemy.isBoss,
               });
 
               state.enemies.delete(enemy.id);
             }
 
-            if (!proj.piercing) break; // non-piercing projectile only hits one enemy
+            if (!proj.piercing) break;
           }
         }
       } else {
-        // Enemy projectile → check player collisions
+        // Enemy projectile → check player collisions in same zone
         state.players.forEach((player) => {
           if (!player.alive) return;
-          if (player.zone !== "hostile") return;
+          if (player.zone !== proj.zone) return;
           if (proj.ownerId === player.id) return;
 
           if (

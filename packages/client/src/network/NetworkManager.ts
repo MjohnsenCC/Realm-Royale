@@ -41,6 +41,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.Respawn);
   }
 
+  sendInteractPortal(): void {
+    this.room?.send(ClientMessage.InteractPortal);
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }

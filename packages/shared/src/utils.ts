@@ -16,8 +16,14 @@ import {
   BASE_MANA_REGEN,
   MANA_PER_LEVEL,
   MANA_REGEN_PER_LEVEL,
+  ARENA_WIDTH,
+  ARENA_HEIGHT,
+  NEXUS_WIDTH,
+  NEXUS_HEIGHT,
+  DUNGEON_WIDTH,
+  DUNGEON_HEIGHT,
 } from "./constants";
-import { ItemCategory } from "./types";
+import { ItemCategory, PlayerZone } from "./types";
 import { ITEM_DEFS } from "./items";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
@@ -67,6 +73,8 @@ export function computePlayerStats(
   let speedBonus = 0;
   let hpRegenBonus = 0;
   let maxManaBonus = 0;
+  let manaRegenBonus = 0;
+  let projSpeedBonus = 0;
 
   // Weapon stats (fallback if no weapon)
   let weaponDamage = base.damage;
@@ -93,6 +101,9 @@ export function computePlayerStats(
     const def = ITEM_DEFS[armorId];
     if (def?.armorStats) {
       maxHpBonus += def.armorStats.maxHpBonus;
+      if (def.armorStats.manaRegenBonus) {
+        manaRegenBonus += def.armorStats.manaRegenBonus;
+      }
     }
   }
 
@@ -106,6 +117,9 @@ export function computePlayerStats(
       hpRegenBonus += def.ringStats.hpRegenBonus;
       maxHpBonus += def.ringStats.maxHpBonus;
       maxManaBonus += def.ringStats.maxManaBonus;
+      if (def.ringStats.projSpeedBonus) {
+        projSpeedBonus += def.ringStats.projSpeedBonus;
+      }
     }
   }
 
@@ -120,9 +134,9 @@ export function computePlayerStats(
     speed: Math.min(MAX_SPEED, base.speed + speedBonus),
     hpRegen: base.hpRegen + hpRegenBonus,
     maxMana: manaBase + maxManaBonus,
-    manaRegen: manaRegenBase,
+    manaRegen: manaRegenBase + manaRegenBonus,
     weaponRange,
-    weaponProjSpeed,
+    weaponProjSpeed: weaponProjSpeed + projSpeedBonus,
     weaponProjSize,
   };
 }
@@ -169,6 +183,21 @@ export function normalizeVector(
   const len = Math.sqrt(x * x + y * y);
   if (len === 0) return { x: 0, y: 0 };
   return { x: x / len, y: y / len };
+}
+
+/** Get zone dimensions for a given zone string. */
+export function getZoneDimensions(zone: string): {
+  width: number;
+  height: number;
+} {
+  if (zone === PlayerZone.Nexus)
+    return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
+  if (
+    zone === PlayerZone.DungeonInfernal ||
+    zone === PlayerZone.DungeonVoid
+  )
+    return { width: DUNGEON_WIDTH, height: DUNGEON_HEIGHT };
+  return { width: ARENA_WIDTH, height: ARENA_HEIGHT };
 }
 
 /**
