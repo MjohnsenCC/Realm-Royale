@@ -12,6 +12,7 @@ import {
   ENEMY_SYNC_RADIUS,
   getBiomeAtPosition,
   BIOME_VISUALS,
+  xpForLevel,
 } from "@rotmg-lite/shared";
 
 export class HUD {
@@ -22,8 +23,8 @@ export class HUD {
   private hpBarFill: Phaser.GameObjects.Graphics;
   private hpText: Phaser.GameObjects.Text;
 
-  // XP
-  private xpText: Phaser.GameObjects.Text;
+  // Level & XP
+  private levelText: Phaser.GameObjects.Text;
 
   // Zone/Biome display
   private zoneText: Phaser.GameObjects.Text;
@@ -40,10 +41,6 @@ export class HUD {
   private minimapBiomeCached: boolean = false;
   private minimapDots: Phaser.GameObjects.Graphics;
 
-  // Death screen
-  private deathOverlay: Phaser.GameObjects.Graphics | null = null;
-  private deathText: Phaser.GameObjects.Text | null = null;
-  private deathSubtext: Phaser.GameObjects.Text | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -60,9 +57,9 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // XP counter (below health bar)
-    this.xpText = scene.add
-      .text(20, 40, "XP: 0", {
+    // Level & XP display (below health bar)
+    this.levelText = scene.add
+      .text(20, 40, "Lv 1 | XP: 0 (0%)", {
         fontSize: "14px",
         color: "#aaffaa",
         fontFamily: "monospace",
@@ -145,6 +142,7 @@ export class HUD {
     hp: number,
     maxHp: number,
     xp: number,
+    level: number,
     playerCount: number,
     localX: number,
     localY: number,
@@ -153,7 +151,13 @@ export class HUD {
     zone: string
   ): void {
     this.drawHealthBar(hp, maxHp);
-    this.xpText.setText(`XP: ${xp}`);
+
+    // Level & XP progress display
+    const currentLevelXp = xpForLevel(level);
+    const nextLevelXp = xpForLevel(Math.min(level + 1, 100));
+    const xpNeeded = nextLevelXp - currentLevelXp;
+    const xpProgress = xpNeeded > 0 ? Math.floor(((xp - currentLevelXp) / xpNeeded) * 100) : 100;
+    this.levelText.setText(`Lv ${level} | XP: ${xp} (${xpProgress}%)`);
 
     if (zone === "nexus") {
       this.zoneText.setText("Nexus (Safe Zone)");
@@ -257,20 +261,26 @@ export class HUD {
     }
   }
 
-  showDeathScreen(onReturn: () => void): void {
+  // Death screen elements
+  private deathOverlay: Phaser.GameObjects.Graphics | null = null;
+  private deathText: Phaser.GameObjects.Text | null = null;
+  private deathButton: Phaser.GameObjects.Text | null = null;
+
+  showDeathScreen(onRespawn: () => void): void {
+    this.hideDeathScreen();
     const { width, height } = this.scene.scale;
 
-    // Dark overlay
+    // Semi-transparent dark overlay
     this.deathOverlay = this.scene.add
       .graphics()
       .setScrollFactor(0)
       .setDepth(200);
-    this.deathOverlay.fillStyle(0x000000, 0.7);
+    this.deathOverlay.fillStyle(0x000000, 0.5);
     this.deathOverlay.fillRect(0, 0, width, height);
 
-    // Death text
+    // "YOU DIED!" text
     this.deathText = this.scene.add
-      .text(width / 2, height / 2 - 30, "YOU DIED!", {
+      .text(width / 2, height / 2 - 40, "YOU DIED!", {
         fontSize: "48px",
         color: "#e94560",
         fontFamily: "monospace",
@@ -279,36 +289,104 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(201);
 
-    // Subtext
-    this.deathSubtext = this.scene.add
-      .text(
-        width / 2,
-        height / 2 + 30,
-        "Click to return to menu.",
-        {
-          fontSize: "18px",
-          color: "#aaaaaa",
-          fontFamily: "monospace",
-          align: "center",
-        }
-      )
+    // "Start Over" button
+    this.deathButton = this.scene.add
+      .text(width / 2, height / 2 + 30, "[ Start Over ]", {
+        fontSize: "22px",
+        color: "#ffffff",
+        fontFamily: "monospace",
+        backgroundColor: "#333333",
+        padding: { x: 16, y: 8 },
+      })
       .setOrigin(0.5)
       .setScrollFactor(0)
-      .setDepth(201);
+      .setDepth(201)
+      .setInteractive({ useHandCursor: true });
 
-    // Click to return
-    this.scene.input.once("pointerdown", () => {
+    this.deathButton.on("pointerover", () => {
+      this.deathButton?.setColor("#44ffaa");
+    });
+    this.deathButton.on("pointerout", () => {
+      this.deathButton?.setColor("#ffffff");
+    });
+    this.deathButton.on("pointerdown", () => {
       this.hideDeathScreen();
-      onReturn();
+      onRespawn();
     });
   }
 
-  private hideDeathScreen(): void {
+  hideDeathScreen(): void {
     this.deathOverlay?.destroy();
     this.deathText?.destroy();
-    this.deathSubtext?.destroy();
+    this.deathButton?.destroy();
     this.deathOverlay = null;
     this.deathText = null;
-    this.deathSubtext = null;
+    this.deathButton = null;
+  }
+
+  showXpGain(x: number, y: number, amount: number): void {
+    const text = this.scene.add
+      .text(x, y - 20, `+${amount} XP`, {
+        fontSize: "14px",
+        color: "#44ffaa",
+        fontFamily: "monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5)
+      .setDepth(150);
+
+    this.scene.tweens.add({
+      targets: text,
+      y: y - 60,
+      alpha: 0,
+      duration: 1200,
+      ease: "Power2",
+      onComplete: () => text.destroy(),
+    });
+  }
+
+  showLevelUp(x: number, y: number, level: number): void {
+    // "LEVEL UP!" text
+    const text = this.scene.add
+      .text(x, y - 30, `LEVEL ${level}!`, {
+        fontSize: "18px",
+        color: "#ffdd44",
+        fontFamily: "monospace",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(150);
+
+    this.scene.tweens.add({
+      targets: text,
+      y: y - 70,
+      alpha: 0,
+      duration: 2000,
+      ease: "Power1",
+      onComplete: () => text.destroy(),
+    });
+
+    // Expanding ring effect
+    const ring = this.scene.add.graphics().setDepth(149);
+    let radius = 10;
+    let alpha = 1;
+    const expandTimer = this.scene.time.addEvent({
+      delay: 16,
+      repeat: 30,
+      callback: () => {
+        ring.clear();
+        radius += 3;
+        alpha -= 0.032;
+        if (alpha <= 0) {
+          ring.destroy();
+          expandTimer.destroy();
+          return;
+        }
+        ring.lineStyle(2, 0xffdd44, alpha);
+        ring.strokeCircle(x, y, radius);
+      },
+    });
   }
 }

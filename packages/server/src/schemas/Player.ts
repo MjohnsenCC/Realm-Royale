@@ -1,5 +1,11 @@
 import { Schema, type } from "@colyseus/schema";
-import { PLAYER_MAX_HP } from "@rotmg-lite/shared";
+import {
+  PLAYER_MAX_HP,
+  BASE_DAMAGE,
+  BASE_SHOOT_COOLDOWN,
+  PLAYER_SPEED,
+  BASE_HP_REGEN,
+} from "@rotmg-lite/shared";
 
 export class Player extends Schema {
   @type("string") id: string = "";
@@ -10,6 +16,7 @@ export class Player extends Schema {
   @type("number") hp: number = PLAYER_MAX_HP;
   @type("number") maxHp: number = PLAYER_MAX_HP;
   @type("number") xp: number = 0;
+  @type("number") level: number = 1;
   @type("boolean") alive: boolean = true;
   @type("uint32") lastProcessedInput: number = 0; // synced to client for reconciliation
   @type("string") zone: string = "nexus"; // "nexus" | "hostile"
@@ -28,4 +35,10 @@ export class Player extends Schema {
     shooting: boolean;
     dt: number;
   }> = [];
+
+  // Cached level-derived stats (server-only, recalculated when level changes)
+  cachedDamage: number = BASE_DAMAGE;
+  cachedShootCooldown: number = BASE_SHOOT_COOLDOWN;
+  cachedSpeed: number = PLAYER_SPEED;
+  cachedHpRegen: number = BASE_HP_REGEN;
 }

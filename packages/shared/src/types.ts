@@ -85,5 +85,6 @@ export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 export const ClientMessage = {
   Input: "input",
   ReturnToNexus: "returnToNexus",
+  Respawn: "respawn",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

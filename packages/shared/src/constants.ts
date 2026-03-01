@@ -20,9 +20,25 @@ export const PROJECTILE_RADIUS = 5;
 // Spawning
 export const MIN_SPAWN_DISTANCE = 300; // min px from any player
 
-// XP
-export const XP_ORB_RADIUS = 8;
-export const XP_COLLECT_RADIUS = 40;
+// Leveling
+export const MAX_LEVEL = 100;
+export const XP_SHARE_RADIUS = 600; // px from dead enemy to award XP
+
+// Base stats (level 1)
+export const BASE_MAX_HP = 100;
+export const BASE_DAMAGE = 20;
+export const BASE_SHOOT_COOLDOWN = 250; // ms
+export const BASE_SPEED = 200; // px/s
+export const BASE_HP_REGEN = 0; // hp/s
+
+// Per-level stat increments
+export const HP_PER_LEVEL = 3;
+export const DAMAGE_PER_LEVEL = 0.5;
+export const COOLDOWN_REDUCTION_PER_LEVEL = 1.5; // ms reduction per level
+export const MIN_SHOOT_COOLDOWN = 100; // hard floor
+export const SPEED_PER_LEVEL = 1;
+export const MAX_SPEED = 300; // hard ceiling
+export const HP_REGEN_PER_LEVEL = 0.1; // hp/s per level
 
 // Server
 export const TICK_RATE = 20; // updates per second

@@ -14,13 +14,13 @@ import {
   PORTAL_Y,
   PORTAL_RADIUS,
   TILE_SIZE,
-  PLAYER_SPEED,
   PLAYER_RADIUS,
   TICK_INTERVAL,
   ServerMessage,
   PlayerInput,
   applyMovement,
   getBiomeAtPosition,
+  getStatsForLevel,
   BIOME_VISUALS,
 } from "@rotmg-lite/shared";
 
@@ -52,7 +52,6 @@ interface DecodedState {
   players: MapSchemaInstance;
   enemies: MapSchemaInstance;
   projectiles: MapSchemaInstance;
-  xpOrbs: MapSchemaInstance;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -61,7 +60,6 @@ export class GameScene extends Phaser.Scene {
   private enemySprites = new Map<string, EnemySprite>();
   private enemySnapshotCache = new Map<string, SnapshotBuffer>();
   private projectileSprites = new Map<string, ProjectileSprite>();
-  private xpOrbGraphics = new Map<string, Phaser.GameObjects.Graphics>();
 
   private keys!: {
     W: Phaser.Input.Keyboard.Key;
@@ -98,6 +96,11 @@ export class GameScene extends Phaser.Scene {
   private lastSentMY: number = 0;
   private lastSentAimAngle: number = 0;
   private lastSentShooting: boolean = false;
+
+  // Track XP/level changes for visual effects
+  private lastKnownXp: number = 0;
+  private lastKnownLevel: number = 1;
+  private isDead: boolean = false;
 
   constructor() {
     super({ key: "GameScene" });
@@ -145,15 +148,30 @@ export class GameScene extends Phaser.Scene {
     room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string }) => {
       this.localZone = data.zone;
       this.pendingInputs = [];
+      this.isDead = false;
+      this.hud.hideDeathScreen();
       this.transitionToZone(data.zone);
+
+      // Re-show local player sprite after respawn
+      const localSprite = this.playerSprites.get(this.network.getSessionId());
+      if (localSprite) {
+        localSprite.setVisible(true);
+      }
     });
 
-    // Listen for server messages
+    // Listen for death notification — show death screen, hide player, wait for respawn
     room.onMessage(ServerMessage.PlayerDied, () => {
+      this.isDead = true;
+
+      // Hide local player sprite
+      const localSprite = this.playerSprites.get(this.network.getSessionId());
+      if (localSprite) {
+        localSprite.setVisible(false);
+      }
+
+      // Show death overlay with respawn button
       this.hud.showDeathScreen(() => {
-        this.network.leave();
-        this.cleanup();
-        this.scene.start("MenuScene");
+        this.network.sendRespawn();
       });
     });
 
@@ -433,13 +451,14 @@ export class GameScene extends Phaser.Scene {
           const reconH =
             this.localZone === "nexus" ? NEXUS_HEIGHT : ARENA_HEIGHT;
 
+          const reconSpeed = getStatsForLevel((player.level as number) ?? 1).speed;
           for (const input of this.pendingInputs) {
             const result = applyMovement(
               reconX,
               reconY,
               input.movementX,
               input.movementY,
-              PLAYER_SPEED,
+              reconSpeed,
               input.dt,
               PLAYER_RADIUS,
               reconW,
@@ -549,24 +568,6 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // XP Orbs
-    state.xpOrbs.onAdd((orb, id) => {
-      const g = this.add.graphics();
-      g.fillStyle(0x44ffaa, 0.9);
-      g.fillCircle(0, 0, 8);
-      g.fillStyle(0xaaffdd, 0.6);
-      g.fillCircle(0, 0, 4);
-      g.setPosition(orb.x as number, orb.y as number);
-      this.xpOrbGraphics.set(id, g);
-    });
-
-    state.xpOrbs.onRemove((_orb, id) => {
-      const g = this.xpOrbGraphics.get(id);
-      if (g) {
-        g.destroy();
-        this.xpOrbGraphics.delete(id);
-      }
-    });
   }
 
   update(_time: number, delta: number): void {
@@ -581,48 +582,58 @@ export class GameScene extends Phaser.Scene {
     const zoneW = this.localZone === "nexus" ? NEXUS_WIDTH : ARENA_WIDTH;
     const zoneH = this.localZone === "nexus" ? NEXUS_HEIGHT : ARENA_HEIGHT;
 
-    // Read input
+    // Block all input while dead
     let mx = 0;
     let my = 0;
-    if (this.keys) {
-      if (this.keys.A.isDown) mx -= 1;
-      if (this.keys.D.isDown) mx += 1;
-      if (this.keys.W.isDown) my -= 1;
-      if (this.keys.S.isDown) my += 1;
-
-      // Q key — return to nexus
-      if (this.returnToNexusCooldown > 0) {
-        this.returnToNexusCooldown -= delta;
-      }
-      if (
-        this.keys.Q.isDown &&
-        this.localZone === "hostile" &&
-        this.returnToNexusCooldown <= 0
-      ) {
-        this.network.sendReturnToNexus();
-        this.returnToNexusCooldown = 1000;
-      }
-    }
-
-    // Calculate aim angle
     let aimAngle = 0;
-    if (localSprite) {
-      const pointer = this.input.activePointer;
-      const worldPoint = this.cameras.main.getWorldPoint(
-        pointer.x,
-        pointer.y
-      );
-      aimAngle = Math.atan2(
-        worldPoint.y - localSprite.displayY,
-        worldPoint.x - localSprite.displayX
-      );
-    }
+    let shooting = false;
 
-    const shooting = this.input.activePointer.isDown;
+    if (!this.isDead) {
+      // Read input
+      if (this.keys) {
+        if (this.keys.A.isDown) mx -= 1;
+        if (this.keys.D.isDown) mx += 1;
+        if (this.keys.W.isDown) my -= 1;
+        if (this.keys.S.isDown) my += 1;
+
+        // Q key — return to nexus
+        if (this.returnToNexusCooldown > 0) {
+          this.returnToNexusCooldown -= delta;
+        }
+        if (
+          this.keys.Q.isDown &&
+          this.localZone === "hostile" &&
+          this.returnToNexusCooldown <= 0
+        ) {
+          this.network.sendReturnToNexus();
+          this.returnToNexusCooldown = 1000;
+        }
+      }
+
+      // Calculate aim angle
+      if (localSprite) {
+        const pointer = this.input.activePointer;
+        const worldPoint = this.cameras.main.getWorldPoint(
+          pointer.x,
+          pointer.y
+        );
+        aimAngle = Math.atan2(
+          worldPoint.y - localSprite.displayY,
+          worldPoint.x - localSprite.displayX
+        );
+      }
+
+      shooting = this.input.activePointer.isDown;
+    }
 
     if (localSprite) {
       localSprite.setLocalAimAngle(aimAngle);
     }
+
+    // Derive movement speed from local player's level
+    const localPlayer = state.players.get(sessionId);
+    const localLevel = (localPlayer?.level as number) ?? 1;
+    const localSpeed = getStatsForLevel(localLevel).speed;
 
     // Client-side prediction — runs EVERY FRAME for smooth visuals
     if (localSprite) {
@@ -634,7 +645,7 @@ export class GameScene extends Phaser.Scene {
           localSprite.y,
           mx,
           my,
-          PLAYER_SPEED,
+          localSpeed,
           delta,
           PLAYER_RADIUS,
           zoneW,
@@ -701,10 +712,9 @@ export class GameScene extends Phaser.Scene {
     // Zone-based visibility filtering
     const inNexus = this.localZone === "nexus";
 
-    // Enemies, projectiles, XP orbs only visible in hostile zone
+    // Enemies, projectiles only visible in hostile zone
     this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
     this.projectileSprites.forEach((sprite) => sprite.setVisible(!inNexus));
-    this.xpOrbGraphics.forEach((g) => g.setVisible(!inNexus));
 
     // Players: only show players in the same zone
     this.playerSprites.forEach((sprite) => {
@@ -725,12 +735,15 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Update HUD
-    const localPlayer = state.players.get(sessionId);
     if (localPlayer) {
+      const currentXp = localPlayer.xp as number;
+      const currentLevel = (localPlayer.level as number) ?? 1;
+
       this.hud.update(
         localPlayer.hp as number,
         localPlayer.maxHp as number,
-        localPlayer.xp as number,
+        currentXp,
+        currentLevel,
         state.players.size,
         localSprite?.displayX ?? 0,
         localSprite?.displayY ?? 0,
@@ -738,6 +751,20 @@ export class GameScene extends Phaser.Scene {
         this.enemySprites,
         this.localZone
       );
+
+      // XP gain floating text
+      if (currentXp > this.lastKnownXp && this.lastKnownXp > 0 && localSprite) {
+        const gained = currentXp - this.lastKnownXp;
+        this.hud.showXpGain(localSprite.displayX, localSprite.displayY, gained);
+      }
+
+      // Level-up visual effect
+      if (currentLevel > this.lastKnownLevel && this.lastKnownLevel > 0 && localSprite) {
+        this.hud.showLevelUp(localSprite.displayX, localSprite.displayY, currentLevel);
+      }
+
+      this.lastKnownXp = currentXp;
+      this.lastKnownLevel = currentLevel;
     }
   }
 
@@ -749,8 +776,6 @@ export class GameScene extends Phaser.Scene {
     this.enemySnapshotCache.clear();
     this.projectileSprites.forEach((s) => s.destroy());
     this.projectileSprites.clear();
-    this.xpOrbGraphics.forEach((g) => g.destroy());
-    this.xpOrbGraphics.clear();
     this.clearNexusLabels();
     this.inputSequence = 0;
     this.pendingInputs = [];
@@ -760,5 +785,9 @@ export class GameScene extends Phaser.Scene {
     this.lastSentMY = 0;
     this.lastSentAimAngle = 0;
     this.lastSentShooting = false;
+    this.isDead = false;
+    this.lastKnownXp = 0;
+    this.lastKnownLevel = 1;
+    this.hud.hideDeathScreen();
   }
 }

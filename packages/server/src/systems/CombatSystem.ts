@@ -1,5 +1,4 @@
-import { GameState, XpOrb } from "../schemas/GameState";
-import { generateId } from "../utils/idGenerator";
+import { GameState } from "../schemas/GameState";
 import { SpatialGrid } from "../utils/SpatialGrid";
 import { Enemy } from "../schemas/Enemy";
 import {
@@ -7,11 +6,13 @@ import {
   PLAYER_RADIUS,
   ARENA_WIDTH,
   ARENA_HEIGHT,
-  XP_COLLECT_RADIUS,
+  XP_SHARE_RADIUS,
   ENEMY_DEFS,
   getBiomeAtPosition,
   distanceBetween,
   circlesOverlap,
+  getPlayerLevel,
+  getStatsForLevel,
 } from "@rotmg-lite/shared";
 
 export interface CombatEvent {
@@ -71,14 +72,29 @@ export class CombatSystem {
             projectilesToRemove.push(id);
 
             if (enemy.hp <= 0) {
-              // Spawn XP orb at enemy position
+              // Award XP directly to all nearby alive players
               const xpValue = def ? def.xpValue : 10;
-              const orb = new XpOrb();
-              orb.id = generateId("xp");
-              orb.x = enemy.x;
-              orb.y = enemy.y;
-              orb.value = xpValue;
-              state.xpOrbs.set(orb.id, orb);
+              const enemyX = enemy.x;
+              const enemyY = enemy.y;
+
+              state.players.forEach((player) => {
+                if (!player.alive || player.zone !== "hostile") return;
+                if (distanceBetween(player.x, player.y, enemyX, enemyY) > XP_SHARE_RADIUS) return;
+                player.xp += xpValue;
+                const newLevel = getPlayerLevel(player.xp);
+                if (newLevel !== player.level) {
+                  player.level = newLevel;
+                  const stats = getStatsForLevel(newLevel);
+                  const oldMaxHp = player.maxHp;
+                  player.maxHp = stats.maxHp;
+                  player.cachedDamage = stats.damage;
+                  player.cachedShootCooldown = stats.shootCooldown;
+                  player.cachedSpeed = stats.speed;
+                  player.cachedHpRegen = stats.hpRegen;
+                  // Heal the HP increase so leveling doesn't leave you at low %
+                  player.hp = Math.min(player.hp + (stats.maxHp - oldMaxHp), player.maxHp);
+                }
+              });
 
               // Report enemy kill with biome for respawn
               const biome = getBiomeAtPosition(enemy.spawnX, enemy.spawnY);
@@ -122,26 +138,6 @@ export class CombatSystem {
     const uniqueRemovals = [...new Set(projectilesToRemove)];
     for (const id of uniqueRemovals) {
       state.projectiles.delete(id);
-    }
-
-    // XP orb collection
-    const orbsToRemove: string[] = [];
-    state.xpOrbs.forEach((orb, orbId) => {
-      state.players.forEach((player) => {
-        if (!player.alive) return;
-        if (player.zone !== "hostile") return;
-        if (
-          distanceBetween(orb.x, orb.y, player.x, player.y) < XP_COLLECT_RADIUS
-        ) {
-          player.xp += orb.value;
-          orbsToRemove.push(orbId);
-        }
-      });
-    });
-
-    const uniqueOrbRemovals = [...new Set(orbsToRemove)];
-    for (const id of uniqueOrbRemovals) {
-      state.xpOrbs.delete(id);
     }
 
     return this.events;

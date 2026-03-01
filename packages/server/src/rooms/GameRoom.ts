@@ -14,13 +14,9 @@ import {
   PlayerInput,
   EntityType,
   TICK_INTERVAL,
-  PLAYER_SPEED,
-  PLAYER_MAX_HP,
   PLAYER_RADIUS,
-  PLAYER_SHOOT_COOLDOWN,
   PROJECTILE_SPEED,
   PROJECTILE_RANGE,
-  PROJECTILE_DAMAGE,
   ARENA_WIDTH,
   ARENA_HEIGHT,
   ARENA_CENTER_X,
@@ -30,10 +26,10 @@ import {
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
-  clamp,
   normalizeVector,
   applyMovement,
   distanceBetween,
+  getStatsForLevel,
 } from "@rotmg-lite/shared";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
@@ -82,23 +78,15 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.ReturnToNexus, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive || player.zone !== "hostile") return;
+      this.teleportPlayerToNexus(player, client);
+    });
 
-      // Teleport to nexus
-      player.zone = "nexus";
-      player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
-      player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
-      player.hp = player.maxHp; // full heal on return
-
-      // Remove this player's projectiles
-      const toRemove: string[] = [];
-      this.state.projectiles.forEach((proj, id) => {
-        if (proj.ownerId === client.sessionId) toRemove.push(id);
-      });
-      for (const id of toRemove) {
-        this.state.projectiles.delete(id);
-      }
-
-      client.send(ServerMessage.ZoneChanged, { zone: "nexus" });
+    // Listen for respawn requests (after death)
+    this.onMessage(ClientMessage.Respawn, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || player.alive) return;
+      player.alive = true;
+      this.teleportPlayerToNexus(player, client);
     });
 
     // Start the authoritative game loop
@@ -116,12 +104,19 @@ export class GameRoom extends Room<GameState> {
     player.name =
       (typeof options?.name === "string" ? options.name : "Player") || "Player";
 
-    // Spawn in nexus
+    // Spawn in nexus with level-1 stats
     player.zone = "nexus";
     player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
     player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
-    player.hp = PLAYER_MAX_HP;
-    player.maxHp = PLAYER_MAX_HP;
+    player.level = 1;
+    player.xp = 0;
+    const stats = getStatsForLevel(1);
+    player.maxHp = stats.maxHp;
+    player.hp = stats.maxHp;
+    player.cachedDamage = stats.damage;
+    player.cachedShootCooldown = stats.shootCooldown;
+    player.cachedSpeed = stats.speed;
+    player.cachedHpRegen = stats.hpRegen;
     player.alive = true;
 
     this.state.players.set(client.sessionId, player);
@@ -149,13 +144,30 @@ export class GameRoom extends Room<GameState> {
     if (this.state.players.size === 0) {
       this.state.enemies.clear();
       this.state.projectiles.clear();
-      this.state.xpOrbs.clear();
       this.spawnSystem.reset();
     }
   }
 
   onDispose() {
     console.log("GameRoom disposed");
+  }
+
+  private teleportPlayerToNexus(player: Player, client: Client): void {
+    player.zone = "nexus";
+    player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
+    player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
+    player.hp = player.maxHp;
+
+    // Remove this player's projectiles
+    const toRemove: string[] = [];
+    this.state.projectiles.forEach((proj, id) => {
+      if (proj.ownerId === player.id) toRemove.push(id);
+    });
+    for (const id of toRemove) {
+      this.state.projectiles.delete(id);
+    }
+
+    client.send(ServerMessage.ZoneChanged, { zone: "nexus" });
   }
 
   private gameLoop(deltaTime: number): void {
@@ -180,7 +192,7 @@ export class GameRoom extends Room<GameState> {
             player.y,
             input.movementX,
             input.movementY,
-            PLAYER_SPEED,
+            player.cachedSpeed,
             input.dt,
             PLAYER_RADIUS,
             zoneW,
@@ -220,7 +232,7 @@ export class GameRoom extends Room<GameState> {
       // Handle shooting (only in hostile zone)
       if (!isNexus && player.inputShooting) {
         const now = Date.now();
-        if (now - player.lastShootTime >= PLAYER_SHOOT_COOLDOWN) {
+        if (now - player.lastShootTime >= player.cachedShootCooldown) {
           player.lastShootTime = now;
 
           const proj = new Projectile();
@@ -231,7 +243,7 @@ export class GameRoom extends Room<GameState> {
           proj.ownerType = EntityType.Player;
           proj.ownerId = player.id;
           proj.speed = PROJECTILE_SPEED;
-          proj.damage = PROJECTILE_DAMAGE;
+          proj.damage = player.cachedDamage;
           proj.startX = player.x;
           proj.startY = player.y;
           proj.maxRange = PROJECTILE_RANGE;
@@ -249,11 +261,13 @@ export class GameRoom extends Room<GameState> {
 
     // 4. Process combat events
     for (const event of events) {
-      if (event.type === "playerDied") {
+      if (event.type === "playerDied" && event.playerId) {
+        const player = this.state.players.get(event.playerId);
         const client = this.clients.find(
           (c) => c.sessionId === event.playerId
         );
-        if (client) {
+        if (player && client) {
+          // Send death notification — client shows death screen, waits for respawn click
           client.send(ServerMessage.PlayerDied, {});
         }
       } else if (event.type === "enemyKilled" && event.biome !== undefined) {
@@ -264,7 +278,15 @@ export class GameRoom extends Room<GameState> {
     // 5. Run spawn system
     this.spawnSystem.update(deltaTime, this.state);
 
-    // 6. Periodically mark all enemies dirty so @filterChildren re-evaluates
+    // 6. HP Regeneration
+    this.state.players.forEach((player) => {
+      if (!player.alive) return;
+      if (player.cachedHpRegen > 0 && player.hp < player.maxHp) {
+        player.hp = Math.min(player.maxHp, player.hp + player.cachedHpRegen * (deltaTime / 1000));
+      }
+    });
+
+    // 7. Periodically mark all enemies dirty so @filterChildren re-evaluates
     //    for clients that moved away from stationary enemies
     this.tickCount++;
     if (this.tickCount >= FILTER_REFRESH_INTERVAL) {

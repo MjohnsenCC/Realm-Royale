@@ -37,6 +37,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.ReturnToNexus);
   }
 
+  sendRespawn(): void {
+    this.room?.send(ClientMessage.Respawn);
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }
