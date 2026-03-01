@@ -19,6 +19,9 @@ export interface CombatEvent {
   type: "playerDied" | "enemyKilled";
   playerId?: string;
   biome?: number;
+  enemyX?: number;
+  enemyY?: number;
+  enemyType?: number;
 }
 
 export class CombatSystem {
@@ -96,11 +99,14 @@ export class CombatSystem {
                 }
               });
 
-              // Report enemy kill with biome for respawn
+              // Report enemy kill with biome for respawn and loot drop
               const biome = getBiomeAtPosition(enemy.spawnX, enemy.spawnY);
               this.events.push({
                 type: "enemyKilled",
                 biome,
+                enemyX: enemy.x,
+                enemyY: enemy.y,
+                enemyType: enemy.enemyType,
               });
 
               state.enemies.delete(enemy.id);

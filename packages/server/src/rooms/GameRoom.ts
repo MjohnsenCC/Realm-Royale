@@ -2,6 +2,7 @@ import { Room, Client } from "colyseus";
 import { GameState } from "../schemas/GameState";
 import { Player } from "../schemas/Player";
 import { Projectile } from "../schemas/Projectile";
+import { LootBag, LootBagItem } from "../schemas/LootBag";
 import { config } from "../config";
 import { BiomeSpawnSystem } from "../systems/BiomeSpawnSystem";
 import { EnemyAI } from "../systems/EnemyAI";
@@ -13,6 +14,7 @@ import {
   ServerMessage,
   PlayerInput,
   EntityType,
+  BagRarity,
   TICK_INTERVAL,
   PLAYER_RADIUS,
   PROJECTILE_SPEED,
@@ -26,10 +28,17 @@ import {
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
+  INVENTORY_SIZE,
+  BAG_SIZE,
+  BAG_PICKUP_RADIUS,
+  BAG_LIFETIME,
+  ENEMY_DEFS,
   normalizeVector,
   applyMovement,
   distanceBetween,
   getStatsForLevel,
+  rollBagDrop,
+  rollBagLoot,
 } from "@rotmg-lite/shared";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
@@ -89,6 +98,92 @@ export class GameRoom extends Room<GameState> {
       this.teleportPlayerToNexus(player, client);
     });
 
+    // Listen for item pickup from loot bag
+    this.onMessage(
+      ClientMessage.PickupItem,
+      (client, data: { bagId: string; slotIndex: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive || player.zone !== "hostile") return;
+
+        const bag = this.state.lootBags.get(data.bagId);
+        if (!bag) return;
+
+        // Validate proximity
+        if (distanceBetween(player.x, player.y, bag.x, bag.y) > BAG_PICKUP_RADIUS) return;
+
+        // Validate slot
+        const slotIndex = data.slotIndex;
+        if (slotIndex < 0 || slotIndex >= bag.items.length) return;
+        const bagItem = bag.items[slotIndex];
+        if (!bagItem || bagItem.itemType === -1) return;
+
+        // Find first empty inventory slot
+        let emptySlot = -1;
+        for (let i = 0; i < player.inventory.length; i++) {
+          if (player.inventory[i] === -1) {
+            emptySlot = i;
+            break;
+          }
+        }
+        if (emptySlot === -1) return; // inventory full
+
+        // Transfer item
+        player.inventory[emptySlot] = bagItem.itemType;
+        bagItem.itemType = -1;
+
+        // Delete bag if completely empty
+        const allEmpty = bag.items.every((item) => item.itemType === -1);
+        if (allEmpty) {
+          this.state.lootBags.delete(bag.id);
+          // Close bag UI for any player who had it open
+          this.state.players.forEach((p) => {
+            if (p.openBagId === bag.id) {
+              p.openBagId = "";
+              const c = this.clients.find((cl) => cl.sessionId === p.id);
+              if (c) c.send(ServerMessage.BagClosed, {});
+            }
+          });
+        } else {
+          // Notify all players viewing this bag of the updated contents
+          this.broadcastBagUpdate(bag);
+        }
+      }
+    );
+
+    // Listen for item drop from inventory
+    this.onMessage(
+      ClientMessage.DropItem,
+      (client, data: { slotIndex: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive || player.zone !== "hostile") return;
+
+        const slotIndex = data.slotIndex;
+        if (slotIndex < 0 || slotIndex >= INVENTORY_SIZE) return;
+        const itemType = player.inventory[slotIndex] ?? -1;
+        if (itemType === -1) return;
+
+        // Clear inventory slot
+        player.inventory[slotIndex] = -1;
+
+        // If standing on a bag, drop into that bag if it has room
+        if (player.openBagId) {
+          const openBag = this.state.lootBags.get(player.openBagId);
+          if (openBag) {
+            const emptySlot = openBag.items.findIndex((item) => item.itemType === -1);
+            const slotItem = emptySlot !== -1 ? openBag.items[emptySlot] : undefined;
+            if (slotItem) {
+              slotItem.itemType = itemType;
+              this.broadcastBagUpdate(openBag);
+              return;
+            }
+          }
+        }
+
+        // No open bag or bag is full — create a new green bag
+        this.spawnLootBag(player.x, player.y, BagRarity.Green, [itemType]);
+      }
+    );
+
     // Start the authoritative game loop
     this.setSimulationInterval(
       (deltaTime) => this.gameLoop(deltaTime),
@@ -144,6 +239,7 @@ export class GameRoom extends Room<GameState> {
     if (this.state.players.size === 0) {
       this.state.enemies.clear();
       this.state.projectiles.clear();
+      this.state.lootBags.clear();
       this.spawnSystem.reset();
     }
   }
@@ -272,6 +368,15 @@ export class GameRoom extends Room<GameState> {
         }
       } else if (event.type === "enemyKilled" && event.biome !== undefined) {
         this.spawnSystem.onEnemyKilled(event.biome);
+
+        // Roll for loot bag drop
+        if (event.enemyX !== undefined && event.enemyY !== undefined) {
+          const bagRarity = rollBagDrop(event.biome);
+          if (bagRarity >= 0) {
+            const loot = rollBagLoot(bagRarity);
+            this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, loot);
+          }
+        }
       }
     }
 
@@ -286,16 +391,111 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 7. Periodically mark all enemies dirty so @filterChildren re-evaluates
-    //    for clients that moved away from stationary enemies
+    // 7. Bag despawn — remove bags older than BAG_LIFETIME
+    const now = Date.now();
+    const bagsToRemove: string[] = [];
+    this.state.lootBags.forEach((bag, id) => {
+      if (now - bag.createdAt > BAG_LIFETIME) {
+        bagsToRemove.push(id);
+      }
+    });
+    for (const id of bagsToRemove) {
+      // Close bag UI for any player who had it open
+      this.state.players.forEach((p) => {
+        if (p.openBagId === id) {
+          p.openBagId = "";
+          const c = this.clients.find((cl) => cl.sessionId === p.id);
+          if (c) c.send(ServerMessage.BagClosed, {});
+        }
+      });
+      this.state.lootBags.delete(id);
+    }
+
+    // 8. Bag proximity detection — send BagOpened/BagClosed messages
+    this.state.players.forEach((player) => {
+      if (!player.alive || player.zone !== "hostile") {
+        if (player.openBagId) {
+          player.openBagId = "";
+          const client = this.clients.find((c) => c.sessionId === player.id);
+          if (client) client.send(ServerMessage.BagClosed, {});
+        }
+        return;
+      }
+
+      // Find closest bag within pickup radius
+      let closestBagId = "";
+      let closestDist = BAG_PICKUP_RADIUS + 1;
+      this.state.lootBags.forEach((bag) => {
+        const dist = distanceBetween(player.x, player.y, bag.x, bag.y);
+        if (dist <= BAG_PICKUP_RADIUS && dist < closestDist) {
+          closestDist = dist;
+          closestBagId = bag.id;
+        }
+      });
+
+      if (closestBagId !== player.openBagId) {
+        const client = this.clients.find((c) => c.sessionId === player.id);
+        if (!client) return;
+
+        if (closestBagId) {
+          player.openBagId = closestBagId;
+          client.send(ServerMessage.BagOpened, { bagId: closestBagId });
+        } else {
+          player.openBagId = "";
+          client.send(ServerMessage.BagClosed, {});
+        }
+      }
+    });
+
+    // 9. Periodically mark all enemies and bags dirty so @filterChildren re-evaluates
+    //    for clients that moved away from stationary entities
     this.tickCount++;
     if (this.tickCount >= FILTER_REFRESH_INTERVAL) {
       this.tickCount = 0;
       this.state.enemies.forEach((enemy) => {
-        // Setting x to itself triggers Schema's change tracking setter,
-        // causing Colyseus to re-run the filterChildren callback on next encode.
         enemy.x = enemy.x;
       });
+      this.state.lootBags.forEach((bag) => {
+        bag.x = bag.x;
+      });
     }
+  }
+
+  private spawnLootBag(
+    x: number,
+    y: number,
+    bagRarity: number,
+    itemTypes: number[]
+  ): void {
+    const bag = new LootBag();
+    bag.id = generateId("bag");
+    bag.x = x;
+    bag.y = y;
+    bag.bagRarity = bagRarity;
+    bag.createdAt = Date.now();
+
+    // Fill bag with items (pad to BAG_SIZE with empty slots)
+    for (let i = 0; i < BAG_SIZE; i++) {
+      const item = new LootBagItem();
+      item.itemType = i < itemTypes.length ? itemTypes[i] : -1;
+      bag.items.push(item);
+    }
+
+    this.state.lootBags.set(bag.id, bag);
+  }
+
+  /** Send updated bag contents to every player who has this bag open. */
+  private broadcastBagUpdate(bag: LootBag): void {
+    const items = bag.items.map((item) => item.itemType);
+    this.state.players.forEach((p) => {
+      if (p.openBagId !== bag.id) return;
+      const c = this.clients.find((cl) => cl.sessionId === p.id);
+      if (c) {
+        c.send(ServerMessage.BagUpdated, {
+          bagId: bag.id,
+          items,
+        });
+      }
+    });
   }
 }

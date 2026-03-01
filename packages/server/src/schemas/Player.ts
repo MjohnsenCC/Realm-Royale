@@ -1,10 +1,11 @@
-import { Schema, type } from "@colyseus/schema";
+import { Schema, type, ArraySchema } from "@colyseus/schema";
 import {
   PLAYER_MAX_HP,
   BASE_DAMAGE,
   BASE_SHOOT_COOLDOWN,
   PLAYER_SPEED,
   BASE_HP_REGEN,
+  INVENTORY_SIZE,
 } from "@rotmg-lite/shared";
 
 export class Player extends Schema {
@@ -20,6 +21,9 @@ export class Player extends Schema {
   @type("boolean") alive: boolean = true;
   @type("uint32") lastProcessedInput: number = 0; // synced to client for reconciliation
   @type("string") zone: string = "nexus"; // "nexus" | "hostile"
+  @type(["int8"]) inventory = new ArraySchema<number>(
+    ...new Array(INVENTORY_SIZE).fill(-1)
+  ); // 8 slots, -1 = empty
 
   // Server-only fields (not synced — no @type decorator)
   lastShootTime: number = 0;
@@ -41,4 +45,7 @@ export class Player extends Schema {
   cachedShootCooldown: number = BASE_SHOOT_COOLDOWN;
   cachedSpeed: number = PLAYER_SPEED;
   cachedHpRegen: number = BASE_HP_REGEN;
+
+  // Server-only: ID of the loot bag currently open for this player (empty = none)
+  openBagId: string = "";
 }

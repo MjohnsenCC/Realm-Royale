@@ -64,3 +64,10 @@ export const NEXUS_HEIGHT = 2400;
 export const PORTAL_X = 1200; // center of nexus horizontally
 export const PORTAL_Y = 400; // near top area of nexus
 export const PORTAL_RADIUS = 40;
+
+// Inventory & Loot Bags
+export const INVENTORY_SIZE = 8;
+export const BAG_SIZE = 8;
+export const BAG_PICKUP_RADIUS = 40; // px — how close to interact with a bag
+export const BAG_LIFETIME = 60000; // ms — bags despawn after 60s
+export const BAG_RADIUS = 12; // visual/collision radius

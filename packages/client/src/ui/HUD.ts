@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import { PlayerSprite } from "../entities/PlayerSprite";
 import { EnemySprite } from "../entities/EnemySprite";
+import { InventoryUI } from "./InventoryUI";
+import { LootBagUI } from "./LootBagUI";
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -41,6 +43,9 @@ export class HUD {
   private minimapBiomeCached: boolean = false;
   private minimapDots: Phaser.GameObjects.Graphics;
 
+  // Inventory & Loot Bag UI
+  inventoryUI: InventoryUI;
+  lootBagUI: LootBagUI;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -105,6 +110,12 @@ export class HUD {
     this.minimapBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapBiomeGraphics = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapDots = scene.add.graphics().setScrollFactor(0).setDepth(101);
+
+    // Inventory UI (always visible, bottom-left)
+    this.inventoryUI = new InventoryUI(scene);
+
+    // Loot Bag UI (hidden by default, shown when near a bag)
+    this.lootBagUI = new LootBagUI(scene);
 
     this.drawHealthBar(100, 100);
   }

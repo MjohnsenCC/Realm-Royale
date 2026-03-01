@@ -4,6 +4,7 @@ import { PlayerSprite } from "../entities/PlayerSprite";
 import { EnemySprite } from "../entities/EnemySprite";
 import { SnapshotBuffer } from "../entities/SnapshotBuffer";
 import { ProjectileSprite } from "../entities/ProjectileSprite";
+import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
 import {
   ARENA_WIDTH,
@@ -52,6 +53,7 @@ interface DecodedState {
   players: MapSchemaInstance;
   enemies: MapSchemaInstance;
   projectiles: MapSchemaInstance;
+  lootBags: MapSchemaInstance;
 }
 
 export class GameScene extends Phaser.Scene {
@@ -60,6 +62,7 @@ export class GameScene extends Phaser.Scene {
   private enemySprites = new Map<string, EnemySprite>();
   private enemySnapshotCache = new Map<string, SnapshotBuffer>();
   private projectileSprites = new Map<string, ProjectileSprite>();
+  private bagSprites = new Map<string, LootBagSprite>();
 
   private keys!: {
     W: Phaser.Input.Keyboard.Key;
@@ -137,6 +140,9 @@ export class GameScene extends Phaser.Scene {
       };
     }
 
+    // Disable browser context menu so right-click works for inventory drop
+    this.input.mouse?.disableContextMenu();
+
     // Create HUD
     this.hud = new HUD(this);
 
@@ -158,6 +164,46 @@ export class GameScene extends Phaser.Scene {
         localSprite.setVisible(true);
       }
     });
+
+    // Set room on inventory/loot bag UIs so they can send messages
+    this.hud.inventoryUI.setRoom(room);
+    this.hud.lootBagUI.setRoom(room);
+
+    // Listen for bag open/close (server proximity detection)
+    room.onMessage(
+      ServerMessage.BagOpened,
+      (data: { bagId: string }) => {
+        const bagSchema = (state.lootBags as unknown as { get(key: string): SchemaInstance | undefined }).get(data.bagId);
+        if (!bagSchema) return;
+
+        const items: number[] = [];
+        const bagItems = bagSchema.items as unknown as { forEach(cb: (item: SchemaInstance) => void): void };
+        if (bagItems && typeof bagItems.forEach === "function") {
+          bagItems.forEach((item: SchemaInstance) => {
+            items.push(item.itemType as number);
+          });
+        }
+        this.hud.lootBagUI.show(
+          data.bagId,
+          bagSchema.bagRarity as number,
+          items
+        );
+      }
+    );
+
+    room.onMessage(ServerMessage.BagClosed, () => {
+      this.hud.lootBagUI.hide();
+    });
+
+    // Listen for bag contents updates (items picked up or dropped by any player)
+    room.onMessage(
+      ServerMessage.BagUpdated,
+      (data: { bagId: string; items: number[] }) => {
+        if (this.hud.lootBagUI.getBagId() === data.bagId) {
+          this.hud.lootBagUI.updateItems(data.items);
+        }
+      }
+    );
 
     // Listen for death notification — show death screen, hide player, wait for respawn
     room.onMessage(ServerMessage.PlayerDied, () => {
@@ -568,6 +614,31 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    // Loot Bags
+    state.lootBags.onAdd((bag, id) => {
+      const sprite = new LootBagSprite(
+        this,
+        bag.x as number,
+        bag.y as number,
+        bag.bagRarity as number
+      );
+      this.bagSprites.set(id, sprite);
+
+      bag.onChange(() => {
+        const s = this.bagSprites.get(id);
+        if (s) {
+          s.update(bag.x as number, bag.y as number);
+        }
+      });
+    });
+
+    state.lootBags.onRemove((_bag, id) => {
+      const sprite = this.bagSprites.get(id);
+      if (sprite) {
+        sprite.destroy();
+        this.bagSprites.delete(id);
+      }
+    });
   }
 
   update(_time: number, delta: number): void {
@@ -623,7 +694,12 @@ export class GameScene extends Phaser.Scene {
         );
       }
 
-      shooting = this.input.activePointer.isDown;
+      // Only shoot if not clicking on UI panels
+      const pointer = this.input.activePointer;
+      const overUI =
+        this.hud.inventoryUI.isOverPanel(pointer.x, pointer.y) ||
+        this.hud.lootBagUI.isOverPanel(pointer.x, pointer.y);
+      shooting = pointer.isDown && !overUI;
     }
 
     if (localSprite) {
@@ -712,9 +788,10 @@ export class GameScene extends Phaser.Scene {
     // Zone-based visibility filtering
     const inNexus = this.localZone === "nexus";
 
-    // Enemies, projectiles only visible in hostile zone
+    // Enemies, projectiles, bags only visible in hostile zone
     this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
     this.projectileSprites.forEach((sprite) => sprite.setVisible(!inNexus));
+    this.bagSprites.forEach((sprite) => sprite.setVisible(!inNexus));
 
     // Players: only show players in the same zone
     this.playerSprites.forEach((sprite) => {
@@ -765,6 +842,16 @@ export class GameScene extends Phaser.Scene {
 
       this.lastKnownXp = currentXp;
       this.lastKnownLevel = currentLevel;
+
+      // Update inventory UI from synced player inventory
+      const inv = localPlayer.inventory as unknown as { length: number; [index: number]: number };
+      if (inv && typeof inv.length === "number") {
+        const items: number[] = [];
+        for (let i = 0; i < inv.length; i++) {
+          items.push(inv[i]);
+        }
+        this.hud.inventoryUI.updateInventory(items);
+      }
     }
   }
 
@@ -776,6 +863,8 @@ export class GameScene extends Phaser.Scene {
     this.enemySnapshotCache.clear();
     this.projectileSprites.forEach((s) => s.destroy());
     this.projectileSprites.clear();
+    this.bagSprites.forEach((s) => s.destroy());
+    this.bagSprites.clear();
     this.clearNexusLabels();
     this.inputSequence = 0;
     this.pendingInputs = [];
@@ -789,5 +878,6 @@ export class GameScene extends Phaser.Scene {
     this.lastKnownXp = 0;
     this.lastKnownLevel = 1;
     this.hud.hideDeathScreen();
+    this.hud.lootBagUI.hide();
   }
 }

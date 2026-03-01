@@ -2,6 +2,7 @@ import { Schema, type, MapSchema, filterChildren } from "@colyseus/schema";
 import { Player } from "./Player";
 import { Enemy } from "./Enemy";
 import { Projectile } from "./Projectile";
+import { LootBag } from "./LootBag";
 
 // IMPORTANT: Keep in sync with ENEMY_SYNC_RADIUS in @rotmg-lite/shared/constants.ts
 const ENEMY_SYNC_RADIUS = 1600;
@@ -39,4 +40,19 @@ export class GameState extends Schema {
   })
   @type({ map: Projectile })
   projectiles = new MapSchema<Projectile>();
+
+  @filterChildren(function (
+    this: GameState,
+    client: any,
+    _key: string,
+    value: LootBag
+  ): boolean {
+    const player = this.players.get(client.sessionId);
+    if (!player || !player.alive || player.zone !== "hostile") return false;
+    const dx = player.x - value.x;
+    const dy = player.y - value.y;
+    return dx * dx + dy * dy <= ENEMY_SYNC_RADIUS_SQ;
+  })
+  @type({ map: LootBag })
+  lootBags = new MapSchema<LootBag>();
 }

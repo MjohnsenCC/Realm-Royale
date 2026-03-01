@@ -76,9 +76,54 @@ export const PlayerZone = {
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
 
+// Item rarity tiers
+export const ItemRarity = {
+  Common: 0,
+  Uncommon: 1,
+  Rare: 2,
+  Legendary: 3,
+} as const;
+export type ItemRarity = (typeof ItemRarity)[keyof typeof ItemRarity];
+
+// Loot bag rarity (visual + loot quality)
+export const BagRarity = {
+  Green: 0,
+  Red: 1,
+  Black: 2,
+} as const;
+export type BagRarity = (typeof BagRarity)[keyof typeof BagRarity];
+
+// Placeholder item types (16 items across 4 rarity tiers)
+export const ItemType = {
+  // Common items (green bags)
+  WoodenSword: 0,
+  LeatherShield: 1,
+  HealthPotion: 2,
+  IronRing: 3,
+  ClothArmor: 4,
+  // Uncommon items (red bags)
+  SteelBlade: 5,
+  MysticOrb: 6,
+  ChainMail: 7,
+  EmeraldAmulet: 8,
+  // Rare items (red/black bags)
+  FlameStaff: 9,
+  ShadowCloak: 10,
+  DiamondRing: 11,
+  // Legendary items (black bags)
+  VoidBlade: 12,
+  CelestialOrb: 13,
+  DragonArmor: 14,
+  GodSlayer: 15,
+} as const;
+export type ItemType = (typeof ItemType)[keyof typeof ItemType];
+
 export const ServerMessage = {
   PlayerDied: "playerDied",
   ZoneChanged: "zoneChanged",
+  BagOpened: "bagOpened",
+  BagClosed: "bagClosed",
+  BagUpdated: "bagUpdated",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -86,5 +131,7 @@ export const ClientMessage = {
   Input: "input",
   ReturnToNexus: "returnToNexus",
   Respawn: "respawn",
+  PickupItem: "pickupItem",
+  DropItem: "dropItem",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
