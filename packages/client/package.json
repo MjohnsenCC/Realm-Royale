@@ -1,0 +1,19 @@
+{
+  "name": "@rotmg-lite/client",
+  "version": "1.0.0",
+  "private": true,
+  "scripts": {
+    "dev": "vite",
+    "build": "vite build",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "@colyseus/schema": "^2.0.37",
+    "colyseus.js": "^0.15.28",
+    "phaser": "^3.80.0",
+    "@rotmg-lite/shared": "*"
+  },
+  "devDependencies": {
+    "vite": "^5.4.11"
+  }
+}
