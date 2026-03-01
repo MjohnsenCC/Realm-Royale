@@ -6,6 +6,9 @@ import {
   PLAYER_SPEED,
   BASE_HP_REGEN,
   INVENTORY_SIZE,
+  EQUIPMENT_SLOTS,
+  BASE_MAX_MANA,
+  BASE_MANA_REGEN,
 } from "@rotmg-lite/shared";
 
 export class Player extends Schema {
@@ -21,30 +24,43 @@ export class Player extends Schema {
   @type("boolean") alive: boolean = true;
   @type("uint32") lastProcessedInput: number = 0; // synced to client for reconciliation
   @type("string") zone: string = "nexus"; // "nexus" | "hostile"
-  @type(["int8"]) inventory = new ArraySchema<number>(
+  @type(["int16"]) inventory = new ArraySchema<number>(
     ...new Array(INVENTORY_SIZE).fill(-1)
   ); // 8 slots, -1 = empty
+  @type(["int16"]) equipment = new ArraySchema<number>(
+    ...new Array(EQUIPMENT_SLOTS).fill(-1)
+  ); // 4 slots: weapon, ability, armor, ring
+  @type("number") mana: number = BASE_MAX_MANA;
+  @type("number") maxMana: number = BASE_MAX_MANA;
+  @type("number") cachedSpeed: number = PLAYER_SPEED; // synced for client prediction
 
   // Server-only fields (not synced — no @type decorator)
   lastShootTime: number = 0;
+  lastAbilityTime: number = 0;
   inputMovementX: number = 0;
   inputMovementY: number = 0;
   inputAimAngle: number = 0;
   inputShooting: boolean = false;
+  inputUseAbility: boolean = false;
   pendingInputs: Array<{
     seq: number;
     movementX: number;
     movementY: number;
     aimAngle: number;
     shooting: boolean;
+    useAbility: boolean;
     dt: number;
   }> = [];
 
-  // Cached level-derived stats (server-only, recalculated when level changes)
+  // Cached level-derived stats (server-only, recalculated when level or equipment changes)
   cachedDamage: number = BASE_DAMAGE;
   cachedShootCooldown: number = BASE_SHOOT_COOLDOWN;
-  cachedSpeed: number = PLAYER_SPEED;
   cachedHpRegen: number = BASE_HP_REGEN;
+  cachedManaRegen: number = BASE_MANA_REGEN;
+  // Cached weapon stats
+  cachedWeaponRange: number = 400;
+  cachedWeaponProjSpeed: number = 500;
+  cachedWeaponProjSize: number = 5;
 
   // Server-only: ID of the loot bag currently open for this player (empty = none)
   openBagId: string = "";

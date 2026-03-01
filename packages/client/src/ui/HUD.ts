@@ -25,6 +25,11 @@ export class HUD {
   private hpBarFill: Phaser.GameObjects.Graphics;
   private hpText: Phaser.GameObjects.Text;
 
+  // Mana bar
+  private manaBarBg: Phaser.GameObjects.Graphics;
+  private manaBarFill: Phaser.GameObjects.Graphics;
+  private manaText: Phaser.GameObjects.Text;
+
   // Level & XP
   private levelText: Phaser.GameObjects.Text;
 
@@ -62,9 +67,21 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // Level & XP display (below health bar)
+    // Mana bar (below health bar)
+    this.manaBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
+    this.manaBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.manaText = scene.add
+      .text(20, 32, "100 / 100", {
+        fontSize: "11px",
+        color: "#ffffff",
+        fontFamily: "monospace",
+      })
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    // Level & XP display (below mana bar)
     this.levelText = scene.add
-      .text(20, 40, "Lv 1 | XP: 0 (0%)", {
+      .text(20, 56, "Lv 1 | XP: 0 (0%)", {
         fontSize: "14px",
         color: "#aaffaa",
         fontFamily: "monospace",
@@ -96,7 +113,7 @@ export class HUD {
 
     // Q hint (below zone text, only shown in hostile)
     this.qHintText = scene.add
-      .text(scene.scale.width / 2, 38, "Q: Return to Nexus", {
+      .text(scene.scale.width / 2, 38, "Q: Return to Nexus  |  SPACE: Ability", {
         fontSize: "11px",
         color: "#888888",
         fontFamily: "monospace",
@@ -115,9 +132,10 @@ export class HUD {
     this.inventoryUI = new InventoryUI(scene);
 
     // Loot Bag UI (hidden by default, shown when near a bag)
-    this.lootBagUI = new LootBagUI(scene);
+    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip());
 
     this.drawHealthBar(100, 100);
+    this.drawManaBar(100, 100);
   }
 
   private drawHealthBar(hp: number, maxHp: number): void {
@@ -149,9 +167,38 @@ export class HUD {
     this.hpText.setOrigin(0.5, 0);
   }
 
+  private drawManaBar(mana: number, maxMana: number): void {
+    const barWidth = 160;
+    const barHeight = 16;
+    const x = 16;
+    const y = 36;
+
+    this.manaBarBg.clear();
+    this.manaBarBg.fillStyle(0x333333, 0.8);
+    this.manaBarBg.fillRect(x, y, barWidth, barHeight);
+    this.manaBarBg.lineStyle(1, 0x666666, 1);
+    this.manaBarBg.strokeRect(x, y, barWidth, barHeight);
+
+    this.manaBarFill.clear();
+    const ratio = maxMana > 0 ? Math.max(0, mana / maxMana) : 0;
+    this.manaBarFill.fillStyle(0x4466cc, 1);
+    this.manaBarFill.fillRect(
+      x + 1,
+      y + 1,
+      (barWidth - 2) * ratio,
+      barHeight - 2
+    );
+
+    this.manaText.setText(`${Math.ceil(mana)} / ${maxMana}`);
+    this.manaText.setPosition(x + barWidth / 2, y + 2);
+    this.manaText.setOrigin(0.5, 0);
+  }
+
   update(
     hp: number,
     maxHp: number,
+    mana: number,
+    maxMana: number,
     xp: number,
     level: number,
     playerCount: number,
@@ -162,6 +209,7 @@ export class HUD {
     zone: string
   ): void {
     this.drawHealthBar(hp, maxHp);
+    this.drawManaBar(mana, maxMana);
 
     // Level & XP progress display
     const currentLevelXp = xpForLevel(level);

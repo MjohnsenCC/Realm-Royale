@@ -4,6 +4,7 @@ export interface PlayerInput {
   movement: { x: number; y: number }; // -1 to 1 on each axis
   aimAngle: number; // radians
   shooting: boolean;
+  useAbility: boolean; // Space key
   dt: number; // accumulated delta time (ms) the client predicted with
 }
 
@@ -76,14 +77,49 @@ export const PlayerZone = {
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
 
-// Item rarity tiers
-export const ItemRarity = {
-  Common: 0,
-  Uncommon: 1,
-  Rare: 2,
-  Legendary: 3,
+// Item category (determines which equipment slot it uses)
+export const ItemCategory = {
+  Weapon: 0,
+  Ability: 1,
+  Armor: 2,
+  Ring: 3,
 } as const;
-export type ItemRarity = (typeof ItemRarity)[keyof typeof ItemRarity];
+export type ItemCategory = (typeof ItemCategory)[keyof typeof ItemCategory];
+
+// Weapon subtypes
+export const WeaponSubtype = {
+  Sword: 0,
+  Bow: 1,
+} as const;
+export type WeaponSubtype = (typeof WeaponSubtype)[keyof typeof WeaponSubtype];
+
+// Ability subtypes
+export const AbilitySubtype = {
+  Quiver: 0,
+} as const;
+export type AbilitySubtype =
+  (typeof AbilitySubtype)[keyof typeof AbilitySubtype];
+
+// Item tier (1-6)
+export const ItemTier = {
+  T1: 1,
+  T2: 2,
+  T3: 3,
+  T4: 4,
+  T5: 5,
+  T6: 6,
+} as const;
+export type ItemTier = (typeof ItemTier)[keyof typeof ItemTier];
+
+// Projectile visual type (synced to client for rendering)
+export const ProjectileType = {
+  BowArrow: 0,
+  SwordSlash: 1,
+  QuiverShot: 2,
+  EnemyBullet: 3,
+} as const;
+export type ProjectileType =
+  (typeof ProjectileType)[keyof typeof ProjectileType];
 
 // Loot bag rarity (visual + loot quality)
 export const BagRarity = {
@@ -92,31 +128,6 @@ export const BagRarity = {
   Black: 2,
 } as const;
 export type BagRarity = (typeof BagRarity)[keyof typeof BagRarity];
-
-// Placeholder item types (16 items across 4 rarity tiers)
-export const ItemType = {
-  // Common items (green bags)
-  WoodenSword: 0,
-  LeatherShield: 1,
-  HealthPotion: 2,
-  IronRing: 3,
-  ClothArmor: 4,
-  // Uncommon items (red bags)
-  SteelBlade: 5,
-  MysticOrb: 6,
-  ChainMail: 7,
-  EmeraldAmulet: 8,
-  // Rare items (red/black bags)
-  FlameStaff: 9,
-  ShadowCloak: 10,
-  DiamondRing: 11,
-  // Legendary items (black bags)
-  VoidBlade: 12,
-  CelestialOrb: 13,
-  DragonArmor: 14,
-  GodSlayer: 15,
-} as const;
-export type ItemType = (typeof ItemType)[keyof typeof ItemType];
 
 export const ServerMessage = {
   PlayerDied: "playerDied",
@@ -133,5 +144,7 @@ export const ClientMessage = {
   Respawn: "respawn",
   PickupItem: "pickupItem",
   DropItem: "dropItem",
+  EquipItem: "equipItem",
+  UseAbility: "useAbility",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

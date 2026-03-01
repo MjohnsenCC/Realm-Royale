@@ -21,7 +21,6 @@ import {
   PlayerInput,
   applyMovement,
   getBiomeAtPosition,
-  getStatsForLevel,
   BIOME_VISUALS,
 } from "@rotmg-lite/shared";
 
@@ -70,6 +69,7 @@ export class GameScene extends Phaser.Scene {
     S: Phaser.Input.Keyboard.Key;
     D: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
+    SPACE: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -137,6 +137,7 @@ export class GameScene extends Phaser.Scene {
         S: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.S),
         D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
         Q: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
+        SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
       };
     }
 
@@ -497,7 +498,7 @@ export class GameScene extends Phaser.Scene {
           const reconH =
             this.localZone === "nexus" ? NEXUS_HEIGHT : ARENA_HEIGHT;
 
-          const reconSpeed = getStatsForLevel((player.level as number) ?? 1).speed;
+          const reconSpeed = (player.cachedSpeed as number) ?? 200;
           for (const input of this.pendingInputs) {
             const result = applyMovement(
               reconX,
@@ -594,7 +595,8 @@ export class GameScene extends Phaser.Scene {
         proj.y as number,
         proj.ownerType as number,
         proj.angle as number,
-        proj.speed as number
+        proj.speed as number,
+        (proj.projType as number) ?? 0
       );
       this.projectileSprites.set(id, sprite);
 
@@ -658,6 +660,7 @@ export class GameScene extends Phaser.Scene {
     let my = 0;
     let aimAngle = 0;
     let shooting = false;
+    let useAbility = false;
 
     if (!this.isDead) {
       // Read input
@@ -694,6 +697,11 @@ export class GameScene extends Phaser.Scene {
         );
       }
 
+      // Space key — use ability
+      if (this.keys.SPACE.isDown && this.localZone === "hostile") {
+        useAbility = true;
+      }
+
       // Only shoot if not clicking on UI panels
       const pointer = this.input.activePointer;
       const overUI =
@@ -706,10 +714,9 @@ export class GameScene extends Phaser.Scene {
       localSprite.setLocalAimAngle(aimAngle);
     }
 
-    // Derive movement speed from local player's level
+    // Derive movement speed from synced cachedSpeed
     const localPlayer = state.players.get(sessionId);
-    const localLevel = (localPlayer?.level as number) ?? 1;
-    const localSpeed = getStatsForLevel(localLevel).speed;
+    const localSpeed = (localPlayer?.cachedSpeed as number) ?? 200;
 
     // Client-side prediction — runs EVERY FRAME for smooth visuals
     if (localSprite) {
@@ -767,6 +774,7 @@ export class GameScene extends Phaser.Scene {
           movement: { x: mx, y: my },
           aimAngle,
           shooting,
+          useAbility,
           dt: sendDt,
         };
         this.network.sendInput(input);
@@ -819,6 +827,8 @@ export class GameScene extends Phaser.Scene {
       this.hud.update(
         localPlayer.hp as number,
         localPlayer.maxHp as number,
+        (localPlayer.mana as number) ?? 0,
+        (localPlayer.maxMana as number) ?? 100,
         currentXp,
         currentLevel,
         state.players.size,
@@ -851,6 +861,16 @@ export class GameScene extends Phaser.Scene {
           items.push(inv[i]);
         }
         this.hud.inventoryUI.updateInventory(items);
+      }
+
+      // Update equipment UI from synced player equipment
+      const eq = localPlayer.equipment as unknown as { length: number; [index: number]: number };
+      if (eq && typeof eq.length === "number") {
+        const eqItems: number[] = [];
+        for (let i = 0; i < eq.length; i++) {
+          eqItems.push(eq[i]);
+        }
+        this.hud.inventoryUI.updateEquipment(eqItems);
       }
     }
   }

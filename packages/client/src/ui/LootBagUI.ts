@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { BAG_SIZE, BagRarity, ITEM_DEFS, ClientMessage } from "@rotmg-lite/shared";
+import { ItemTooltip } from "./ItemTooltip";
 
 const SLOT_SIZE = 36;
 const SLOT_GAP = 4;
@@ -40,9 +41,11 @@ export class LootBagUI {
   private currentBagId: string = "";
   private currentItems: number[] = new Array(BAG_SIZE).fill(-1);
   private currentBagRarity: number = 0;
+  private tooltip: ItemTooltip;
 
-  constructor(scene: Phaser.Scene) {
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip) {
     this.scene = scene;
+    this.tooltip = tooltip;
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
@@ -75,6 +78,19 @@ export class LootBagUI {
         if (pointer.leftButtonDown()) {
           this.onPickupItem(i);
         }
+      });
+
+      zone.on("pointerover", () => {
+        const itemId = this.currentItems[i];
+        if (itemId >= 0) {
+          const invPanelWidth = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
+          const panelX = 16 + invPanelWidth + 8;
+          const panelY = this.scene.scale.height - PANEL_HEIGHT - 16;
+          this.tooltip.show(itemId, panelX, panelY - 8);
+        }
+      });
+      zone.on("pointerout", () => {
+        this.tooltip.hide();
       });
 
       this.slotZones.push(zone);
@@ -155,7 +171,6 @@ export class LootBagUI {
 
   private redraw(): void {
     // Position: next to inventory panel (to the right of it)
-    // Inventory is at x=16, so this sits at x = 16 + inventoryWidth + gap
     const invPanelWidth = COLS * SLOT_SIZE + (COLS - 1) * SLOT_GAP + PADDING * 2;
     const panelX = 16 + invPanelWidth + 8;
     const panelY = this.scene.scale.height - PANEL_HEIGHT - 16;
@@ -192,7 +207,10 @@ export class LootBagUI {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
       this.slotGraphics.fillRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
-      this.slotGraphics.lineStyle(1, def ? 0x888888 : 0x333344, 1);
+
+      // Use tier color for border
+      const slotBorder = def ? def.tierColor : 0x333344;
+      this.slotGraphics.lineStyle(1, slotBorder, 1);
       this.slotGraphics.strokeRect(sx, sy, SLOT_SIZE, SLOT_SIZE);
 
       if (def) {

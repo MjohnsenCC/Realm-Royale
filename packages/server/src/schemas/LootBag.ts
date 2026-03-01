@@ -1,7 +1,7 @@
 import { Schema, type, ArraySchema } from "@colyseus/schema";
 
 export class LootBagItem extends Schema {
-  @type("int8") itemType: number = -1; // -1 = empty slot
+  @type("int16") itemType: number = -1; // -1 = empty slot
 }
 
 export class LootBag extends Schema {

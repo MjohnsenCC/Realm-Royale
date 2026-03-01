@@ -12,7 +12,13 @@ import {
   MAX_SPEED,
   BASE_HP_REGEN,
   HP_REGEN_PER_LEVEL,
+  BASE_MAX_MANA,
+  BASE_MANA_REGEN,
+  MANA_PER_LEVEL,
+  MANA_REGEN_PER_LEVEL,
 } from "./constants";
+import { ItemCategory } from "./types";
+import { ITEM_DEFS } from "./items";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
 export function xpForLevel(level: number): number {
@@ -36,6 +42,88 @@ export function getStatsForLevel(level: number) {
     shootCooldown: Math.max(MIN_SHOOT_COOLDOWN, BASE_SHOOT_COOLDOWN - (l - 1) * COOLDOWN_REDUCTION_PER_LEVEL),
     speed: Math.min(MAX_SPEED, BASE_SPEED + (l - 1) * SPEED_PER_LEVEL),
     hpRegen: BASE_HP_REGEN + (l - 1) * HP_REGEN_PER_LEVEL,
+  };
+}
+
+/** Compute full player stats combining level + equipment bonuses. */
+export function computePlayerStats(
+  level: number,
+  equipment: number[]
+): {
+  maxHp: number;
+  damage: number;
+  shootCooldown: number;
+  speed: number;
+  hpRegen: number;
+  maxMana: number;
+  manaRegen: number;
+  weaponRange: number;
+  weaponProjSpeed: number;
+  weaponProjSize: number;
+} {
+  const base = getStatsForLevel(level);
+  let maxHpBonus = 0;
+  let damageBonus = 0;
+  let speedBonus = 0;
+  let hpRegenBonus = 0;
+  let maxManaBonus = 0;
+
+  // Weapon stats (fallback if no weapon)
+  let weaponDamage = base.damage;
+  let weaponCooldown = base.shootCooldown;
+  let weaponRange = 100;
+  let weaponProjSpeed = 300;
+  let weaponProjSize = 5;
+
+  const weaponId = equipment[ItemCategory.Weapon] ?? -1;
+  if (weaponId >= 0) {
+    const def = ITEM_DEFS[weaponId];
+    if (def?.weaponStats) {
+      weaponDamage = def.weaponStats.damage;
+      weaponCooldown = def.weaponStats.shootCooldown;
+      weaponRange = def.weaponStats.range;
+      weaponProjSpeed = def.weaponStats.projectileSpeed;
+      weaponProjSize = def.weaponStats.projectileSize;
+    }
+  }
+
+  // Armor
+  const armorId = equipment[ItemCategory.Armor] ?? -1;
+  if (armorId >= 0) {
+    const def = ITEM_DEFS[armorId];
+    if (def?.armorStats) {
+      maxHpBonus += def.armorStats.maxHpBonus;
+    }
+  }
+
+  // Ring
+  const ringId = equipment[ItemCategory.Ring] ?? -1;
+  if (ringId >= 0) {
+    const def = ITEM_DEFS[ringId];
+    if (def?.ringStats) {
+      speedBonus += def.ringStats.speedBonus;
+      damageBonus += def.ringStats.damageBonus;
+      hpRegenBonus += def.ringStats.hpRegenBonus;
+      maxHpBonus += def.ringStats.maxHpBonus;
+      maxManaBonus += def.ringStats.maxManaBonus;
+    }
+  }
+
+  const l = clamp(level, 1, MAX_LEVEL);
+  const manaBase = BASE_MAX_MANA + (l - 1) * MANA_PER_LEVEL;
+  const manaRegenBase = BASE_MANA_REGEN + (l - 1) * MANA_REGEN_PER_LEVEL;
+
+  return {
+    maxHp: base.maxHp + maxHpBonus,
+    damage: weaponDamage + damageBonus,
+    shootCooldown: weaponCooldown,
+    speed: Math.min(MAX_SPEED, base.speed + speedBonus),
+    hpRegen: base.hpRegen + hpRegenBonus,
+    maxMana: manaBase + maxManaBonus,
+    manaRegen: manaRegenBase,
+    weaponRange,
+    weaponProjSpeed,
+    weaponProjSize,
   };
 }
 

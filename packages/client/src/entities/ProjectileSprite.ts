@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { EntityType, PROJECTILE_RADIUS } from "@rotmg-lite/shared";
+import { EntityType, ProjectileType, PROJECTILE_RADIUS } from "@rotmg-lite/shared";
 
 export class ProjectileSprite {
   private graphics: Phaser.GameObjects.Graphics;
@@ -17,7 +17,8 @@ export class ProjectileSprite {
     y: number,
     ownerType: number,
     angle: number,
-    speed: number
+    speed: number,
+    projType: number = ProjectileType.EnemyBullet
   ) {
     this.x = x;
     this.y = y;
@@ -26,11 +27,36 @@ export class ProjectileSprite {
     this.angle = angle;
     this.speed = speed;
 
-    const color = ownerType === EntityType.Player ? 0xffff44 : 0xff4444;
-
     this.graphics = scene.add.graphics();
-    this.graphics.fillStyle(color, 1);
-    this.graphics.fillCircle(0, 0, PROJECTILE_RADIUS);
+
+    if (ownerType === EntityType.Enemy) {
+      // Enemy bullets: red circle
+      this.graphics.fillStyle(0xff4444, 1);
+      this.graphics.fillCircle(0, 0, PROJECTILE_RADIUS);
+    } else {
+      switch (projType) {
+        case ProjectileType.SwordSlash:
+          // Wide white/gray arc shape for melee
+          this.graphics.fillStyle(0xccccff, 0.8);
+          this.graphics.fillEllipse(0, 0, 24, 8);
+          break;
+        case ProjectileType.QuiverShot:
+          // Large cyan/blue circle with inner glow
+          this.graphics.fillStyle(0x44aaff, 0.5);
+          this.graphics.fillCircle(0, 0, 14);
+          this.graphics.fillStyle(0x88ccff, 1);
+          this.graphics.fillCircle(0, 0, 8);
+          break;
+        case ProjectileType.BowArrow:
+        default:
+          // Yellow elongated shape
+          this.graphics.fillStyle(0xffff44, 1);
+          this.graphics.fillEllipse(0, 0, 10, 4);
+          break;
+      }
+    }
+
+    this.graphics.setRotation(angle);
     this.graphics.setPosition(x, y);
   }
 

@@ -71,3 +71,18 @@ export const BAG_SIZE = 8;
 export const BAG_PICKUP_RADIUS = 40; // px — how close to interact with a bag
 export const BAG_LIFETIME = 60000; // ms — bags despawn after 60s
 export const BAG_RADIUS = 12; // visual/collision radius
+
+// Equipment
+export const EQUIPMENT_SLOTS = 4; // weapon, ability, armor, ring
+
+// Mana
+export const BASE_MAX_MANA = 100;
+export const BASE_MANA_REGEN = 5; // mana/s
+export const MANA_PER_LEVEL = 2; // bonus max mana per level
+export const MANA_REGEN_PER_LEVEL = 0.2; // bonus mana regen per level
+
+// Default starting equipment (tier 1 of each)
+export const DEFAULT_WEAPON = 11; // Bow T1
+export const DEFAULT_ABILITY = 101; // Quiver T1
+export const DEFAULT_ARMOR = 201; // Armor T1
+export const DEFAULT_RING = 301; // Ring T1

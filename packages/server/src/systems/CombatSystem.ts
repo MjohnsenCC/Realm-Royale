@@ -12,7 +12,7 @@ import {
   distanceBetween,
   circlesOverlap,
   getPlayerLevel,
-  getStatsForLevel,
+  computePlayerStats,
 } from "@rotmg-lite/shared";
 
 export interface CombatEvent {
@@ -68,11 +68,19 @@ export class CombatSystem {
         // Player projectile → check enemy collisions using spatial grid
         const nearby = this.enemyGrid.query(proj.x, proj.y, 50);
         for (const enemy of nearby) {
+          // Skip enemies already hit by this piercing projectile
+          if (proj.piercing && proj.hitEnemies.has(enemy.id)) continue;
+
           const def = ENEMY_DEFS[enemy.enemyType];
           const enemyRadius = def ? def.radius : 14;
-          if (circlesOverlap(proj.x, proj.y, 5, enemy.x, enemy.y, enemyRadius)) {
+          if (circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, enemyRadius)) {
             enemy.hp -= proj.damage;
-            projectilesToRemove.push(id);
+
+            if (proj.piercing) {
+              proj.hitEnemies.add(enemy.id);
+            } else {
+              projectilesToRemove.push(id);
+            }
 
             if (enemy.hp <= 0) {
               // Award XP directly to all nearby alive players
@@ -87,13 +95,24 @@ export class CombatSystem {
                 const newLevel = getPlayerLevel(player.xp);
                 if (newLevel !== player.level) {
                   player.level = newLevel;
-                  const stats = getStatsForLevel(newLevel);
+                  const eq = [
+                    player.equipment[0] ?? -1,
+                    player.equipment[1] ?? -1,
+                    player.equipment[2] ?? -1,
+                    player.equipment[3] ?? -1,
+                  ];
+                  const stats = computePlayerStats(newLevel, eq);
                   const oldMaxHp = player.maxHp;
                   player.maxHp = stats.maxHp;
                   player.cachedDamage = stats.damage;
                   player.cachedShootCooldown = stats.shootCooldown;
                   player.cachedSpeed = stats.speed;
                   player.cachedHpRegen = stats.hpRegen;
+                  player.maxMana = stats.maxMana;
+                  player.cachedManaRegen = stats.manaRegen;
+                  player.cachedWeaponRange = stats.weaponRange;
+                  player.cachedWeaponProjSpeed = stats.weaponProjSpeed;
+                  player.cachedWeaponProjSize = stats.weaponProjSize;
                   // Heal the HP increase so leveling doesn't leave you at low %
                   player.hp = Math.min(player.hp + (stats.maxHp - oldMaxHp), player.maxHp);
                 }
@@ -111,7 +130,8 @@ export class CombatSystem {
 
               state.enemies.delete(enemy.id);
             }
-            break; // projectile only hits one enemy
+
+            if (!proj.piercing) break; // non-piercing projectile only hits one enemy
           }
         }
       } else {
@@ -122,7 +142,7 @@ export class CombatSystem {
           if (proj.ownerId === player.id) return;
 
           if (
-            circlesOverlap(proj.x, proj.y, 5, player.x, player.y, PLAYER_RADIUS)
+            circlesOverlap(proj.x, proj.y, proj.collisionRadius, player.x, player.y, PLAYER_RADIUS)
           ) {
             player.hp -= proj.damage;
             projectilesToRemove.push(id);

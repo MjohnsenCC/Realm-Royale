@@ -1,5 +1,5 @@
 import { Schema, type } from "@colyseus/schema";
-import { EntityType } from "@rotmg-lite/shared";
+import { EntityType, ProjectileType } from "@rotmg-lite/shared";
 
 export class Projectile extends Schema {
   @type("string") id: string = "";
@@ -8,6 +8,7 @@ export class Projectile extends Schema {
   @type("number") angle: number = 0;
   @type("uint8") ownerType: number = EntityType.Player;
   @type("number") speed: number = 0;
+  @type("uint8") projType: number = ProjectileType.BowArrow;
 
   // Server-only
   ownerId: string = "";
@@ -15,4 +16,7 @@ export class Projectile extends Schema {
   startX: number = 0;
   startY: number = 0;
   maxRange: number = 0;
+  piercing: boolean = false;
+  collisionRadius: number = 5;
+  hitEnemies: Set<string> = new Set();
 }

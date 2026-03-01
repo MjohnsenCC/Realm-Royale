@@ -14,11 +14,12 @@ import {
   ServerMessage,
   PlayerInput,
   EntityType,
+  ItemCategory,
+  WeaponSubtype,
+  ProjectileType,
   BagRarity,
   TICK_INTERVAL,
   PLAYER_RADIUS,
-  PROJECTILE_SPEED,
-  PROJECTILE_RANGE,
   ARENA_WIDTH,
   ARENA_HEIGHT,
   ARENA_CENTER_X,
@@ -29,14 +30,21 @@ import {
   PORTAL_Y,
   PORTAL_RADIUS,
   INVENTORY_SIZE,
+  EQUIPMENT_SLOTS,
   BAG_SIZE,
   BAG_PICKUP_RADIUS,
   BAG_LIFETIME,
-  ENEMY_DEFS,
+  DEFAULT_WEAPON,
+  DEFAULT_ABILITY,
+  DEFAULT_ARMOR,
+  DEFAULT_RING,
   normalizeVector,
   applyMovement,
   distanceBetween,
-  getStatsForLevel,
+  computePlayerStats,
+  getItemCategory,
+  getItemSubtype,
+  ITEM_DEFS,
   rollBagDrop,
   rollBagLoot,
 } from "@rotmg-lite/shared";
@@ -45,6 +53,39 @@ import {
 // Colyseus only re-evaluates filters on changed children — enemies beyond AI_UPDATE_RANGE
 // never get position updates, so the filter would never remove them from a departing client.
 const FILTER_REFRESH_INTERVAL = 2; // every 2 ticks (100ms at 20Hz)
+
+/** Recalculate all player stats from level + equipment. */
+function recalcPlayerStats(player: Player): void {
+  const eq = [
+    player.equipment[0] ?? -1,
+    player.equipment[1] ?? -1,
+    player.equipment[2] ?? -1,
+    player.equipment[3] ?? -1,
+  ];
+  const stats = computePlayerStats(player.level, eq);
+
+  const oldMaxHp = player.maxHp;
+  player.maxHp = stats.maxHp;
+  player.cachedDamage = stats.damage;
+  player.cachedShootCooldown = stats.shootCooldown;
+  player.cachedSpeed = stats.speed;
+  player.cachedHpRegen = stats.hpRegen;
+  player.maxMana = stats.maxMana;
+  player.cachedManaRegen = stats.manaRegen;
+  player.cachedWeaponRange = stats.weaponRange;
+  player.cachedWeaponProjSpeed = stats.weaponProjSpeed;
+  player.cachedWeaponProjSize = stats.weaponProjSize;
+
+  // Heal HP proportionally if maxHp increased
+  if (player.maxHp > oldMaxHp) {
+    player.hp = Math.min(player.hp + (player.maxHp - oldMaxHp), player.maxHp);
+  } else {
+    player.hp = Math.min(player.hp, player.maxHp);
+  }
+  player.mana = Math.min(player.mana, player.maxMana);
+}
+
+export { recalcPlayerStats };
 
 export class GameRoom extends Room<GameState> {
   maxClients = config.maxPlayers;
@@ -79,6 +120,7 @@ export class GameRoom extends Room<GameState> {
         movementY: mv.y,
         aimAngle: typeof input.aimAngle === "number" ? input.aimAngle : 0,
         shooting: !!input.shooting,
+        useAbility: !!input.useAbility,
         dt,
       });
     });
@@ -95,6 +137,8 @@ export class GameRoom extends Room<GameState> {
       const player = this.state.players.get(client.sessionId);
       if (!player || player.alive) return;
       player.alive = true;
+      player.hp = player.maxHp;
+      player.mana = player.maxMana;
       this.teleportPlayerToNexus(player, client);
     });
 
@@ -184,6 +228,31 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Listen for equip item from inventory
+    this.onMessage(
+      ClientMessage.EquipItem,
+      (client, data: { inventorySlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const slot = data.inventorySlot;
+        if (slot < 0 || slot >= INVENTORY_SIZE) return;
+
+        const itemId = player.inventory[slot] ?? -1;
+        if (itemId === -1) return;
+
+        const category = getItemCategory(itemId);
+        if (category < 0 || category >= EQUIPMENT_SLOTS) return;
+
+        // Swap: equipment[category] <-> inventory[slot]
+        const currentEquipped = player.equipment[category] ?? -1;
+        player.equipment[category] = itemId;
+        player.inventory[slot] = currentEquipped; // -1 if nothing was equipped
+
+        recalcPlayerStats(player);
+      }
+    );
+
     // Start the authoritative game loop
     this.setSimulationInterval(
       (deltaTime) => this.gameLoop(deltaTime),
@@ -199,20 +268,24 @@ export class GameRoom extends Room<GameState> {
     player.name =
       (typeof options?.name === "string" ? options.name : "Player") || "Player";
 
-    // Spawn in nexus with level-1 stats
+    // Spawn in nexus
     player.zone = "nexus";
     player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
     player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
     player.level = 1;
     player.xp = 0;
-    const stats = getStatsForLevel(1);
-    player.maxHp = stats.maxHp;
-    player.hp = stats.maxHp;
-    player.cachedDamage = stats.damage;
-    player.cachedShootCooldown = stats.shootCooldown;
-    player.cachedSpeed = stats.speed;
-    player.cachedHpRegen = stats.hpRegen;
     player.alive = true;
+
+    // Default equipment (tier 1 of each)
+    player.equipment[ItemCategory.Weapon] = DEFAULT_WEAPON;
+    player.equipment[ItemCategory.Ability] = DEFAULT_ABILITY;
+    player.equipment[ItemCategory.Armor] = DEFAULT_ARMOR;
+    player.equipment[ItemCategory.Ring] = DEFAULT_RING;
+
+    // Calculate stats from level + equipment
+    recalcPlayerStats(player);
+    player.hp = player.maxHp;
+    player.mana = player.maxMana;
 
     this.state.players.set(client.sessionId, player);
     console.log(`${client.sessionId} joined as "${player.name}"`);
@@ -253,6 +326,7 @@ export class GameRoom extends Room<GameState> {
     player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
     player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
     player.hp = player.maxHp;
+    player.mana = player.maxMana;
 
     // Remove this player's projectiles
     const toRemove: string[] = [];
@@ -299,6 +373,7 @@ export class GameRoom extends Room<GameState> {
 
           player.aimAngle = input.aimAngle;
           player.inputShooting = input.shooting;
+          player.inputUseAbility = input.useAbility;
           player.lastProcessedInput = input.seq;
         }
 
@@ -331,6 +406,10 @@ export class GameRoom extends Room<GameState> {
         if (now - player.lastShootTime >= player.cachedShootCooldown) {
           player.lastShootTime = now;
 
+          const weaponId = player.equipment[ItemCategory.Weapon] ?? -1;
+          const weaponDef = weaponId >= 0 ? ITEM_DEFS[weaponId] : null;
+          const isSword = weaponId >= 0 && getItemSubtype(weaponId) === WeaponSubtype.Sword;
+
           const proj = new Projectile();
           proj.id = generateId("pproj");
           proj.x = player.x;
@@ -338,13 +417,50 @@ export class GameRoom extends Room<GameState> {
           proj.angle = player.aimAngle;
           proj.ownerType = EntityType.Player;
           proj.ownerId = player.id;
-          proj.speed = PROJECTILE_SPEED;
+          proj.speed = player.cachedWeaponProjSpeed;
           proj.damage = player.cachedDamage;
           proj.startX = player.x;
           proj.startY = player.y;
-          proj.maxRange = PROJECTILE_RANGE;
+          proj.maxRange = player.cachedWeaponRange;
+          proj.collisionRadius = player.cachedWeaponProjSize;
+          proj.projType = isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow;
+          proj.piercing = false;
 
           this.state.projectiles.set(proj.id, proj);
+        }
+      }
+
+      // Handle ability (Space key, only in hostile zone)
+      if (!isNexus && player.inputUseAbility) {
+        const now = Date.now();
+        const abilityId = player.equipment[ItemCategory.Ability] ?? -1;
+        if (abilityId >= 0) {
+          const abilityDef = ITEM_DEFS[abilityId];
+          const as = abilityDef?.abilityStats;
+          if (as && now - player.lastAbilityTime >= as.cooldown) {
+            if (player.mana >= as.manaCost) {
+              player.mana -= as.manaCost;
+              player.lastAbilityTime = now;
+
+              const proj = new Projectile();
+              proj.id = generateId("aproj");
+              proj.x = player.x;
+              proj.y = player.y;
+              proj.angle = player.aimAngle;
+              proj.ownerType = EntityType.Player;
+              proj.ownerId = player.id;
+              proj.speed = as.projectileSpeed;
+              proj.damage = as.damage;
+              proj.startX = player.x;
+              proj.startY = player.y;
+              proj.maxRange = as.range;
+              proj.collisionRadius = as.projectileSize;
+              proj.projType = ProjectileType.QuiverShot;
+              proj.piercing = as.piercing;
+
+              this.state.projectiles.set(proj.id, proj);
+            }
+          }
         }
       }
     });
@@ -373,7 +489,7 @@ export class GameRoom extends Room<GameState> {
         if (event.enemyX !== undefined && event.enemyY !== undefined) {
           const bagRarity = rollBagDrop(event.biome);
           if (bagRarity >= 0) {
-            const loot = rollBagLoot(bagRarity);
+            const loot = rollBagLoot(bagRarity, event.biome);
             this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, loot);
           }
         }
@@ -391,7 +507,15 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 7. Bag despawn — remove bags older than BAG_LIFETIME
+    // 7. Mana Regeneration
+    this.state.players.forEach((player) => {
+      if (!player.alive) return;
+      if (player.cachedManaRegen > 0 && player.mana < player.maxMana) {
+        player.mana = Math.min(player.maxMana, player.mana + player.cachedManaRegen * (deltaTime / 1000));
+      }
+    });
+
+    // 8. Bag despawn — remove bags older than BAG_LIFETIME
     const now = Date.now();
     const bagsToRemove: string[] = [];
     this.state.lootBags.forEach((bag, id) => {
@@ -411,7 +535,7 @@ export class GameRoom extends Room<GameState> {
       this.state.lootBags.delete(id);
     }
 
-    // 8. Bag proximity detection — send BagOpened/BagClosed messages
+    // 9. Bag proximity detection — send BagOpened/BagClosed messages
     this.state.players.forEach((player) => {
       if (!player.alive || player.zone !== "hostile") {
         if (player.openBagId) {
@@ -447,7 +571,7 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 9. Periodically mark all enemies and bags dirty so @filterChildren re-evaluates
+    // 10. Periodically mark all enemies and bags dirty so @filterChildren re-evaluates
     //    for clients that moved away from stationary entities
     this.tickCount++;
     if (this.tickCount >= FILTER_REFRESH_INTERVAL) {
