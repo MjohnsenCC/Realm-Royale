@@ -28,11 +28,13 @@ import {
   BIOME_VISUALS,
   DUNGEON_VISUALS,
   ZONE_TO_DUNGEON,
-  DUNGEON_WIDTH,
-  DUNGEON_HEIGHT,
   DUNGEON_PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
+  generateDungeonMap,
+  resolveWallCollision,
+  DungeonTile,
 } from "@rotmg-lite/shared";
+import type { DungeonMapData } from "@rotmg-lite/shared";
 
 // Colyseus schema decoded types (client-side generic)
 interface SchemaInstance {
@@ -108,6 +110,10 @@ export class GameScene extends Phaser.Scene {
   // E key (portal interact) cooldown
   private portalInteractCooldown: number = 0;
 
+  // Dungeon map data (for rendering and client-side prediction)
+  private dungeonSeed: number = 0;
+  private currentDungeonMap: DungeonMapData | null = null;
+
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
   private pendingInputs: Array<{
@@ -180,11 +186,20 @@ export class GameScene extends Phaser.Scene {
     this.setupStateListeners(state);
 
     // Listen for zone change
-    room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string }) => {
+    room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string; dungeonSeed?: number }) => {
       this.localZone = data.zone;
       this.pendingInputs = [];
       this.isDead = false;
       this.hud.hideDeathScreen();
+
+      // Generate dungeon map from seed if entering a dungeon
+      if (isDungeonZone(data.zone) && data.dungeonSeed !== undefined) {
+        this.dungeonSeed = data.dungeonSeed;
+        this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, ZONE_TO_DUNGEON[data.zone]);
+      } else {
+        this.currentDungeonMap = null;
+      }
+
       this.transitionToZone(data.zone);
 
       // Re-show local player sprite after respawn
@@ -284,14 +299,8 @@ export class GameScene extends Phaser.Scene {
       this.drawPortal();
       this.cameras.main.setBackgroundColor("#1a2a1a");
     } else if (isDungeonZone(zone)) {
-      const dungeonType = ZONE_TO_DUNGEON[zone];
-      const visual = DUNGEON_VISUALS[dungeonType];
-      if (visual) {
-        const hex = "#" + visual.groundFill.toString(16).padStart(6, "0");
-        this.cameras.main.setBackgroundColor(hex);
-      } else {
-        this.cameras.main.setBackgroundColor("#1a1a1a");
-      }
+      // Dark background so wall areas appear as dark void
+      this.cameras.main.setBackgroundColor("#080808");
     } else {
       this.cameras.main.setBackgroundColor("#1a1a2e");
     }
@@ -561,6 +570,12 @@ export class GameScene extends Phaser.Scene {
             );
             reconX = result.x;
             reconY = result.y;
+            // Wall collision in dungeons
+            if (this.currentDungeonMap) {
+              const wallResult = resolveWallCollision(reconX, reconY, PLAYER_RADIUS, this.currentDungeonMap);
+              reconX = wallResult.x;
+              reconY = wallResult.y;
+            }
           }
 
           // Detect large corrections (zone change, desync) and snap immediately
@@ -795,7 +810,15 @@ export class GameScene extends Phaser.Scene {
           zoneW,
           zoneH
         );
-        localSprite.setLocalPosition(result.x, result.y);
+        let predX = result.x;
+        let predY = result.y;
+        // Wall collision in dungeons
+        if (this.currentDungeonMap) {
+          const wallResult = resolveWallCollision(predX, predY, PLAYER_RADIUS, this.currentDungeonMap);
+          predX = wallResult.x;
+          predY = wallResult.y;
+        }
+        localSprite.setLocalPosition(predX, predY);
       }
     }
 
@@ -1114,31 +1137,75 @@ export class GameScene extends Phaser.Scene {
     const visual = DUNGEON_VISUALS[dungeonType];
     if (!visual) return;
 
-    // Solid fill
-    this.groundGraphics.fillStyle(visual.groundFill, 1);
-    this.groundGraphics.fillRect(0, 0, DUNGEON_WIDTH, DUNGEON_HEIGHT);
-
-    // Tile grid
-    this.groundGraphics.lineStyle(1, visual.tileLineColor, visual.tileLineAlpha);
-    for (let x = 0; x <= DUNGEON_WIDTH; x += TILE_SIZE) {
-      this.groundGraphics.lineBetween(x, 0, x, DUNGEON_HEIGHT);
-    }
-    for (let y = 0; y <= DUNGEON_HEIGHT; y += TILE_SIZE) {
-      this.groundGraphics.lineBetween(0, y, DUNGEON_WIDTH, y);
+    const mapData = this.currentDungeonMap;
+    if (!mapData) {
+      // Fallback: simple fill if no map data yet
+      this.groundGraphics.fillStyle(visual.groundFill, 1);
+      const dims = getZoneDimensions(this.localZone);
+      this.groundGraphics.fillRect(0, 0, dims.width, dims.height);
+      return;
     }
 
-    // Border
-    this.groundGraphics.lineStyle(3, visual.tileLineColor, 0.8);
-    this.groundGraphics.strokeRect(0, 0, DUNGEON_WIDTH, DUNGEON_HEIGHT);
+    const { tiles, width, height } = mapData;
 
-    // Dungeon name label
+    // Draw tiles
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        const px = tx * TILE_SIZE;
+        const py = ty * TILE_SIZE;
+        const tile = tiles[ty * width + tx];
+
+        if (tile === DungeonTile.Floor) {
+          // Floor tile: colored fill + grid line
+          this.groundGraphics.fillStyle(visual.groundFill, 1);
+          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          this.groundGraphics.lineStyle(1, visual.tileLineColor, visual.tileLineAlpha);
+          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+        }
+        // Wall tiles: skip rendering (transparent, black background shows through)
+      }
+    }
+
+    // Draw highlighted edges where floor meets wall for visual clarity
+    this.groundGraphics.lineStyle(2, visual.tileLineColor, 0.6);
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
+        const px = tx * TILE_SIZE;
+        const py = ty * TILE_SIZE;
+
+        // Left edge
+        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
+        }
+        // Right edge
+        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
+        }
+        // Top edge
+        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
+        }
+        // Bottom edge
+        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
+        }
+      }
+    }
+
+    // Dungeon name label near spawn room
     this.clearNexusLabels();
     const label = this.add
-      .text(DUNGEON_WIDTH / 2, DUNGEON_HEIGHT - 60, `~ ${visual.name} ~`, {
-        fontSize: "18px",
-        color: "#" + visual.tileLineColor.toString(16).padStart(6, "0"),
-        fontFamily: "monospace",
-      })
+      .text(
+        mapData.spawnRoom.centerX,
+        mapData.spawnRoom.centerY + (mapData.spawnRoom.h * TILE_SIZE) / 2 + 20,
+        `~ ${visual.name} ~`,
+        {
+          fontSize: "14px",
+          color: "#" + visual.tileLineColor.toString(16).padStart(6, "0"),
+          fontFamily: "monospace",
+        }
+      )
       .setOrigin(0.5)
       .setAlpha(0.5);
     this.nexusLabels.push(label);

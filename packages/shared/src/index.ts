@@ -4,3 +4,4 @@ export * from "./utils";
 export * from "./enemies";
 export * from "./noise";
 export * from "./items";
+export * from "./dungeonMap";

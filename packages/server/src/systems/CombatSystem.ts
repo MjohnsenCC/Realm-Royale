@@ -6,13 +6,16 @@ import {
   PLAYER_RADIUS,
   XP_SHARE_RADIUS,
   ENEMY_DEFS,
+  TILE_SIZE,
   getBiomeAtPosition,
   distanceBetween,
   circlesOverlap,
   getPlayerLevel,
   computePlayerStats,
   getZoneDimensions,
+  DungeonTile,
 } from "@rotmg-lite/shared";
+import type { DungeonMapData } from "@rotmg-lite/shared";
 
 export interface CombatEvent {
   type: "playerDied" | "enemyKilled";
@@ -29,7 +32,7 @@ export class CombatSystem {
   private events: CombatEvent[] = [];
   private enemyGrid = new SpatialGrid<Enemy>(200);
 
-  update(deltaTime: number, state: GameState): CombatEvent[] {
+  update(deltaTime: number, state: GameState, dungeonMaps?: Map<string, DungeonMapData>): CombatEvent[] {
     this.events = [];
     const dt = deltaTime / 1000;
 
@@ -64,6 +67,23 @@ export class CombatSystem {
       ) {
         projectilesToRemove.push(id);
         return;
+      }
+
+      // Check if projectile hit a wall tile in a dungeon
+      const projMapData = dungeonMaps?.get(proj.zone);
+      if (projMapData) {
+        const tileX = Math.floor(proj.x / TILE_SIZE);
+        const tileY = Math.floor(proj.y / TILE_SIZE);
+        if (
+          tileX >= 0 &&
+          tileX < projMapData.width &&
+          tileY >= 0 &&
+          tileY < projMapData.height &&
+          projMapData.tiles[tileY * projMapData.width + tileX] === DungeonTile.Wall
+        ) {
+          projectilesToRemove.push(id);
+          return;
+        }
       }
 
       if (proj.ownerType === EntityType.Player) {

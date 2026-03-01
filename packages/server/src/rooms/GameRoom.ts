@@ -33,8 +33,6 @@ import {
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
-  DUNGEON_SPAWN_X,
-  DUNGEON_SPAWN_Y,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   INVENTORY_SIZE,
   EQUIPMENT_SLOTS,
@@ -59,6 +57,7 @@ import {
   isDungeonZone,
   DUNGEON_TO_ZONE,
   ZONE_TO_DUNGEON,
+  resolveWallCollision,
 } from "@rotmg-lite/shared";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
@@ -203,12 +202,16 @@ export class GameRoom extends Room<GameState> {
             );
           }
 
-          // Teleport player to dungeon start
+          // Teleport player to dungeon start (position from generated map)
           player.zone = dungeonZone;
-          player.x = DUNGEON_SPAWN_X;
-          player.y = DUNGEON_SPAWN_Y;
+          const spawnPos = this.dungeonSystem.getSpawnPosition(dungeonZone);
+          if (spawnPos) {
+            player.x = spawnPos.x;
+            player.y = spawnPos.y;
+          }
           this.removePlayerProjectiles(player.id);
-          client.send(ServerMessage.ZoneChanged, { zone: dungeonZone });
+          const dungeonSeed = this.dungeonSystem.getDungeonSeed(dungeonZone);
+          client.send(ServerMessage.ZoneChanged, { zone: dungeonZone, dungeonSeed });
           handled = true;
         } else if (portal.portalType === PortalType.DungeonExit) {
           // Exit dungeon: return to the zone the player entered from
@@ -450,6 +453,11 @@ export class GameRoom extends Room<GameState> {
           player.speedBoostAmount = 0;
         }
 
+        // Get dungeon map for wall collision (if in dungeon)
+        const dungeonMap = isDungeonZone(player.zone)
+          ? this.dungeonSystem.getDungeonMap(player.zone)
+          : undefined;
+
         for (const input of player.pendingInputs) {
           const result = applyMovement(
             player.x,
@@ -464,6 +472,13 @@ export class GameRoom extends Room<GameState> {
           );
           player.x = result.x;
           player.y = result.y;
+
+          // Wall collision in dungeons
+          if (dungeonMap) {
+            const wallResult = resolveWallCollision(player.x, player.y, PLAYER_RADIUS, dungeonMap);
+            player.x = wallResult.x;
+            player.y = wallResult.y;
+          }
 
           player.aimAngle = input.aimAngle;
           player.inputShooting = input.shooting;
@@ -557,8 +572,13 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 2. Run enemy AI
-    this.enemyAI.update(deltaTime, this.state, this.shootingSystem);
+    // 2. Run enemy AI (pass dungeon maps for wall collision)
+    const dungeonMaps = new Map<string, import("@rotmg-lite/shared").DungeonMapData>();
+    for (const zone of ["dungeon_infernal", "dungeon_void"]) {
+      const mapData = this.dungeonSystem.getDungeonMap(zone);
+      if (mapData) dungeonMaps.set(zone, mapData);
+    }
+    this.enemyAI.update(deltaTime, this.state, this.shootingSystem, dungeonMaps);
 
     // 2b. The Architect minion spawning
     const now = Date.now();
@@ -581,8 +601,8 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 3. Run combat
-    const events = this.combatSystem.update(deltaTime, this.state);
+    // 3. Run combat (pass dungeon maps for projectile-wall collision)
+    const events = this.combatSystem.update(deltaTime, this.state, dungeonMaps);
 
     // 4. Process combat events
     for (const event of events) {

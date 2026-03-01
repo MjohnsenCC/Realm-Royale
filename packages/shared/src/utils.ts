@@ -22,8 +22,10 @@ import {
   NEXUS_HEIGHT,
   DUNGEON_WIDTH,
   DUNGEON_HEIGHT,
+  TILE_SIZE,
 } from "./constants";
-import { ItemCategory, PlayerZone } from "./types";
+import { ItemCategory, PlayerZone, DungeonType } from "./types";
+import { DUNGEON_CONFIGS } from "./dungeonMap";
 import { ITEM_DEFS } from "./items";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
@@ -185,6 +187,12 @@ export function normalizeVector(
   return { x: x / len, y: y / len };
 }
 
+/** Map dungeon zone strings to DungeonType for dimension lookup. */
+const ZONE_TO_DUNGEON_TYPE: Record<string, number> = {
+  [PlayerZone.DungeonInfernal]: DungeonType.InfernalPit,
+  [PlayerZone.DungeonVoid]: DungeonType.VoidSanctum,
+};
+
 /** Get zone dimensions for a given zone string. */
 export function getZoneDimensions(zone: string): {
   width: number;
@@ -192,11 +200,16 @@ export function getZoneDimensions(zone: string): {
 } {
   if (zone === PlayerZone.Nexus)
     return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
-  if (
-    zone === PlayerZone.DungeonInfernal ||
-    zone === PlayerZone.DungeonVoid
-  )
-    return { width: DUNGEON_WIDTH, height: DUNGEON_HEIGHT };
+  const dType = ZONE_TO_DUNGEON_TYPE[zone];
+  if (dType !== undefined) {
+    const config = DUNGEON_CONFIGS[dType];
+    if (config) {
+      return {
+        width: config.tilesX * TILE_SIZE,
+        height: config.tilesY * TILE_SIZE,
+      };
+    }
+  }
   return { width: ARENA_WIDTH, height: ARENA_HEIGHT };
 }
 

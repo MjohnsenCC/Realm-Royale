@@ -8,18 +8,38 @@ import {
   EnemyAIState,
   PortalType,
   BiomeType,
-  DUNGEON_LAYOUTS,
   DUNGEON_BOSS_TYPE,
   DUNGEON_TO_ZONE,
-  DUNGEON_BOSS_X,
-  DUNGEON_BOSS_Y,
   DUNGEON_PORTAL_LIFETIME,
   INFERNAL_PORTAL_CHANCE,
   VOID_PORTAL_CHANCE,
   ENEMY_DEFS,
+  DUNGEON_ROOM_ENEMIES,
+  TILE_SIZE,
+  generateDungeonMap,
+  isTileWalkable,
 } from "@rotmg-lite/shared";
+import type { DungeonMapData, DungeonRoom } from "@rotmg-lite/shared";
 
 export class DungeonSystem {
+  // Active dungeon seeds and cached maps per zone
+  private activeDungeonSeeds = new Map<string, number>();
+  private activeDungeonMaps = new Map<string, DungeonMapData>();
+
+  /**
+   * Get the dungeon map for an active dungeon zone.
+   */
+  getDungeonMap(zone: string): DungeonMapData | undefined {
+    return this.activeDungeonMaps.get(zone);
+  }
+
+  /**
+   * Get the seed for an active dungeon zone (for sending to clients).
+   */
+  getDungeonSeed(zone: string): number | undefined {
+    return this.activeDungeonSeeds.get(zone);
+  }
+
   /**
    * Called when an enemy is killed. Rolls for dungeon portal spawn.
    * Returns true if a portal was spawned.
@@ -60,7 +80,7 @@ export class DungeonSystem {
   }
 
   /**
-   * Create a dungeon instance: place enemies + boss in the dungeon zone.
+   * Create a dungeon instance: generate map, place enemies in rooms, place boss.
    */
   createDungeonInstance(dungeonType: number, state: GameState): void {
     const zone = DUNGEON_TO_ZONE[dungeonType];
@@ -87,33 +107,76 @@ export class DungeonSystem {
     });
     for (const id of bagsToRemove) state.lootBags.delete(id);
 
-    // Place layout enemies
-    const layout = DUNGEON_LAYOUTS[dungeonType];
-    if (layout) {
-      for (const placement of layout) {
-        this.spawnDungeonEnemy(
-          placement.enemyType,
-          placement.x,
-          placement.y,
-          zone,
-          state
-        );
+    // Generate random seed and map
+    const seed = Math.floor(Math.random() * 0x7fffffff);
+    const mapData = generateDungeonMap(seed, dungeonType);
+    this.activeDungeonSeeds.set(zone, seed);
+    this.activeDungeonMaps.set(zone, mapData);
+
+    // Place enemies in rooms using room-based config
+    const roomEnemies = DUNGEON_ROOM_ENEMIES[dungeonType];
+    if (roomEnemies) {
+      for (
+        let i = 0;
+        i < mapData.rooms.length && i < roomEnemies.length;
+        i++
+      ) {
+        const room = mapData.rooms[i];
+        const config = roomEnemies[i];
+
+        for (const enemyType of config.enemies) {
+          const pos = this.randomPositionInRoom(room, mapData);
+          this.spawnDungeonEnemy(enemyType, pos.x, pos.y, zone, state);
+        }
       }
     }
 
-    // Place boss
+    // Place boss in boss room center
     const bossType = DUNGEON_BOSS_TYPE[dungeonType];
     if (bossType !== undefined) {
       const boss = this.spawnDungeonEnemy(
         bossType,
-        DUNGEON_BOSS_X,
-        DUNGEON_BOSS_Y,
+        mapData.bossRoom.centerX,
+        mapData.bossRoom.centerY,
         zone,
         state
       );
       boss.isBoss = true;
       boss.bossPhase = 1;
     }
+  }
+
+  /**
+   * Get the spawn position for a dungeon zone (center of spawn room).
+   */
+  getSpawnPosition(zone: string): { x: number; y: number } | undefined {
+    const mapData = this.activeDungeonMaps.get(zone);
+    if (!mapData) return undefined;
+    return { x: mapData.spawnRoom.centerX, y: mapData.spawnRoom.centerY };
+  }
+
+  private randomPositionInRoom(
+    room: DungeonRoom,
+    mapData: DungeonMapData
+  ): { x: number; y: number } {
+    // Try random positions within the room, with margin from walls
+    for (let attempt = 0; attempt < 20; attempt++) {
+      const margin = TILE_SIZE * 0.5;
+      const x =
+        (room.x + 1) * TILE_SIZE +
+        margin +
+        Math.random() * ((room.w - 2) * TILE_SIZE - margin * 2);
+      const y =
+        (room.y + 1) * TILE_SIZE +
+        margin +
+        Math.random() * ((room.h - 2) * TILE_SIZE - margin * 2);
+
+      if (isTileWalkable(x, y, mapData)) {
+        return { x, y };
+      }
+    }
+    // Fallback: room center
+    return { x: room.centerX, y: room.centerY };
   }
 
   private spawnDungeonEnemy(
@@ -193,7 +256,10 @@ export class DungeonSystem {
     // Despawn expired entrance portals (exit portals and nexus test portals persist)
     const portalsToDespawn: string[] = [];
     state.dungeonPortals.forEach((portal, id) => {
-      if (portal.portalType !== PortalType.DungeonExit && portal.zone !== "nexus") {
+      if (
+        portal.portalType !== PortalType.DungeonExit &&
+        portal.zone !== "nexus"
+      ) {
         if (now - portal.createdAt > DUNGEON_PORTAL_LIFETIME) {
           portalsToDespawn.push(id);
         }
@@ -216,6 +282,10 @@ export class DungeonSystem {
     const dungeonZones = ["dungeon_infernal", "dungeon_void"];
     for (const zone of dungeonZones) {
       if (occupiedZones.has(zone)) continue;
+
+      // Clear seed and cached map for this zone
+      this.activeDungeonSeeds.delete(zone);
+      this.activeDungeonMaps.delete(zone);
 
       const enemiesToRemove: string[] = [];
       state.enemies.forEach((enemy, id) => {

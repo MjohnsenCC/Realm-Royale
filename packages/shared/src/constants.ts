@@ -88,12 +88,12 @@ export const DEFAULT_ARMOR = 201; // Armor T1
 export const DEFAULT_RING = 301; // Ring T1
 
 // Dungeons
-export const DUNGEON_WIDTH = 400;
-export const DUNGEON_HEIGHT = 2000;
-export const DUNGEON_SPAWN_X = 200;
-export const DUNGEON_SPAWN_Y = 1800;
-export const DUNGEON_BOSS_X = 200;
-export const DUNGEON_BOSS_Y = 200;
+export const DUNGEON_WIDTH = 800;
+export const DUNGEON_HEIGHT = 1440;
+export const DUNGEON_SPAWN_X = 400; // fallback; actual spawn derived from map data
+export const DUNGEON_SPAWN_Y = 1280; // fallback; actual spawn derived from map data
+export const DUNGEON_BOSS_X = 400; // fallback; actual boss pos derived from map data
+export const DUNGEON_BOSS_Y = 160; // fallback; actual boss pos derived from map data
 
 // Dungeon portals
 export const DUNGEON_PORTAL_RADIUS = 35;

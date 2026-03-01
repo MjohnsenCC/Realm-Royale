@@ -11,8 +11,11 @@ import {
   angleBetween,
   clamp,
   getZoneDimensions,
+  resolveWallCollision,
+  isTileWalkable,
+  hasLineOfSight,
 } from "@rotmg-lite/shared";
-import type { EnemyDefinition } from "@rotmg-lite/shared";
+import type { EnemyDefinition, DungeonMapData } from "@rotmg-lite/shared";
 
 const AI_UPDATE_RANGE = 1500; // Only update enemies within this range of a player
 
@@ -20,7 +23,8 @@ export class EnemyAI {
   update(
     deltaTime: number,
     state: GameState,
-    shootingSystem: ShootingPatternSystem
+    shootingSystem: ShootingPatternSystem,
+    dungeonMaps?: Map<string, DungeonMapData>
   ): void {
     const dt = deltaTime / 1000;
 
@@ -30,6 +34,8 @@ export class EnemyAI {
 
       const def = ENEMY_DEFS[enemy.enemyType];
       if (!def) return;
+
+      const mapData = dungeonMaps?.get(enemy.zone);
 
       // Boss phase transitions
       if (enemy.isBoss && enemy.bossPhase === 1) {
@@ -41,13 +47,13 @@ export class EnemyAI {
 
       switch (enemy.aiState) {
         case EnemyAIState.Idle:
-          this.updateIdle(enemy, def, dt, state);
+          this.updateIdle(enemy, def, dt, state, mapData);
           break;
         case EnemyAIState.Aggro:
-          this.updateAggro(enemy, def, dt, deltaTime, state, shootingSystem);
+          this.updateAggro(enemy, def, dt, deltaTime, state, shootingSystem, mapData);
           break;
         case EnemyAIState.Returning:
-          this.updateReturning(enemy, def, dt, state);
+          this.updateReturning(enemy, def, dt, state, mapData);
           break;
       }
     });
@@ -57,10 +63,11 @@ export class EnemyAI {
     enemy: Enemy,
     def: EnemyDefinition,
     dt: number,
-    state: GameState
+    state: GameState,
+    mapData?: DungeonMapData
   ): void {
     // Check for aggro
-    const target = this.findPlayerInRange(enemy, def.aggroRange, state);
+    const target = this.findPlayerInRange(enemy, def.aggroRange, state, mapData);
     if (target) {
       enemy.aiState = EnemyAIState.Aggro;
       enemy.targetPlayerId = target.id;
@@ -82,7 +89,7 @@ export class EnemyAI {
 
     if (distToIdleTarget < 10) {
       enemy.idlePauseTimer = 1000 + Math.random() * 2000;
-      this.pickNewIdleTarget(enemy);
+      this.pickNewIdleTarget(enemy, mapData);
       return;
     }
 
@@ -94,7 +101,7 @@ export class EnemyAI {
     );
     enemy.x += Math.cos(angle) * def.speed * 0.3 * dt;
     enemy.y += Math.sin(angle) * def.speed * 0.3 * dt;
-    this.clampToZone(enemy, def);
+    this.clampToZone(enemy, def, mapData);
   }
 
   private updateAggro(
@@ -103,7 +110,8 @@ export class EnemyAI {
     dt: number,
     _deltaTimeMs: number,
     state: GameState,
-    shootingSystem: ShootingPatternSystem
+    shootingSystem: ShootingPatternSystem,
+    mapData?: DungeonMapData
   ): void {
     const target = state.players.get(enemy.targetPlayerId);
 
@@ -136,7 +144,7 @@ export class EnemyAI {
       const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
       enemy.x += Math.cos(angle) * effectiveDef.speed * dt;
       enemy.y += Math.sin(angle) * effectiveDef.speed * dt;
-      this.clampToZone(enemy, def);
+      this.clampToZone(enemy, def, mapData);
     }
 
     // Shoot
@@ -151,7 +159,8 @@ export class EnemyAI {
     enemy: Enemy,
     def: EnemyDefinition,
     dt: number,
-    state: GameState
+    state: GameState,
+    mapData?: DungeonMapData
   ): void {
     const distToSpawn = distanceBetween(
       enemy.x,
@@ -164,11 +173,11 @@ export class EnemyAI {
       enemy.aiState = EnemyAIState.Idle;
       enemy.x = enemy.spawnX;
       enemy.y = enemy.spawnY;
-      this.pickNewIdleTarget(enemy);
+      this.pickNewIdleTarget(enemy, mapData);
       return;
     }
 
-    const target = this.findPlayerInRange(enemy, def.aggroRange * 0.7, state);
+    const target = this.findPlayerInRange(enemy, def.aggroRange * 0.7, state, mapData);
     if (target) {
       enemy.aiState = EnemyAIState.Aggro;
       enemy.targetPlayerId = target.id;
@@ -178,13 +187,14 @@ export class EnemyAI {
     const angle = angleBetween(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
     enemy.x += Math.cos(angle) * def.speed * dt;
     enemy.y += Math.sin(angle) * def.speed * dt;
-    this.clampToZone(enemy, def);
+    this.clampToZone(enemy, def, mapData);
   }
 
   private findPlayerInRange(
     enemy: Enemy,
     range: number,
-    state: GameState
+    state: GameState,
+    mapData?: DungeonMapData
   ): Player | null {
     let nearest: Player | null = null;
     let nearestDist = Infinity;
@@ -193,6 +203,10 @@ export class EnemyAI {
       if (!player.alive || player.zone !== enemy.zone) return;
       const dist = distanceBetween(enemy.x, enemy.y, player.x, player.y);
       if (dist < range && dist < nearestDist) {
+        // In dungeons, check line-of-sight through walls
+        if (mapData && !hasLineOfSight(enemy.x, enemy.y, player.x, player.y, mapData)) {
+          return; // Wall blocks vision
+        }
         nearestDist = dist;
         nearest = player;
       }
@@ -201,17 +215,37 @@ export class EnemyAI {
     return nearest;
   }
 
-  private pickNewIdleTarget(enemy: Enemy): void {
-    const angle = Math.random() * Math.PI * 2;
-    const dist = 30 + Math.random() * 50;
-    enemy.idleTargetX = enemy.spawnX + Math.cos(angle) * dist;
-    enemy.idleTargetY = enemy.spawnY + Math.sin(angle) * dist;
+  private pickNewIdleTarget(enemy: Enemy, mapData?: DungeonMapData): void {
+    // Try several random positions, prefer walkable tiles in dungeons
+    for (let attempt = 0; attempt < 10; attempt++) {
+      const angle = Math.random() * Math.PI * 2;
+      const dist = 30 + Math.random() * 50;
+      const targetX = enemy.spawnX + Math.cos(angle) * dist;
+      const targetY = enemy.spawnY + Math.sin(angle) * dist;
+
+      if (mapData && !isTileWalkable(targetX, targetY, mapData)) continue;
+
+      enemy.idleTargetX = targetX;
+      enemy.idleTargetY = targetY;
+      return;
+    }
+
+    // Fallback: stay at spawn
+    enemy.idleTargetX = enemy.spawnX;
+    enemy.idleTargetY = enemy.spawnY;
   }
 
-  private clampToZone(enemy: Enemy, def: EnemyDefinition): void {
+  private clampToZone(enemy: Enemy, def: EnemyDefinition, mapData?: DungeonMapData): void {
     const dims = getZoneDimensions(enemy.zone);
     enemy.x = clamp(enemy.x, def.radius, dims.width - def.radius);
     enemy.y = clamp(enemy.y, def.radius, dims.height - def.radius);
+
+    // Apply wall collision in dungeons
+    if (mapData) {
+      const resolved = resolveWallCollision(enemy.x, enemy.y, def.radius, mapData);
+      enemy.x = resolved.x;
+      enemy.y = resolved.y;
+    }
   }
 
   private isNearAnyPlayer(

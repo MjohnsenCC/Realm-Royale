@@ -620,13 +620,13 @@ export const DUNGEON_VISUALS: Record<
   number,
   { groundFill: number; tileLineColor: number; tileLineAlpha: number; name: string }
 > = {
-  [DungeonBiomeType.InfernalPit]: {
+  [DungeonType.InfernalPit]: {
     groundFill: 0x2e0a0a,
     tileLineColor: 0x4e1a0a,
     tileLineAlpha: 0.4,
     name: "The Infernal Pit",
   },
-  [DungeonBiomeType.VoidSanctum]: {
+  [DungeonType.VoidSanctum]: {
     groundFill: 0x0a0a2e,
     tileLineColor: 0x1a0a4e,
     tileLineAlpha: 0.4,
@@ -693,6 +693,41 @@ export const ZONE_TO_DUNGEON: Record<string, number> = {
 export const DUNGEON_TO_ZONE: Record<number, string> = {
   [DungeonType.InfernalPit]: PlayerZone.DungeonInfernal,
   [DungeonType.VoidSanctum]: PlayerZone.DungeonVoid,
+};
+
+// --- Room-Based Dungeon Enemy Config ---
+// Each entry corresponds to a room by index:
+// [0] = spawn room, [1-3] = normal rooms, [4] = boss room (boss spawned separately)
+
+export interface DungeonRoomEnemyConfig {
+  enemies: number[]; // EnemyType values
+}
+
+export const DUNGEON_ROOM_ENEMIES: Record<number, DungeonRoomEnemyConfig[]> = {
+  [DungeonType.InfernalPit]: [
+    // Room 0: spawn room - no enemies
+    { enemies: [] },
+    // Room 1: first encounter
+    { enemies: [EnemyType.InfernalHound, EnemyType.CinderWraith, EnemyType.InfernalHound] },
+    // Room 2: mid dungeon
+    { enemies: [EnemyType.MagmaSerpent, EnemyType.InfernalHound, EnemyType.CinderWraith] },
+    // Room 3: pre-boss
+    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.CinderWraith, EnemyType.InfernalHound, EnemyType.InfernalHound] },
+    // Room 4: boss room - boss spawned separately
+    { enemies: [] },
+  ],
+  [DungeonType.VoidSanctum]: [
+    // Room 0: spawn room - no enemies
+    { enemies: [] },
+    // Room 1: first encounter
+    { enemies: [EnemyType.VoidAcolyte, EnemyType.VoidAcolyte, EnemyType.ShadowWeaver] },
+    // Room 2: mid dungeon
+    { enemies: [EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte] },
+    // Room 3: pre-boss
+    { enemies: [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte, EnemyType.VoidAcolyte] },
+    // Room 4: boss room - boss spawned separately
+    { enemies: [] },
+  ],
 };
 
 // --- Dungeon Helpers ---
