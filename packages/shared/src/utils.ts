@@ -25,7 +25,7 @@ import {
   TILE_SIZE,
 } from "./constants";
 import { ItemCategory, PlayerZone, DungeonType } from "./types";
-import { DUNGEON_CONFIGS } from "./dungeonMap";
+import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
 import { ITEM_DEFS } from "./items";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
@@ -202,6 +202,15 @@ export function getZoneDimensions(zone: string): {
     return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
   const dType = ZONE_TO_DUNGEON_TYPE[zone];
   if (dType !== undefined) {
+    // Use actual generated dimensions if available (dynamic grid sizing)
+    const generated = getGeneratedDungeonDimensions(dType);
+    if (generated) {
+      return {
+        width: generated.width * TILE_SIZE,
+        height: generated.height * TILE_SIZE,
+      };
+    }
+    // Fallback to static config
     const config = DUNGEON_CONFIGS[dType];
     if (config) {
       return {

@@ -6,3 +6,4 @@ export * from "./noise";
 export * from "./items";
 export * from "./dungeonMap";
 export * from "./dungeonModifiers";
+export * from "./nexusMap";

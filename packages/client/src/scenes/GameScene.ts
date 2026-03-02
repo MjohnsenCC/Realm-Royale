@@ -11,8 +11,6 @@ import { getUIScale } from "../ui/UIScale";
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
-  NEXUS_WIDTH,
-  NEXUS_HEIGHT,
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
@@ -33,6 +31,7 @@ import {
   DUNGEON_PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   generateDungeonMap,
+  generateNexusMap,
   resolveWallCollision,
   DungeonTile,
 } from "@rotmg-lite/shared";
@@ -127,6 +126,7 @@ export class GameScene extends Phaser.Scene {
   // Dungeon map data (for rendering and client-side prediction)
   private dungeonSeed: number = 0;
   private currentDungeonMap: DungeonMapData | null = null;
+  private nexusMap: DungeonMapData = generateNexusMap();
 
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
@@ -170,6 +170,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.localZone = "nexus";
+    this.currentDungeonMap = this.nexusMap; // enable wall collision in nexus
 
     // Draw ground for current zone
     this.groundGraphics = this.add.graphics();
@@ -179,7 +180,7 @@ export class GameScene extends Phaser.Scene {
 
     // No camera bounds — camera always centers on player
     this.cameras.main.removeBounds();
-    this.cameras.main.setBackgroundColor("#1a2a1a");
+    this.cameras.main.setBackgroundColor("#0a0a0a");
 
     // Setup keyboard input (including Q for return to nexus)
     if (this.input.keyboard) {
@@ -216,10 +217,12 @@ export class GameScene extends Phaser.Scene {
       this.isDead = false;
       this.hud.hideDeathScreen();
 
-      // Generate dungeon map from seed if entering a dungeon
+      // Generate dungeon map from seed if entering a dungeon, or use nexus map
       if (isDungeonZone(data.zone) && data.dungeonSeed !== undefined) {
         this.dungeonSeed = data.dungeonSeed;
         this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, ZONE_TO_DUNGEON[data.zone]);
+      } else if (data.zone === "nexus") {
+        this.currentDungeonMap = this.nexusMap;
       } else {
         this.currentDungeonMap = null;
       }
@@ -373,7 +376,7 @@ export class GameScene extends Phaser.Scene {
 
     if (zone === "nexus") {
       this.drawPortal();
-      this.cameras.main.setBackgroundColor("#1a2a1a");
+      this.cameras.main.setBackgroundColor("#0a0a0a");
     } else if (isDungeonZone(zone)) {
       // Dark background so wall areas appear as dark void
       this.cameras.main.setBackgroundColor("#080808");
@@ -512,108 +515,52 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawNexusGround(): void {
-    // Peaceful green-tinted stone floor (2400x2400)
-    this.groundGraphics.fillStyle(0x1a2a1a, 1);
-    this.groundGraphics.fillRect(0, 0, NEXUS_WIDTH, NEXUS_HEIGHT);
+    const mapData = this.nexusMap;
+    const { tiles, width, height } = mapData;
+    const groundFill = 0x1a2a1a;
+    const lineColor = 0x2a4a2a;
+    const edgeColor = 0x44aa66;
 
-    // Subtle tile grid
-    this.groundGraphics.lineStyle(1, 0x2a4a2a, 0.4);
-    for (let x = 0; x <= NEXUS_WIDTH; x += TILE_SIZE) {
-      this.groundGraphics.lineBetween(x, 0, x, NEXUS_HEIGHT);
-    }
-    for (let y = 0; y <= NEXUS_HEIGHT; y += TILE_SIZE) {
-      this.groundGraphics.lineBetween(0, y, NEXUS_WIDTH, y);
-    }
-
-    // Decorative border
-    this.groundGraphics.lineStyle(3, 0x44aa66, 0.6);
-    this.groundGraphics.strokeRect(0, 0, NEXUS_WIDTH, NEXUS_HEIGHT);
-
-    // Garden patches in corners (scaled for larger nexus)
-    const cornerInset = 160;
-    const patchRadius = 60;
-    const patchInner = 36;
-    this.groundGraphics.fillStyle(0x2a5a2a, 0.5);
-    this.groundGraphics.fillCircle(cornerInset, cornerInset, patchRadius);
-    this.groundGraphics.fillCircle(
-      NEXUS_WIDTH - cornerInset,
-      cornerInset,
-      patchRadius
-    );
-    this.groundGraphics.fillCircle(
-      cornerInset,
-      NEXUS_HEIGHT - cornerInset,
-      patchRadius - 10
-    );
-    this.groundGraphics.fillCircle(
-      NEXUS_WIDTH - cornerInset,
-      NEXUS_HEIGHT - cornerInset,
-      patchRadius - 10
-    );
-
-    this.groundGraphics.fillStyle(0x3a6a3a, 0.3);
-    this.groundGraphics.fillCircle(cornerInset, cornerInset, patchInner);
-    this.groundGraphics.fillCircle(
-      NEXUS_WIDTH - cornerInset,
-      cornerInset,
-      patchInner
-    );
-    this.groundGraphics.fillCircle(
-      cornerInset,
-      NEXUS_HEIGHT - cornerInset,
-      patchInner - 6
-    );
-    this.groundGraphics.fillCircle(
-      NEXUS_WIDTH - cornerInset,
-      NEXUS_HEIGHT - cornerInset,
-      patchInner - 6
-    );
-
-    // Additional garden patches along edges
-    const midPatches = [
-      { x: NEXUS_WIDTH / 2, y: cornerInset },
-      { x: NEXUS_WIDTH / 2, y: NEXUS_HEIGHT - cornerInset },
-      { x: cornerInset, y: NEXUS_HEIGHT / 2 },
-      { x: NEXUS_WIDTH - cornerInset, y: NEXUS_HEIGHT / 2 },
-    ];
-    this.groundGraphics.fillStyle(0x2a5a2a, 0.35);
-    for (const p of midPatches) {
-      this.groundGraphics.fillCircle(p.x, p.y, 40);
+    // Draw floor tiles
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] === DungeonTile.Floor) {
+          const px = tx * TILE_SIZE;
+          const py = ty * TILE_SIZE;
+          this.groundGraphics.fillStyle(groundFill, 1);
+          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          this.groundGraphics.lineStyle(1, lineColor, 0.4);
+          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+        }
+      }
     }
 
-    // Center decorative circle (fountain-like)
-    this.groundGraphics.lineStyle(2, 0x44aa66, 0.3);
-    this.groundGraphics.strokeCircle(
-      NEXUS_WIDTH / 2,
-      NEXUS_HEIGHT / 2 + 120,
-      100
-    );
-    this.groundGraphics.fillStyle(0x225533, 0.3);
-    this.groundGraphics.fillCircle(
-      NEXUS_WIDTH / 2,
-      NEXUS_HEIGHT / 2 + 120,
-      96
-    );
+    // Draw highlighted edges where floor meets wall
+    this.groundGraphics.lineStyle(2, edgeColor, 0.6);
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
+        const px = tx * TILE_SIZE;
+        const py = ty * TILE_SIZE;
+        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
+        }
+        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
+        }
+        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
+        }
+        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
+        }
+      }
+    }
 
-    // Pathways from center to edges
-    this.groundGraphics.lineStyle(2, 0x2a4a2a, 0.5);
-    this.groundGraphics.lineBetween(
-      NEXUS_WIDTH / 2,
-      0,
-      NEXUS_WIDTH / 2,
-      NEXUS_HEIGHT
-    );
-    this.groundGraphics.lineBetween(
-      0,
-      NEXUS_HEIGHT / 2,
-      NEXUS_WIDTH,
-      NEXUS_HEIGHT / 2
-    );
-
-    // Nexus label
+    // Nexus label at spawn center
     this.clearNexusLabels();
     const label = this.add
-      .text(NEXUS_WIDTH / 2, NEXUS_HEIGHT - 60, "~ The Nexus ~", {
+      .text(mapData.spawnRoom.centerX, mapData.spawnRoom.centerY + 60, "~ The Nexus ~", {
         fontSize: "18px",
         color: "#44aa66",
         fontFamily: "monospace",

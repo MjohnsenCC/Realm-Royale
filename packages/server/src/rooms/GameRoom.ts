@@ -28,8 +28,6 @@ import {
   PLAYER_RADIUS,
   ARENA_CENTER_X,
   ARENA_CENTER_Y,
-  NEXUS_WIDTH,
-  NEXUS_HEIGHT,
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
@@ -60,7 +58,9 @@ import {
   resolveWallCollision,
   generateDungeonStats,
   makeItemId,
+  generateNexusMap,
 } from "@rotmg-lite/shared";
+import type { DungeonMapData } from "@rotmg-lite/shared";
 import { ArraySchema } from "@colyseus/schema";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
@@ -106,6 +106,7 @@ export class GameRoom extends Room<GameState> {
   private combatSystem = new CombatSystem();
   private shootingSystem = new ShootingPatternSystem();
   private dungeonSystem = new DungeonSystem();
+  private nexusMap: DungeonMapData = generateNexusMap();
   private tickCount = 0;
   private filterFlip = false;
 
@@ -370,8 +371,8 @@ export class GameRoom extends Room<GameState> {
       (typeof options?.name === "string" ? options.name : "Player") || "Player";
 
     player.zone = "nexus";
-    player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
-    player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
+    player.x = this.nexusMap.spawnRoom.centerX + (Math.random() - 0.5) * 80;
+    player.y = this.nexusMap.spawnRoom.centerY + (Math.random() - 0.5) * 80;
     player.level = 1;
     player.xp = 0;
     player.alive = true;
@@ -409,11 +410,13 @@ export class GameRoom extends Room<GameState> {
   }
 
   private spawnNexusTestPortals(): void {
-    // Infernal Pit test portal (left side of bottom nexus)
+    const testRoom = this.nexusMap.rooms[2]; // south room (dungeon test portals)
+
+    // Infernal Pit test portal (left side of test room)
     const infernal = new DungeonPortal();
     infernal.id = generateId("nportal");
-    infernal.x = 900;
-    infernal.y = 2200;
+    infernal.x = testRoom.centerX - 80;
+    infernal.y = testRoom.centerY + 20;
     infernal.portalType = PortalType.InfernalPitEntrance;
     infernal.zone = "nexus";
     infernal.createdAt = 0; // never expires (DungeonSystem skips nexus portals)
@@ -425,11 +428,11 @@ export class GameRoom extends Room<GameState> {
     infernal.modifierTiers = new ArraySchema<number>(...infernalStats.modifierTiers);
     this.state.dungeonPortals.set(infernal.id, infernal);
 
-    // Void Sanctum test portal (right side of bottom nexus)
+    // Void Sanctum test portal (right side of test room)
     const voidPortal = new DungeonPortal();
     voidPortal.id = generateId("nportal");
-    voidPortal.x = 1500;
-    voidPortal.y = 2200;
+    voidPortal.x = testRoom.centerX + 80;
+    voidPortal.y = testRoom.centerY + 20;
     voidPortal.portalType = PortalType.VoidSanctumEntrance;
     voidPortal.zone = "nexus";
     voidPortal.createdAt = 0;
@@ -446,8 +449,8 @@ export class GameRoom extends Room<GameState> {
     player.invulnerable = true;
     player.invulnerableSince = Date.now();
     player.zone = "nexus";
-    player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
-    player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
+    player.x = this.nexusMap.spawnRoom.centerX + (Math.random() - 0.5) * 80;
+    player.y = this.nexusMap.spawnRoom.centerY + (Math.random() - 0.5) * 80;
     player.hp = player.maxHp;
     player.mana = player.maxMana;
     this.removePlayerProjectiles(player.id);
@@ -488,10 +491,12 @@ export class GameRoom extends Room<GameState> {
           player.speedBoostAmount = 0;
         }
 
-        // Get dungeon map for wall collision (if in dungeon)
+        // Get map for wall collision (nexus + dungeons)
         const dungeonMap = isDungeonZone(player.zone)
           ? this.dungeonSystem.getDungeonMap(player.zone)
-          : undefined;
+          : player.zone === "nexus"
+            ? this.nexusMap
+            : undefined;
 
         for (const input of player.pendingInputs) {
           const result = applyMovement(

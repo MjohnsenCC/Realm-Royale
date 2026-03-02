@@ -98,15 +98,26 @@ function mulberry32(seed: number): () => number {
   };
 }
 
+// --- Runtime dimension cache (set by generateDungeonMap, used by getZoneDimensions) ---
+
+const generatedDungeonDims = new Map<number, { width: number; height: number }>();
+
+/** Get the actual generated map dimensions for a dungeon type (in tiles). */
+export function getGeneratedDungeonDimensions(
+  dungeonType: number
+): { width: number; height: number } | undefined {
+  return generatedDungeonDims.get(dungeonType);
+}
+
 // --- Map Generation ---
 
 export function generateDungeonMap(seed: number, dungeonType?: number): DungeonMapData {
   const dType = dungeonType ?? DungeonType.InfernalPit;
   const config = DUNGEON_CONFIGS[dType] ?? DUNGEON_CONFIGS[DungeonType.InfernalPit];
   const rng = mulberry32(seed);
-  const W = config.tilesX;
-  const H = config.tilesY;
-  const tiles = new Uint8Array(W * H); // all Wall=0
+  let W = config.tilesX;
+  let H = config.tilesY;
+  let tiles = new Uint8Array(W * H); // all Wall=0
   const corridorW = config.corridorWidth ?? 2;
 
   const rooms: DungeonRoom[] = [];
@@ -241,119 +252,137 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
     }
   }
 
-  // --- Void Sanctum: branching layout with circular rooms ---
+  // --- Void Sanctum: two-phase dynamic generation with circular rooms ---
   if (dType === DungeonType.VoidSanctum) {
     const spawnR = randInt(config.spawnRadius![0], config.spawnRadius![1]);
     const normalR = config.normalRadius!;
     const bossR = randInt(config.bossRadius![0], config.bossRadius![1]);
     const switchR = config.switchRadius!;
 
-    // Room 0: Spawn room (bottom center)
-    const spawnCX = Math.floor(W / 2) + randInt(-2, 2);
-    const spawnCY = H - spawnR - 3;
-    const spawnRoom = carveCircularRoom(spawnCX, spawnCY, spawnR, "spawn");
-    rooms.push(spawnRoom);
+    // Phase 1: Position all rooms in unbounded space (no grid constraints)
+    interface CircularPlacement {
+      cx: number; cy: number; radius: number;
+      type: "spawn" | "normal" | "boss" | "switch";
+    }
+    const circPlacements: CircularPlacement[] = [];
+    const circLinks: [number, number][] = [];
 
-    // Room 1: offset to one side
+    // Room 0: Spawn room (origin)
+    const spawnCX = randInt(-2, 2);
+    const spawnCY = 0;
+    circPlacements.push({ cx: spawnCX, cy: spawnCY, radius: spawnR, type: "spawn" });
+
+    // Room 1: offset to one side, above spawn
     const r1R = randInt(normalR[0], normalR[1]);
     const r1Left = rng() > 0.5;
-    const r1CX = r1Left ? randInt(r1R + 3, Math.floor(W / 3)) : randInt(Math.floor(W * 2 / 3), W - r1R - 3);
+    const r1CX = r1Left ? randInt(-20, -r1R - 3) : randInt(r1R + 3, 20);
     const r1CY = spawnCY - spawnR - r1R - randInt(1, 2);
-    const room1 = carveCircularRoom(r1CX, r1CY, r1R, "normal");
-    rooms.push(room1);
-    carveCorridor(spawnRoom, room1);
+    circPlacements.push({ cx: r1CX, cy: r1CY, radius: r1R, type: "normal" });
+    circLinks.push([0, 1]);
 
-    // Room 2: offset to the other side
+    // Room 2: offset to the other side, above room 1
     const r2R = randInt(normalR[0], normalR[1]);
-    const r2CX = r1Left ? randInt(Math.floor(W * 2 / 3), W - r2R - 3) : randInt(r2R + 3, Math.floor(W / 3));
+    const r2CX = r1Left ? randInt(r2R + 3, 20) : randInt(-20, -r2R - 3);
     const r2CY = r1CY - r1R - r2R - randInt(1, 2);
-    const room2 = carveCircularRoom(r2CX, r2CY, r2R, "normal");
-    rooms.push(room2);
-    carveCorridor(room1, room2);
+    circPlacements.push({ cx: r2CX, cy: r2CY, radius: r2R, type: "normal" });
+    circLinks.push([1, 2]);
 
-    // Room 3: center-ish (crossroads - connects to switchA and preBoss)
+    // Room 3: center-ish crossroads (connects to switchA and preBoss)
     const r3R = randInt(normalR[0], normalR[1]);
-    const r3CX = Math.floor(W / 2) + randInt(-3, 3);
+    const r3CX = randInt(-3, 3);
     const r3CY = r2CY - r2R - r3R - randInt(1, 2);
-    const room3 = carveCircularRoom(r3CX, r3CY, r3R, "normal");
-    rooms.push(room3);
-    carveCorridor(room2, room3);
+    circPlacements.push({ cx: r3CX, cy: r3CY, radius: r3R, type: "normal" });
+    circLinks.push([2, 3]);
 
-    // Room 4: switchRoomA (dead-end branch from room3, off to one side)
+    // Room 4: switchRoomA (dead-end branch from room3)
     const sAR = randInt(switchR[0], switchR[1]);
-    const sALeft = r1Left; // branch same direction as room1 for variety
-    const sACX = sALeft ? randInt(sAR + 3, Math.floor(W / 4)) : randInt(Math.floor(W * 3 / 4), W - sAR - 3);
-    const sACY = r3CY + randInt(-2, 2); // roughly same Y level
-    const switchRoomA = carveCircularRoom(sACX, sACY, sAR, "switch");
-    rooms.push(switchRoomA);
-    carveCorridor(room3, switchRoomA);
+    const sACX = r1Left ? randInt(-25, -15) : randInt(15, 25);
+    const sACY = r3CY + randInt(-2, 2);
+    circPlacements.push({ cx: sACX, cy: sACY, radius: sAR, type: "switch" });
+    circLinks.push([3, 4]);
 
     // Room 5: preBoss room (above room3, center)
     const pbR = randInt(normalR[0], normalR[1]);
-    const pbCX = Math.floor(W / 2) + randInt(-2, 2);
+    const pbCX = randInt(-2, 2);
     const pbCY = r3CY - r3R - pbR - randInt(1, 2);
-    const preBossRoom = carveCircularRoom(pbCX, pbCY, pbR, "normal");
-    rooms.push(preBossRoom);
-    carveCorridor(room3, preBossRoom);
+    circPlacements.push({ cx: pbCX, cy: pbCY, radius: pbR, type: "normal" });
+    circLinks.push([3, 5]);
 
     // Room 6: Boss room (large, above preBoss, center)
-    const bossCX = Math.floor(W / 2);
-    const bossCY = Math.max(bossR + 3, pbCY - pbR - bossR - randInt(1, 2));
-    const bossRoom = carveCircularRoom(bossCX, bossCY, bossR, "boss");
-    rooms.push(bossRoom);
-    carveCorridor(preBossRoom, bossRoom);
+    const bossCX = 0;
+    const bossCY = pbCY - pbR - bossR - randInt(1, 2);
+    circPlacements.push({ cx: bossCX, cy: bossCY, radius: bossR, type: "boss" });
+    circLinks.push([5, 6]);
 
     // Room 7: switchRoomB (dead-end branch left from boss)
     const sBR = randInt(switchR[0], switchR[1]);
-    const sBCX = randInt(sBR + 3, Math.floor(W / 4));
+    const sBCX = randInt(-25, -15);
     const sBCY = bossCY + randInt(-2, 2);
-    const switchRoomB = carveCircularRoom(sBCX, sBCY, sBR, "switch");
-    rooms.push(switchRoomB);
-    carveCorridor(bossRoom, switchRoomB);
+    circPlacements.push({ cx: sBCX, cy: sBCY, radius: sBR, type: "switch" });
+    circLinks.push([6, 7]);
 
     // Room 8: switchRoomC (dead-end branch right from boss)
     const sCR = randInt(switchR[0], switchR[1]);
-    const sCCX = randInt(Math.floor(W * 3 / 4), W - sCR - 3);
+    const sCCX = randInt(15, 25);
     const sCCY = bossCY + randInt(-2, 2);
-    const switchRoomC = carveCircularRoom(sCCX, sCCY, sCR, "switch");
-    rooms.push(switchRoomC);
-    carveCorridor(bossRoom, switchRoomC);
+    circPlacements.push({ cx: sCCX, cy: sCCY, radius: sCR, type: "switch" });
+    circLinks.push([6, 8]);
 
-    const switchRooms = [switchRoomA, switchRoomB, switchRoomC];
+    // Phase 2: Compute bounding box, resize grid, offset all rooms to fit
+    const pad = 4;
+    let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
+    for (const r of circPlacements) {
+      if (r.cx - r.radius < pMinX) pMinX = r.cx - r.radius;
+      if (r.cy - r.radius < pMinY) pMinY = r.cy - r.radius;
+      if (r.cx + r.radius > pMaxX) pMaxX = r.cx + r.radius;
+      if (r.cy + r.radius > pMaxY) pMaxY = r.cy + r.radius;
+    }
+    const offX = pad - pMinX;
+    const offY = pad - pMinY;
+    for (const r of circPlacements) {
+      r.cx += offX;
+      r.cy += offY;
+    }
+    W = pMaxX - pMinX + pad * 2;
+    H = pMaxY - pMinY + pad * 2;
+    tiles = new Uint8Array(W * H);
+
+    // Phase 3: Carve rooms and corridors into the dynamically-sized grid
+    let spawnRoom!: DungeonRoom;
+    let bossRoom!: DungeonRoom;
+    const switchRoomIndices: number[] = [];
+    for (let i = 0; i < circPlacements.length; i++) {
+      const p = circPlacements[i];
+      const room = carveCircularRoom(p.cx, p.cy, p.radius, p.type);
+      rooms.push(room);
+      if (p.type === "spawn") spawnRoom = room;
+      if (p.type === "boss") bossRoom = room;
+      if (p.type === "switch") switchRoomIndices.push(i);
+    }
+    for (const [fromIdx, toIdx] of circLinks) {
+      carveCorridor(rooms[fromIdx], rooms[toIdx]);
+    }
+
+    const switchRooms = switchRoomIndices.map(i => rooms[i]);
+    generatedDungeonDims.set(dType, { width: W, height: H });
     return { tiles, width: W, height: H, rooms, spawnRoom, bossRoom, switchRooms };
   }
 
-  // --- Default layout (InfernalPit): zigzag main path with branching dead ends ---
+  // --- InfernalPit: two-phase generation (position rooms, then compute grid) ---
+  // Phase 1: Position all rooms in unbounded space (no grid constraints)
 
-  // Spawn room (bottom area, centered)
-  const spawnW = randInt(config.spawnW[0], config.spawnW[1]);
-  const spawnH = randInt(config.spawnH[0], config.spawnH[1]);
-  const spawnX = Math.floor((W - spawnW) / 2);
-  const spawnY = H - spawnH - 2;
-  const spawnRoom = carveRoom(spawnX, spawnY, spawnW, spawnH, "spawn");
-  rooms.push(spawnRoom);
-
-  // Main path: 8-12 rooms (including spawn, excluding boss)
-  const mainPathLen = randInt(8, 12);
-  const branchCount = randInt(1, 2); // 1-2 dead-end branches (each 2-4 rooms deep)
-
-  // Pick branch point indices along main path (rooms 1 through mainPathLen-1)
-  const branchPoints: number[] = [];
-  branchPoints.push(randInt(1, mainPathLen - 1));
-  if (branchCount >= 2) {
-    let bp2 = randInt(1, mainPathLen - 1);
-    let tries = 0;
-    while (bp2 === branchPoints[0] && tries < 10) {
-      bp2 = randInt(1, mainPathLen - 1);
-      tries++;
-    }
-    branchPoints.push(bp2);
+  interface RoomPlacement {
+    x: number; y: number; w: number; h: number;
+    type: "spawn" | "normal" | "boss";
   }
 
-  // Helper: check if a proposed room overlaps any existing room (with margin)
-  function roomsOverlap(ax: number, ay: number, aw: number, ah: number): boolean {
+  const placements: RoomPlacement[] = [];
+  const links: [number, number][] = []; // corridor connections as index pairs
+
+  // Overlap check against placed rooms (no grid clamping)
+  function placementsOverlap(ax: number, ay: number, aw: number, ah: number): boolean {
     const margin = 2;
-    for (const r of rooms) {
+    for (const r of placements) {
       if (
         ax < r.x + r.w + margin &&
         ax + aw + margin > r.x &&
@@ -366,120 +395,148 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
     return false;
   }
 
-  // Place main path rooms (upward from spawn with zigzag pattern)
-  let prevRoom = spawnRoom;
-  const mainPathRooms: DungeonRoom[] = [spawnRoom];
-  let zigzagLeft = rng() > 0.5; // initial zigzag direction
+  // Spawn room (reference point at origin)
+  const spawnW = randInt(config.spawnW[0], config.spawnW[1]);
+  const spawnH = randInt(config.spawnH[0], config.spawnH[1]);
+  placements.push({ x: 0, y: 0, w: spawnW, h: spawnH, type: "spawn" });
+
+  // Main path: 8-12 rooms (including spawn, excluding boss)
+  const mainPathLen = randInt(8, 12);
+  const branchCount = randInt(1, 2);
+
+  // Pick branch point indices along main path
+  const branchPoints: number[] = [];
+  branchPoints.push(randInt(1, mainPathLen - 1));
+  if (branchCount >= 2) {
+    let bp2 = randInt(1, mainPathLen - 1);
+    let tries = 0;
+    while (bp2 === branchPoints[0] && tries < 10) {
+      bp2 = randInt(1, mainPathLen - 1);
+      tries++;
+    }
+    branchPoints.push(bp2);
+  }
+
+  // Place main path rooms (zigzag upward)
+  const mainPathIndices: number[] = [0];
+  let zigzagLeft = rng() > 0.5;
 
   for (let i = 1; i < mainPathLen; i++) {
+    const prevIdx = mainPathIndices[mainPathIndices.length - 1];
+    const prev = placements[prevIdx];
     const rW = randInt(config.normalW[0], config.normalW[1]);
     const rH = randInt(config.normalH[0], config.normalH[1]);
-    const parentCX = Math.floor(prevRoom.x + prevRoom.w / 2);
+    const parentCX = prev.x + Math.floor(prev.w / 2);
 
-    // Alternate left/right with significant horizontal offset for zigzag
     const hOffset = randInt(8, 14) * (zigzagLeft ? -1 : 1);
-    let rX = Math.max(1, Math.min(W - rW - 1, parentCX - Math.floor(rW / 2) + hOffset));
-    let rY = prevRoom.y - rH - randInt(3, 5);
+    let rX = parentCX - Math.floor(rW / 2) + hOffset;
+    let rY = prev.y - rH - randInt(3, 5);
 
-    // Collision check with retry
-    for (let attempt = 0; attempt < 5 && roomsOverlap(rX, rY, rW, rH); attempt++) {
-      rX = Math.max(1, Math.min(W - rW - 1, parentCX - Math.floor(rW / 2)));
+    for (let attempt = 0; attempt < 5 && placementsOverlap(rX, rY, rW, rH); attempt++) {
+      rX = parentCX - Math.floor(rW / 2);
       rY -= 2;
     }
-    rY = Math.max(2, rY);
 
-    const room = carveRoom(rX, rY, rW, rH, "normal");
-    rooms.push(room);
-    carveCorridor(prevRoom, room);
-    mainPathRooms.push(room);
-    prevRoom = room;
-
-    // Flip direction for next room
+    const idx = placements.length;
+    placements.push({ x: rX, y: rY, w: rW, h: rH, type: "normal" });
+    links.push([prevIdx, idx]);
+    mainPathIndices.push(idx);
     zigzagLeft = !zigzagLeft;
   }
 
-  // Place branch chains (2-4 room deep dead-end paths off the main path)
+  // Place branch chains (2-4 rooms each, no grid boundary to worry about)
   for (let b = 0; b < branchPoints.length; b++) {
-    const parentIdx = branchPoints[b];
-    let branchParent = mainPathRooms[parentIdx];
+    const parentMainIdx = branchPoints[b];
+    let branchParentIdx = mainPathIndices[parentMainIdx];
     const branchLen = randInt(2, 4);
     const goLeft = rng() > 0.5;
 
     for (let step = 0; step < branchLen; step++) {
+      const parent = placements[branchParentIdx];
       const rW = randInt(config.normalW[0], config.normalW[1]);
       const rH = randInt(config.normalH[0], config.normalH[1]);
 
-      // Branch rooms go diagonally: sideways + upward so they don't run out of horizontal space
       const hGap = randInt(2, 4);
       const vGap = randInt(2, 5);
-      let rX: number;
-      if (goLeft) {
-        rX = branchParent.x - rW - hGap;
-      } else {
-        rX = branchParent.x + branchParent.w + hGap;
-      }
-      let rY = branchParent.y - rH - vGap;
+      let rX = goLeft ? parent.x - rW - hGap : parent.x + parent.w + hGap;
+      let rY = parent.y - rH - vGap;
 
-      // Clamp to grid
-      rX = Math.max(1, Math.min(W - rW - 1, rX));
-      rY = Math.max(2, rY);
-
-      // Collision retry: try other side + upward shift
-      if (roomsOverlap(rX, rY, rW, rH)) {
-        rX = goLeft
-          ? branchParent.x + branchParent.w + hGap
-          : branchParent.x - rW - hGap;
-        rX = Math.max(1, Math.min(W - rW - 1, rX));
+      // Collision retries (no clamping needed — grid will fit around rooms)
+      if (placementsOverlap(rX, rY, rW, rH)) {
+        rX = goLeft ? parent.x + parent.w + hGap : parent.x - rW - hGap;
       }
-      if (roomsOverlap(rX, rY, rW, rH)) {
+      if (placementsOverlap(rX, rY, rW, rH)) {
         rY -= randInt(4, 8);
-        rY = Math.max(2, rY);
       }
-      if (roomsOverlap(rX, rY, rW, rH)) {
-        // Last resort: try placing directly above with random horizontal offset
-        rX = Math.max(1, Math.min(W - rW - 1,
-          Math.floor(branchParent.x + branchParent.w / 2) - Math.floor(rW / 2) + randInt(-6, 6)));
-        rY = branchParent.y - rH - randInt(4, 8);
-        rY = Math.max(2, rY);
+      if (placementsOverlap(rX, rY, rW, rH)) {
+        rX = Math.floor(parent.x + parent.w / 2) - Math.floor(rW / 2) + randInt(-6, 6);
+        rY = parent.y - rH - randInt(4, 8);
       }
-      // If still overlapping, stop this branch
-      if (roomsOverlap(rX, rY, rW, rH)) break;
+      if (placementsOverlap(rX, rY, rW, rH)) break;
 
-      const room = carveRoom(rX, rY, rW, rH, "normal");
-      rooms.push(room);
-      carveCorridor(branchParent, room);
-      branchParent = room; // chain: next room connects from this one
+      const idx = placements.length;
+      placements.push({ x: rX, y: rY, w: rW, h: rH, type: "normal" });
+      links.push([branchParentIdx, idx]);
+      branchParentIdx = idx;
     }
   }
 
-  // Boss room: randomly placed above, to the left, or to the right of the last main path room
-  const bossW = randInt(config.bossW[0], config.bossW[1]);
-  const bossH = randInt(config.bossH[0], config.bossH[1]);
-  const lastMain = mainPathRooms[mainPathRooms.length - 1];
-  const lastMainCX = Math.floor(lastMain.x + lastMain.w / 2);
-  const lastMainCY = Math.floor(lastMain.y + lastMain.h / 2);
+  // Boss room: randomly placed above, left, or right of last main path room
+  const bW = randInt(config.bossW[0], config.bossW[1]);
+  const bH = randInt(config.bossH[0], config.bossH[1]);
+  const lastMainIdx = mainPathIndices[mainPathIndices.length - 1];
+  const lastMain = placements[lastMainIdx];
+  const lmCX = lastMain.x + Math.floor(lastMain.w / 2);
+  const lmCY = lastMain.y + Math.floor(lastMain.h / 2);
   const bossDir = randInt(0, 2); // 0 = above, 1 = left, 2 = right
-  let bossX: number;
-  let bossY: number;
+  let bX: number, bY: number;
   if (bossDir === 1) {
-    // Left of last room
-    bossX = lastMain.x - bossW - randInt(3, 5);
-    bossY = lastMainCY - Math.floor(bossH / 2) + randInt(-3, 3);
+    bX = lastMain.x - bW - randInt(3, 5);
+    bY = lmCY - Math.floor(bH / 2) + randInt(-3, 3);
   } else if (bossDir === 2) {
-    // Right of last room
-    bossX = lastMain.x + lastMain.w + randInt(3, 5);
-    bossY = lastMainCY - Math.floor(bossH / 2) + randInt(-3, 3);
+    bX = lastMain.x + lastMain.w + randInt(3, 5);
+    bY = lmCY - Math.floor(bH / 2) + randInt(-3, 3);
   } else {
-    // Above last room (original behavior)
-    bossX = lastMainCX - Math.floor(bossW / 2);
-    bossY = lastMain.y - bossH - randInt(3, 5);
+    bX = lmCX - Math.floor(bW / 2);
+    bY = lastMain.y - bH - randInt(3, 5);
   }
-  bossX = Math.max(1, Math.min(W - bossW - 1, bossX));
-  bossY = Math.max(2, Math.min(H - bossH - 1, bossY));
-  const bossRoom = carveRoom(bossX, bossY, bossW, bossH, "boss");
-  rooms.push(bossRoom);
-  carveCorridor(lastMain, bossRoom);
+  const bossIdx = placements.length;
+  placements.push({ x: bX, y: bY, w: bW, h: bH, type: "boss" });
+  links.push([lastMainIdx, bossIdx]);
 
+  // Phase 2: Compute bounding box, resize grid, offset all rooms to fit
+  const pad = 4;
+  let pMinX = Infinity, pMinY = Infinity, pMaxX = -Infinity, pMaxY = -Infinity;
+  for (const r of placements) {
+    if (r.x < pMinX) pMinX = r.x;
+    if (r.y < pMinY) pMinY = r.y;
+    if (r.x + r.w > pMaxX) pMaxX = r.x + r.w;
+    if (r.y + r.h > pMaxY) pMaxY = r.y + r.h;
+  }
+  const offX = pad - pMinX;
+  const offY = pad - pMinY;
+  for (const r of placements) {
+    r.x += offX;
+    r.y += offY;
+  }
+  W = pMaxX - pMinX + pad * 2;
+  H = pMaxY - pMinY + pad * 2;
+  tiles = new Uint8Array(W * H);
+
+  // Phase 3: Carve rooms and corridors into the dynamically-sized grid
+  let spawnRoom!: DungeonRoom;
+  let bossRoom!: DungeonRoom;
+  for (const p of placements) {
+    const room = carveRoom(p.x, p.y, p.w, p.h, p.type);
+    rooms.push(room);
+    if (p.type === "spawn") spawnRoom = room;
+    if (p.type === "boss") bossRoom = room;
+  }
+  for (const [fromIdx, toIdx] of links) {
+    carveCorridor(rooms[fromIdx], rooms[toIdx]);
+  }
+
+  generatedDungeonDims.set(dType, { width: W, height: H });
   return { tiles, width: W, height: H, rooms, spawnRoom, bossRoom };
 }
 

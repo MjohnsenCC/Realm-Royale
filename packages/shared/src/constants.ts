@@ -56,13 +56,15 @@ export const MINIMAP_HEIGHT = 150;
 // Enemy sync (area-of-interest filtering)
 export const ENEMY_SYNC_RADIUS = 1600;
 
-// Nexus (safe zone — 4x original size)
-export const NEXUS_WIDTH = 2400;
-export const NEXUS_HEIGHT = 2400;
+// Nexus (safe zone — hub with center room + 4 side rooms)
+export const NEXUS_TILES_X = 50;
+export const NEXUS_TILES_Y = 50;
+export const NEXUS_WIDTH = NEXUS_TILES_X * TILE_SIZE; // 2000
+export const NEXUS_HEIGHT = NEXUS_TILES_Y * TILE_SIZE; // 2000
 
-// Portal (located in nexus, takes player to hostile zone)
-export const PORTAL_X = 1200; // center of nexus horizontally
-export const PORTAL_Y = 400; // near top area of nexus
+// Portal (located in nexus north room, takes player to hostile zone)
+export const PORTAL_X = 25.5 * TILE_SIZE; // 1020 — center of north room
+export const PORTAL_Y = 7 * TILE_SIZE; // 280 — center of north room
 export const PORTAL_RADIUS = 40;
 
 // Inventory & Loot Bags
