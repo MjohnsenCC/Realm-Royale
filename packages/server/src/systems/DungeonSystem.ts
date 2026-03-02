@@ -17,6 +17,7 @@ import {
   VOID_PORTAL_CHANCE,
   ENEMY_DEFS,
   DUNGEON_ROOM_ENEMIES,
+  INFERNAL_NORMAL_ROOM_VARIANTS,
   TILE_SIZE,
   generateDungeonMap,
   isTileWalkable,
@@ -166,27 +167,53 @@ export class DungeonSystem {
     }
 
     // Place enemies in rooms using room-based config
-    const roomEnemies = DUNGEON_ROOM_ENEMIES[dungeonType];
-    if (roomEnemies) {
-      for (
-        let i = 0;
-        i < mapData.rooms.length && i < roomEnemies.length;
-        i++
-      ) {
-        const room = mapData.rooms[i];
-        const config = roomEnemies[i];
+    if (dungeonType === DungeonType.InfernalPit) {
+      // Type-based spawning: variable room count, cycle through normal variants
+      let normalRoomIdx = 0;
+      for (const room of mapData.rooms) {
+        if (room.type === "spawn" || room.type === "boss") continue;
 
-        for (const enemyType of config.enemies) {
+        const enemies = INFERNAL_NORMAL_ROOM_VARIANTS[normalRoomIdx % INFERNAL_NORMAL_ROOM_VARIANTS.length];
+        normalRoomIdx++;
+
+        for (const enemyType of enemies) {
           const pos = this.randomPositionInRoom(room, mapData);
           this.spawnDungeonEnemy(enemyType, pos.x, pos.y, zone, state);
         }
 
-        // Spawn extra enemies from Swarming modifier (skip spawn room and boss room)
-        if (extraEnemiesPerRoom > 0 && config.enemies.length > 0 && room.type !== "spawn" && room.type !== "boss") {
+        // Spawn extra enemies from Swarming modifier
+        if (extraEnemiesPerRoom > 0 && enemies.length > 0) {
           for (let e = 0; e < extraEnemiesPerRoom; e++) {
-            const randomType = config.enemies[Math.floor(Math.random() * config.enemies.length)];
+            const randomType = enemies[Math.floor(Math.random() * enemies.length)];
             const pos = this.randomPositionInRoom(room, mapData);
             this.spawnDungeonEnemy(randomType, pos.x, pos.y, zone, state);
+          }
+        }
+      }
+    } else {
+      // Index-based spawning (VoidSanctum: fixed room count)
+      const roomEnemies = DUNGEON_ROOM_ENEMIES[dungeonType];
+      if (roomEnemies) {
+        for (
+          let i = 0;
+          i < mapData.rooms.length && i < roomEnemies.length;
+          i++
+        ) {
+          const room = mapData.rooms[i];
+          const config = roomEnemies[i];
+
+          for (const enemyType of config.enemies) {
+            const pos = this.randomPositionInRoom(room, mapData);
+            this.spawnDungeonEnemy(enemyType, pos.x, pos.y, zone, state);
+          }
+
+          // Spawn extra enemies from Swarming modifier (skip spawn room and boss room)
+          if (extraEnemiesPerRoom > 0 && config.enemies.length > 0 && room.type !== "spawn" && room.type !== "boss") {
+            for (let e = 0; e < extraEnemiesPerRoom; e++) {
+              const randomType = config.enemies[Math.floor(Math.random() * config.enemies.length)];
+              const pos = this.randomPositionInRoom(room, mapData);
+              this.spawnDungeonEnemy(randomType, pos.x, pos.y, zone, state);
+            }
           }
         }
       }
@@ -221,7 +248,8 @@ export class DungeonSystem {
           state
         );
         boss.isBoss = true;
-        boss.bossPhase = 1;
+        boss.bossPhase = 0;
+        boss.aiState = EnemyAIState.Sleeping;
       }
     }
   }
@@ -433,6 +461,14 @@ export class DungeonSystem {
   }
 
   /**
+   * Called when a sleeping boss takes its first hit. Starts 2-second wake timer.
+   */
+  onBossHit(zone: string): void {
+    if (this.bossWakeTimers.has(zone)) return;
+    this.bossWakeTimers.set(zone, Date.now() + 2000);
+  }
+
+  /**
    * Get remaining switch count for a zone.
    */
   getSwitchesRemaining(zone: string): number {
@@ -485,11 +521,13 @@ export class DungeonSystem {
       state.dungeonPortals.delete(id);
     }
 
-    // Boss wake timer (VoidSanctum)
+    // Boss wake timer (all dungeon types)
     for (const [zone, mapData] of this.activeDungeonMaps) {
       const dungeonType = ZONE_TO_DUNGEON[zone];
-      if (dungeonType !== DungeonType.VoidSanctum) continue;
-      if ((this.switchesRemaining.get(zone) ?? 0) > 0) continue;
+      const isVoidSanctum = dungeonType === DungeonType.VoidSanctum;
+
+      // VoidSanctum: skip if switches not yet destroyed
+      if (isVoidSanctum && (this.switchesRemaining.get(zone) ?? 0) > 0) continue;
 
       // Check if there's a sleeping boss in this zone
       let hasSleepingBoss = false;
@@ -503,21 +541,24 @@ export class DungeonSystem {
       const wakeTime = this.bossWakeTimers.get(zone);
 
       if (wakeTime === undefined) {
-        // Check if any player is inside the boss room bounds
-        const room = mapData.bossRoom;
-        let playerInBossRoom = false;
-        state.players.forEach((player) => {
-          if (player.zone !== zone || !player.alive) return;
-          const px = player.x / TILE_SIZE;
-          const py = player.y / TILE_SIZE;
-          if (px >= room.x && px <= room.x + room.w &&
-              py >= room.y && py <= room.y + room.h) {
-            playerInBossRoom = true;
-          }
-        });
+        // VoidSanctum: wake triggered by player entering boss room
+        // InfernalPit: wake triggered by onBossHit() (timer set externally)
+        if (isVoidSanctum) {
+          const room = mapData.bossRoom;
+          let playerInBossRoom = false;
+          state.players.forEach((player) => {
+            if (player.zone !== zone || !player.alive) return;
+            const px = player.x / TILE_SIZE;
+            const py = player.y / TILE_SIZE;
+            if (px >= room.x && px <= room.x + room.w &&
+                py >= room.y && py <= room.y + room.h) {
+              playerInBossRoom = true;
+            }
+          });
 
-        if (playerInBossRoom) {
-          this.bossWakeTimers.set(zone, now + 5000);
+          if (playerInBossRoom) {
+            this.bossWakeTimers.set(zone, now + 5000);
+          }
         }
       } else if (now >= wakeTime) {
         // Wake the boss

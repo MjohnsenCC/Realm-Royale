@@ -329,7 +329,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     room.onMessage(ServerMessage.BossAwakened, () => {
-      this.showDungeonNotification("The Architect has awakened!");
+      this.showDungeonNotification("The boss has awakened!");
     });
 
     // Handle room leave/error

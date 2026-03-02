@@ -23,7 +23,7 @@ export class LootBagSprite {
     this.x = x;
     this.y = y;
     this.bagRarity = bagRarity;
-    this.graphics = scene.add.graphics().setDepth(5);
+    this.graphics = scene.add.graphics().setDepth(7);
     this.draw();
   }
 

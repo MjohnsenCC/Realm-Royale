@@ -57,10 +57,12 @@ export class EnemyAI {
         }
       }
 
-      // Boss phase transitions for Molten Wyrm (2 phases, unchanged)
-      if (enemy.isBoss && enemy.enemyType === EnemyType.MoltenWyrm && enemy.bossPhase === 1) {
+      // Boss phase transitions for Molten Wyrm (3 phases)
+      if (enemy.isBoss && enemy.enemyType === EnemyType.MoltenWyrm && enemy.bossPhase >= 1) {
         const hpRatio = enemy.hp / enemy.maxHp;
-        if (hpRatio <= 0.5) {
+        if (hpRatio <= 0.3 && enemy.bossPhase < 3) {
+          enemy.bossPhase = 3;
+        } else if (hpRatio <= 0.6 && enemy.bossPhase < 2) {
           enemy.bossPhase = 2;
         }
       }
@@ -166,13 +168,25 @@ export class EnemyAI {
     // Get effective def (boss phase overrides)
     const effectiveDef = this.getBossOverrideDef(enemy, def);
 
-    // Move toward target
-    const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
-    if (distToTarget > effectiveDef.aggroRange * 0.5) {
-      const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
-      enemy.x += Math.cos(angle) * effectiveDef.speed * dt;
-      enemy.y += Math.sin(angle) * effectiveDef.speed * dt;
+    // Move: Molten Wyrm orbits in a small circle; others chase target
+    if (enemy.enemyType === EnemyType.MoltenWyrm && enemy.isBoss) {
+      const orbitRadius = 40;
+      const orbitSpeed = 0.8;
+      enemy.bossOrbitAngle += orbitSpeed * dt;
+      if (enemy.bossOrbitAngle > Math.PI * 2) {
+        enemy.bossOrbitAngle -= Math.PI * 2;
+      }
+      enemy.x = enemy.spawnX + Math.cos(enemy.bossOrbitAngle) * orbitRadius;
+      enemy.y = enemy.spawnY + Math.sin(enemy.bossOrbitAngle) * orbitRadius;
       this.clampToZone(enemy, def, mapData);
+    } else {
+      const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+      if (distToTarget > effectiveDef.aggroRange * 0.5) {
+        const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+        enemy.x += Math.cos(angle) * effectiveDef.speed * dt;
+        enemy.y += Math.sin(angle) * effectiveDef.speed * dt;
+        this.clampToZone(enemy, def, mapData);
+      }
     }
 
     // Shoot
@@ -301,21 +315,49 @@ export class EnemyAI {
 
     if (enemy.enemyType === EnemyType.MoltenWyrm) {
       if (enemy.bossPhase === 1) {
-        const useSpiral =
+        // Phase 1 (100%-60%): Slow lumbering attacks — alternating aimed spread and slow ring
+        const useSpread =
           Math.floor(enemy.spiralAngleOffset * 3) % 2 === 0;
+        return {
+          ...baseDef,
+          shootingPattern: useSpread
+            ? ShootingPatternType.Spread3
+            : ShootingPatternType.BurstRing8,
+          shootCooldown: 1200,
+          projectileSpeed: 160,
+          projectileRange: 280,
+          speed: 55,
+        };
+      } else if (enemy.bossPhase === 2) {
+        // Phase 2 (60%-30%): Eruption — fast spirals with increased speed, chases aggressively
+        const useSpiral =
+          Math.floor(enemy.spiralAngleOffset * 4) % 3 !== 0;
         return {
           ...baseDef,
           shootingPattern: useSpiral
             ? ShootingPatternType.Spiral5
-            : ShootingPatternType.BurstRing12,
+            : ShootingPatternType.Spread5,
+          shootCooldown: 800,
+          projectileDamage: 24,
+          projectileSpeed: 120,
+          projectileRange: 300,
+          speed: 80,
         };
       } else {
+        // Phase 3 (<30%): Meltdown — rapid rotating cross + multi-speed rings, very aggressive
+        const cycle = Math.floor(enemy.spiralAngleOffset * 5) % 3;
+        let pattern: number;
+        if (cycle === 0) pattern = ShootingPatternType.RotatingCross;
+        else if (cycle === 1) pattern = ShootingPatternType.MultiSpeedRing;
+        else pattern = ShootingPatternType.CounterSpiralDouble;
         return {
           ...baseDef,
+          shootingPattern: pattern,
           shootCooldown: 500,
-          shootingPattern: ShootingPatternType.BurstRing16,
-          projectileDamage: 28,
-          speed: 55,
+          projectileDamage: 30,
+          projectileSpeed: 140,
+          projectileRange: 350,
+          speed: 100,
         };
       }
     }

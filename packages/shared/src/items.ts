@@ -5,6 +5,7 @@ import {
   AbilitySubtype,
   BagRarity,
   BiomeType,
+  DungeonType,
 } from "./types";
 
 // --- Item ID Encoding: category * 100 + subtype * 10 + tier ---
@@ -398,10 +399,20 @@ const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
   .map(Number)
   .filter((id) => getItemTier(id) === ItemTier.UT);
 
+/** Dungeon-exclusive UT items (only drop from specific bosses). */
+const UT_WEAPON_ID = makeItemId(0, 0, 7); // Doom Blade
+const UT_ARMOR_ID = makeItemId(2, 0, 7); // Ethereal Shroud
+const DUNGEON_EXCLUSIVE_UT_IDS = new Set([UT_WEAPON_ID, UT_ARMOR_ID]);
+
+/** UT items available from overworld black bags (excludes dungeon-exclusive UTs). */
+const GENERAL_UT_ITEM_IDS = UT_ITEM_IDS.filter(
+  (id) => !DUNGEON_EXCLUSIVE_UT_IDS.has(id)
+);
+
 export function rollBagLoot(bagRarity: number, biome: number): number[] {
-  // Black bags always drop exactly 1 random UT item
+  // Black bags drop 1 random non-dungeon-exclusive UT item
   if (bagRarity === BagRarity.Black) {
-    return [pickRandom(UT_ITEM_IDS)];
+    return [pickRandom(GENERAL_UT_ITEM_IDS)];
   }
 
   const tierRanges = BIOME_TIER_RANGES[biome];
@@ -452,25 +463,32 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
 /**
  * Roll loot for a boss kill. Bosses always drop a Red or Black bag.
  */
-export function rollBossLoot(_dungeonType: number): {
+export function rollBossLoot(dungeonType: number): {
   bagRarity: number;
   items: number[];
 } {
-  return rollBossLootWithRarity(_dungeonType, 0.3);
+  return rollBossLootWithRarity(dungeonType, 0.3);
 }
 
 /**
  * Roll boss loot with a custom black bag chance (for dungeon rarity boosts).
+ * Infernal boss always drops UT weapon, Void boss always drops UT armor.
  */
 export function rollBossLootWithRarity(
-  _dungeonType: number,
+  dungeonType: number,
   blackBagChance: number
 ): { bagRarity: number; items: number[] } {
   const isBlack = Math.random() < blackBagChance;
   const bagRarity = isBlack ? BagRarity.Black : BagRarity.Red;
 
   if (bagRarity === BagRarity.Black) {
-    return { bagRarity, items: [pickRandom(UT_ITEM_IDS)] };
+    if (dungeonType === DungeonType.InfernalPit) {
+      return { bagRarity, items: [UT_WEAPON_ID] };
+    }
+    if (dungeonType === DungeonType.VoidSanctum) {
+      return { bagRarity, items: [UT_ARMOR_ID] };
+    }
+    return { bagRarity, items: [pickRandom(GENERAL_UT_ITEM_IDS)] };
   }
 
   const itemCount = 1 + Math.floor(Math.random() * 2); // 1-2

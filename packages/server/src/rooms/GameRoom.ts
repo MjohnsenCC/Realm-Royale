@@ -762,6 +762,8 @@ export class GameRoom extends Room<GameState> {
           }
           // Dungeon enemies do NOT respawn
         }
+      } else if (event.type === "bossHit" && event.enemyZone) {
+        this.dungeonSystem.onBossHit(event.enemyZone);
       }
     }
 

@@ -14,11 +14,12 @@ import {
   computePlayerStats,
   getZoneDimensions,
   DungeonTile,
+  EnemyAIState,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 
 export interface CombatEvent {
-  type: "playerDied" | "enemyKilled";
+  type: "playerDied" | "enemyKilled" | "bossHit";
   playerId?: string;
   biome?: number;
   enemyX?: number;
@@ -102,6 +103,15 @@ export class CombatSystem {
               ? Math.round(proj.damage * (1 - enemy.damageResist / 100))
               : proj.damage;
             enemy.hp -= effectiveDamage;
+
+            // Wake sleeping boss on first hit
+            if (enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
+              this.events.push({
+                type: "bossHit",
+                enemyZone: enemy.zone,
+                isBoss: true,
+              });
+            }
 
             if (proj.piercing) {
               proj.hitEnemies.add(enemy.id);

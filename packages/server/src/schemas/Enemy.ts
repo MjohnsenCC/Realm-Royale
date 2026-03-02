@@ -19,6 +19,7 @@ export class Enemy extends Schema {
   idlePauseTimer: number = 0;
   spiralAngleOffset: number = 0;
   lastShootTime: number = 0;
+  bossOrbitAngle: number = 0;
 
   // Dungeon modifier effects (server-only)
   damageResist: number = 0; // percentage damage reduction (0-100)

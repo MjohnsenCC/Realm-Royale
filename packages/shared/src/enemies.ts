@@ -448,15 +448,15 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     biome: DungeonBiomeType.InfernalPit,
     name: "Infernal Hound",
     hp: 100,
-    speed: 80,
+    speed: 120,
     radius: 14,
     aggroRange: 350,
     leashRange: 800,
-    shootCooldown: 1000,
+    shootCooldown: 2800,
     projectileDamage: 15,
-    projectileSpeed: 300,
-    projectileRange: 400,
-    shootingPattern: ShootingPatternType.Spread3,
+    projectileSpeed: 120,
+    projectileRange: 200,
+    shootingPattern: ShootingPatternType.SingleAimed,
     xpValue: 40,
     shape: "triangle",
     color: 0xff4400,
@@ -466,15 +466,15 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     biome: DungeonBiomeType.InfernalPit,
     name: "Magma Serpent",
     hp: 150,
-    speed: 50,
+    speed: 100,
     radius: 16,
     aggroRange: 300,
     leashRange: 800,
-    shootCooldown: 1200,
+    shootCooldown: 3200,
     projectileDamage: 18,
-    projectileSpeed: 280,
-    projectileRange: 420,
-    shootingPattern: ShootingPatternType.Spiral5,
+    projectileSpeed: 120,
+    projectileRange: 220,
+    shootingPattern: ShootingPatternType.Spread3,
     xpValue: 50,
     shape: "hexagon",
     color: 0xff6600,
@@ -484,15 +484,15 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     biome: DungeonBiomeType.InfernalPit,
     name: "Cinder Wraith",
     hp: 80,
-    speed: 100,
+    speed: 140,
     radius: 12,
     aggroRange: 400,
     leashRange: 800,
-    shootCooldown: 600,
+    shootCooldown: 2000,
     projectileDamage: 12,
-    projectileSpeed: 380,
-    projectileRange: 380,
-    shootingPattern: ShootingPatternType.DoubleSingle,
+    projectileSpeed: 120,
+    projectileRange: 200,
+    shootingPattern: ShootingPatternType.BurstRing4,
     xpValue: 35,
     shape: "diamond",
     color: 0xffaa22,
@@ -503,15 +503,15 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     biome: DungeonBiomeType.InfernalPit,
     name: "Molten Wyrm",
     hp: 1500,
-    speed: 40,
+    speed: 55,
     radius: 30,
     aggroRange: 600,
     leashRange: 1200,
-    shootCooldown: 800,
+    shootCooldown: 1200,
     projectileDamage: 20,
-    projectileSpeed: 280,
-    projectileRange: 500,
-    shootingPattern: ShootingPatternType.BurstRing12,
+    projectileSpeed: 160,
+    projectileRange: 280,
+    shootingPattern: ShootingPatternType.BurstRing8,
     xpValue: 500,
     shape: "star",
     color: 0xff4400,
@@ -717,7 +717,8 @@ export const DUNGEON_TO_ZONE: Record<number, string> = {
 
 // --- Room-Based Dungeon Enemy Config ---
 // Each entry corresponds to a room by index:
-// [0] = spawn room, [1-3] = normal rooms, [4] = boss room (boss spawned separately)
+// InfernalPit: [0] = spawn, [1-7] = normal rooms (3 enemies each), [8] = boss room
+// VoidSanctum: [0] = spawn, [1-3] = normal, [4] = switchA, [5] = preBoss, [6] = boss, [7-8] = switches
 
 export interface DungeonRoomEnemyConfig {
   enemies: number[]; // EnemyType values
@@ -727,13 +728,21 @@ export const DUNGEON_ROOM_ENEMIES: Record<number, DungeonRoomEnemyConfig[]> = {
   [DungeonType.InfernalPit]: [
     // Room 0: spawn room - no enemies
     { enemies: [] },
-    // Room 1: first encounter
+    // Room 1
+    { enemies: [EnemyType.InfernalHound, EnemyType.InfernalHound, EnemyType.InfernalHound] },
+    // Room 2
     { enemies: [EnemyType.InfernalHound, EnemyType.CinderWraith, EnemyType.InfernalHound] },
-    // Room 2: mid dungeon
+    // Room 3
     { enemies: [EnemyType.MagmaSerpent, EnemyType.InfernalHound, EnemyType.CinderWraith] },
-    // Room 3: pre-boss
-    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.CinderWraith, EnemyType.InfernalHound, EnemyType.InfernalHound] },
-    // Room 4: boss room - boss spawned separately
+    // Room 4
+    { enemies: [EnemyType.CinderWraith, EnemyType.CinderWraith, EnemyType.MagmaSerpent] },
+    // Room 5
+    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.CinderWraith] },
+    // Room 6
+    { enemies: [EnemyType.MagmaSerpent, EnemyType.CinderWraith, EnemyType.InfernalHound] },
+    // Room 7
+    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.MagmaSerpent] },
+    // Room 8: boss room - boss spawned separately
     { enemies: [] },
   ],
   [DungeonType.VoidSanctum]: [
@@ -757,6 +766,18 @@ export const DUNGEON_ROOM_ENEMIES: Record<number, DungeonRoomEnemyConfig[]> = {
     { enemies: [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte] },
   ],
 };
+
+// --- Infernal Pit Normal Room Enemy Variants ---
+// Pool of enemy lists for normal rooms (cycled through for variable room counts)
+export const INFERNAL_NORMAL_ROOM_VARIANTS: number[][] = [
+  [EnemyType.InfernalHound, EnemyType.InfernalHound, EnemyType.InfernalHound],
+  [EnemyType.InfernalHound, EnemyType.CinderWraith, EnemyType.InfernalHound],
+  [EnemyType.MagmaSerpent, EnemyType.InfernalHound, EnemyType.CinderWraith],
+  [EnemyType.CinderWraith, EnemyType.CinderWraith, EnemyType.MagmaSerpent],
+  [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.CinderWraith],
+  [EnemyType.MagmaSerpent, EnemyType.CinderWraith, EnemyType.InfernalHound],
+  [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.MagmaSerpent],
+];
 
 // --- Dungeon Helpers ---
 
