@@ -463,8 +463,10 @@ export class DungeonSystem {
 
   /**
    * Update: despawn expired entrance portals, cleanup empty dungeons, boss wake timer.
+   * Returns zones where a boss just awakened (for client notifications).
    */
-  update(_deltaTime: number, state: GameState): void {
+  update(_deltaTime: number, state: GameState): string[] {
+    const bossAwokeZones: string[] = [];
     const now = Date.now();
 
     // Despawn expired entrance portals (exit portals and nexus test portals persist)
@@ -526,11 +528,14 @@ export class DungeonSystem {
           }
         });
         this.bossWakeTimers.delete(zone);
+        bossAwokeZones.push(zone);
       }
     }
 
     // Cleanup empty dungeons (no players = remove enemies, projectiles, bags, portals)
     this.cleanupEmptyDungeons(state);
+
+    return bossAwokeZones;
   }
 
   private cleanupEmptyDungeons(state: GameState): void {

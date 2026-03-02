@@ -107,6 +107,7 @@ export class GameRoom extends Room<GameState> {
   private shootingSystem = new ShootingPatternSystem();
   private dungeonSystem = new DungeonSystem();
   private tickCount = 0;
+  private filterFlip = false;
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
@@ -690,9 +691,6 @@ export class GameRoom extends Room<GameState> {
                 const c = this.clients.find((cl) => cl.sessionId === p.id);
                 if (c) {
                   c.send(ServerMessage.SwitchDestroyed, { remaining });
-                  if (remaining <= 0) {
-                    c.send(ServerMessage.BossAwakened, {});
-                  }
                 }
               }
             });
@@ -770,8 +768,16 @@ export class GameRoom extends Room<GameState> {
     // 5. Run spawn system
     this.spawnSystem.update(deltaTime, this.state);
 
-    // 5b. Run dungeon system (portal despawn, cleanup)
-    this.dungeonSystem.update(deltaTime, this.state);
+    // 5b. Run dungeon system (portal despawn, cleanup, boss wake timer)
+    const bossAwokeZones = this.dungeonSystem.update(deltaTime, this.state);
+    for (const zone of bossAwokeZones) {
+      this.state.players.forEach((p) => {
+        if (p.zone === zone) {
+          const c = this.clients.find((cl) => cl.sessionId === p.id);
+          if (c) c.send(ServerMessage.BossAwakened, {});
+        }
+      });
+    }
 
     // 6. HP Regeneration
     this.state.players.forEach((player) => {
@@ -852,17 +858,21 @@ export class GameRoom extends Room<GameState> {
     });
 
     // 10. Periodically mark entities dirty for filterChildren
+    // Self-assignment (enemy.x = enemy.x) doesn't mark dirty if the value hasn't changed.
+    // Alternate a sub-pixel nudge so stationary entities (switches, bags) get re-evaluated.
     this.tickCount++;
     if (this.tickCount >= FILTER_REFRESH_INTERVAL) {
       this.tickCount = 0;
+      this.filterFlip = !this.filterFlip;
+      const nudge = this.filterFlip ? 0.001 : -0.001;
       this.state.enemies.forEach((enemy) => {
-        enemy.x = enemy.x;
+        enemy.x += nudge;
       });
       this.state.lootBags.forEach((bag) => {
-        bag.x = bag.x;
+        bag.x += nudge;
       });
       this.state.dungeonPortals.forEach((portal) => {
-        portal.x = portal.x;
+        portal.x += nudge;
       });
     }
   }
