@@ -161,6 +161,8 @@ export class GameRoom extends Room<GameState> {
       if (player.zone === "nexus") {
         const dist = distanceBetween(player.x, player.y, PORTAL_X, PORTAL_Y);
         if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
+          player.invulnerable = true;
+          player.invulnerableSince = Date.now();
           player.zone = "hostile";
           player.x = ARENA_CENTER_X + (Math.random() - 0.5) * 200;
           player.y = ARENA_CENTER_Y + (Math.random() - 0.5) * 200;
@@ -212,6 +214,8 @@ export class GameRoom extends Room<GameState> {
           }
 
           // Teleport player to dungeon start (position from generated map)
+          player.invulnerable = true;
+          player.invulnerableSince = Date.now();
           player.zone = dungeonZone;
           const spawnPos = this.dungeonSystem.getSpawnPosition(dungeonZone);
           if (spawnPos) {
@@ -224,6 +228,8 @@ export class GameRoom extends Room<GameState> {
           handled = true;
         } else if (portal.portalType === PortalType.DungeonExit) {
           // Exit dungeon: return to the zone the player entered from
+          player.invulnerable = true;
+          player.invulnerableSince = Date.now();
           const returnZone = portal.exitReturnZone || "hostile";
           player.zone = returnZone;
           player.x = portal.exitReturnX;
@@ -235,6 +241,13 @@ export class GameRoom extends Room<GameState> {
           handled = true;
         }
       });
+    });
+
+    // Client signals loading screen is done — remove invulnerability
+    this.onMessage(ClientMessage.ZoneReady, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      player.invulnerable = false;
     });
 
     // Listen for item pickup from loot bag
@@ -429,6 +442,8 @@ export class GameRoom extends Room<GameState> {
   }
 
   private teleportPlayerToNexus(player: Player, client: Client): void {
+    player.invulnerable = true;
+    player.invulnerableSince = Date.now();
     player.zone = "nexus";
     player.x = NEXUS_WIDTH / 2 + (Math.random() - 0.5) * 200;
     player.y = NEXUS_HEIGHT / 2 + 200 + (Math.random() - 0.5) * 200;
@@ -752,6 +767,13 @@ export class GameRoom extends Room<GameState> {
       if (!player.alive) return;
       if (player.cachedManaRegen > 0 && player.mana < player.maxMana) {
         player.mana = Math.min(player.maxMana, player.mana + player.cachedManaRegen * (deltaTime / 1000));
+      }
+    });
+
+    // 7b. Clear stale invulnerability (safety net if client never sends ZoneReady)
+    this.state.players.forEach((player) => {
+      if (player.invulnerable && now - player.invulnerableSince > 5000) {
+        player.invulnerable = false;
       }
     });
 

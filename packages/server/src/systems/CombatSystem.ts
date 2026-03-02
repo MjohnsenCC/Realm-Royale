@@ -166,6 +166,7 @@ export class CombatSystem {
         // Enemy projectile → check player collisions in same zone
         state.players.forEach((player) => {
           if (!player.alive) return;
+          if (player.invulnerable) return;
           if (player.zone !== proj.zone) return;
           if (proj.ownerId === player.id) return;
 

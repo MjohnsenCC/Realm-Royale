@@ -7,6 +7,7 @@ import { ProjectileSprite } from "../entities/ProjectileSprite";
 import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
+import { getUIScale } from "../ui/UIScale";
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -85,6 +86,7 @@ export class GameScene extends Phaser.Scene {
     Q: Phaser.Input.Keyboard.Key;
     E: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
+    SHIFT: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -95,6 +97,14 @@ export class GameScene extends Phaser.Scene {
 
   // Zone tracking
   private localZone: string = "nexus";
+  // Cached dungeon stats for in-dungeon shift tooltip
+  private cachedDungeonStats: {
+    portalType: number;
+    modifierIds: number[];
+    modifierTiers: number[];
+    lootRarityBoost: number;
+    lootQuantityBoost: number;
+  } | null = null;
 
   // Dungeon portal sprites
   private dungeonPortalSprites = new Map<
@@ -141,6 +151,12 @@ export class GameScene extends Phaser.Scene {
   private lastKnownLevel: number = 1;
   private isDead: boolean = false;
 
+  // Loading screen state
+  private isLoadingZone: boolean = false;
+  private loadingOverlay: Phaser.GameObjects.Graphics | null = null;
+  private loadingText: Phaser.GameObjects.Text | null = null;
+  private loadingSubText: Phaser.GameObjects.Text | null = null;
+
   constructor() {
     super({ key: "GameScene" });
   }
@@ -175,6 +191,7 @@ export class GameScene extends Phaser.Scene {
         Q: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
         E: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
+        SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
       };
     }
 
@@ -207,13 +224,27 @@ export class GameScene extends Phaser.Scene {
         this.currentDungeonMap = null;
       }
 
-      this.transitionToZone(data.zone);
+      // Show loading screen with zone name (and difficulty for dungeons)
+      const displayInfo = this.getZoneDisplayInfo(data.zone);
+      this.showLoadingScreen(displayInfo.name, displayInfo.color, displayInfo.difficulty, displayInfo.difficultyColor);
 
-      // Re-show local player sprite after respawn
+      // Hide local player sprite during loading
       const localSprite = this.playerSprites.get(this.network.getSessionId());
       if (localSprite) {
-        localSprite.setVisible(true);
+        localSprite.setVisible(false);
       }
+
+      // Delay the visual transition until loading screen ends
+      this.time.delayedCall(2000, () => {
+        this.transitionToZone(data.zone);
+
+        const sprite = this.playerSprites.get(this.network.getSessionId());
+        if (sprite) {
+          sprite.setVisible(true);
+        }
+        this.hideLoadingScreen();
+        this.network.sendZoneReady();
+      });
     });
 
     // "Press E" floating prompt (hidden until near a portal)
@@ -313,6 +344,115 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.rebuildDungeonPortals();
+  }
+
+  private getZoneDisplayInfo(zone: string): { name: string; color: string; difficulty?: string; difficultyColor?: string } {
+    if (isDungeonZone(zone)) {
+      const dungeonType = ZONE_TO_DUNGEON[zone];
+      const visuals = DUNGEON_VISUALS[dungeonType];
+      if (visuals) {
+        const color = dungeonType === 0 ? "#ff4400" : "#8833ee";
+        const difficulty = dungeonType === 0 ? "Hard" : "Extreme";
+        const difficultyColor = dungeonType === 0 ? "#ff8844" : "#ff4444";
+        return { name: visuals.name, color, difficulty, difficultyColor };
+      }
+      return { name: "Dungeon", color: "#ffffff" };
+    }
+    if (zone === "hostile") {
+      return { name: "The Wilds", color: "#e94560" };
+    }
+    return { name: "Nexus", color: "#44aa66" };
+  }
+
+  private loadingDifficultyText: Phaser.GameObjects.Text | null = null;
+
+  private showLoadingScreen(zoneName: string, zoneColor: string, difficulty?: string, difficultyColor?: string): void {
+    this.hideLoadingScreen();
+    this.isLoadingZone = true;
+
+    const { width, height } = this.scale;
+    const S = getUIScale();
+
+    this.loadingOverlay = this.add
+      .graphics()
+      .setScrollFactor(0)
+      .setDepth(200);
+    this.loadingOverlay.fillStyle(0x000000, 1);
+    this.loadingOverlay.fillRect(0, 0, width, height);
+
+    this.loadingText = this.add
+      .text(width / 2, height / 2 - Math.round(20 * S), zoneName, {
+        fontSize: `${Math.round(36 * S)}px`,
+        color: zoneColor,
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(201);
+
+    // Show difficulty for dungeons
+    if (difficulty) {
+      this.loadingDifficultyText = this.add
+        .text(width / 2, height / 2 + Math.round(20 * S), `Difficulty: ${difficulty}`, {
+          fontSize: `${Math.round(14 * S)}px`,
+          color: difficultyColor ?? "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setScrollFactor(0)
+        .setDepth(201);
+    }
+
+    this.loadingSubText = this.add
+      .text(width / 2, height / 2 + Math.round(50 * S), "Entering...", {
+        fontSize: `${Math.round(16 * S)}px`,
+        color: "#888888",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setScrollFactor(0)
+      .setDepth(201);
+
+    const fadeTargets = [this.loadingOverlay, this.loadingText, this.loadingSubText];
+    if (this.loadingDifficultyText) fadeTargets.push(this.loadingDifficultyText as any);
+
+    for (const t of fadeTargets) t.setAlpha(0);
+
+    this.tweens.add({
+      targets: fadeTargets,
+      alpha: 1,
+      duration: 300,
+      ease: "Power2",
+    });
+  }
+
+  private hideLoadingScreen(): void {
+    this.isLoadingZone = false;
+
+    const overlay = this.loadingOverlay;
+    const text = this.loadingText;
+    const subText = this.loadingSubText;
+    const diffText = this.loadingDifficultyText;
+    this.loadingOverlay = null;
+    this.loadingText = null;
+    this.loadingSubText = null;
+    this.loadingDifficultyText = null;
+
+    const targets = [overlay, text, subText, diffText].filter(Boolean);
+    if (targets.length > 0) {
+      this.tweens.add({
+        targets,
+        alpha: 0,
+        duration: 400,
+        ease: "Power2",
+        onComplete: () => {
+          overlay?.destroy();
+          text?.destroy();
+          subText?.destroy();
+          diffText?.destroy();
+        },
+      });
+    }
   }
 
   private clearNexusLabels(): void {
@@ -733,7 +873,7 @@ export class GameScene extends Phaser.Scene {
     let shooting = false;
     let useAbility = false;
 
-    if (!this.isDead) {
+    if (!this.isDead && !this.isLoadingZone) {
       // Read input
       if (this.keys) {
         if (this.keys.A.isDown) mx -= 1;
@@ -1008,6 +1148,7 @@ export class GameScene extends Phaser.Scene {
     this.lastKnownLevel = 1;
     this.hud.hideDeathScreen();
     this.hud.lootBagUI.hide();
+    this.hideLoadingScreen();
   }
 
   // --- Dungeon Portal Methods ---
@@ -1327,13 +1468,35 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
+    const shiftHeld = this.keys?.SHIFT.isDown ?? false;
+
     if (foundPortalType >= 0) {
+      // Cache for in-dungeon use
+      this.cachedDungeonStats = {
+        portalType: foundPortalType,
+        modifierIds: foundModifierIds,
+        modifierTiers: foundModifierTiers,
+        lootRarityBoost: foundRarityBoost,
+        lootQuantityBoost: foundQuantityBoost,
+      };
       this.dungeonTooltip.show(
         foundPortalType,
         foundModifierIds,
         foundModifierTiers,
         foundRarityBoost,
-        foundQuantityBoost
+        foundQuantityBoost,
+        shiftHeld
+      );
+    } else if (shiftHeld && isDungeonZone(this.localZone) && this.cachedDungeonStats) {
+      // Inside dungeon + Shift held: show cached tooltip
+      const c = this.cachedDungeonStats;
+      this.dungeonTooltip.show(
+        c.portalType,
+        c.modifierIds,
+        c.modifierTiers,
+        c.lootRarityBoost,
+        c.lootQuantityBoost,
+        true
       );
     } else {
       this.dungeonTooltip.hide();

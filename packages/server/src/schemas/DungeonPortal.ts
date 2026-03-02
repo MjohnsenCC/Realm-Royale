@@ -10,8 +10,8 @@ export class DungeonPortal extends Schema {
   // Dungeon modifier stats (synced for client tooltip)
   @type(["uint8"]) modifierIds = new ArraySchema<number>();
   @type(["uint8"]) modifierTiers = new ArraySchema<number>();
-  @type("uint8") lootRarityBoost: number = 0;
-  @type("uint8") lootQuantityBoost: number = 0;
+  @type("number") lootRarityBoost: number = 0;
+  @type("number") lootQuantityBoost: number = 0;
 
   // Server-only (not synced)
   createdAt: number = 0;

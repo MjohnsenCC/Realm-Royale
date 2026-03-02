@@ -125,8 +125,8 @@ export function generateDungeonStats(): DungeonStats {
 
   const modifierTiers: number[] = [];
   // Per-tier loot contributions: [tier1, tier2, tier3, tier4, tier5]
-  const quantityPerTier = [2, 5, 10, 15, 40];
-  const rarityPerTier = [1, 2.5, 5, 7.5, 20];
+  const quantityPerTier = [2, 5, 10, 15, 20];
+  const rarityPerTier = [1, 2.5, 5, 7.5, 10];
 
   // Weighted tier roll: higher tiers are slightly rarer
   // Weights: tier1=25, tier2=25, tier3=20, tier4=18, tier5=12
@@ -147,10 +147,7 @@ export function generateDungeonStats(): DungeonStats {
     totalRarity += rarityPerTier[tier - 1];
   }
 
-  const lootQuantityBoost = Math.round(totalQuantity);
-  const lootRarityBoost = Math.round(totalRarity);
-
-  return { modifierIds, modifierTiers, lootRarityBoost, lootQuantityBoost };
+  return { modifierIds, modifierTiers, lootRarityBoost: totalRarity, lootQuantityBoost: totalQuantity };
 }
 
 // --- Display Helpers ---

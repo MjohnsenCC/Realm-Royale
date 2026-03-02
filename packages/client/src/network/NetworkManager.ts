@@ -45,6 +45,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.InteractPortal);
   }
 
+  sendZoneReady(): void {
+    this.room?.send(ClientMessage.ZoneReady);
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }

@@ -73,4 +73,8 @@ export class Player extends Schema {
   dungeonReturnX: number = 0;
   dungeonReturnY: number = 0;
   dungeonReturnZone: string = "";
+
+  // Server-only: invulnerable during zone loading transition
+  invulnerable: boolean = false;
+  invulnerableSince: number = 0;
 }

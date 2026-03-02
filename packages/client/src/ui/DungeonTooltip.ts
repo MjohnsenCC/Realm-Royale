@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import {
   DUNGEON_MODIFIER_DEFS,
+  DungeonModifierId,
   PortalType,
   MINIMAP_HEIGHT,
   getModifierTierValue,
@@ -15,12 +16,15 @@ export class DungeonTooltip {
   private rarityText: Phaser.GameObjects.Text;
   private quantityText: Phaser.GameObjects.Text;
   private dividerGfx: Phaser.GameObjects.Graphics;
+  private difficultyText: Phaser.GameObjects.Text;
   private modifierTexts: Phaser.GameObjects.Text[] = [];
+  private shiftHintText: Phaser.GameObjects.Text;
 
   private S: number;
   private tooltipWidth: number;
   private padding: number;
   private visible: boolean = false;
+  private lastShiftHeld: boolean = false;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -54,10 +58,24 @@ export class DungeonTooltip {
       .setWordWrapWidth(this.tooltipWidth - this.padding * 2);
     this.container.add(this.nameText);
 
+    // Difficulty rating
+    this.difficultyText = scene.add.text(
+      this.padding,
+      this.padding + Math.round(18 * S),
+      "",
+      {
+        fontSize: `${Math.round(10 * S)}px`,
+        color: "#ffffff",
+        fontFamily: "monospace",
+        fontStyle: "bold",
+      }
+    );
+    this.container.add(this.difficultyText);
+
     // Loot rarity boost
     this.rarityText = scene.add.text(
       this.padding,
-      this.padding + Math.round(20 * S),
+      this.padding + Math.round(32 * S),
       "",
       {
         fontSize: statFontSize,
@@ -70,7 +88,7 @@ export class DungeonTooltip {
     // Loot quantity boost
     this.quantityText = scene.add.text(
       this.padding,
-      this.padding + Math.round(34 * S),
+      this.padding + Math.round(46 * S),
       "",
       {
         fontSize: statFontSize,
@@ -89,13 +107,22 @@ export class DungeonTooltip {
       const t = scene.add
         .text(this.padding, 0, "", {
           fontSize: modFontSize,
-          color: "#ff6666",
+          color: "#ffffff",
           fontFamily: "monospace",
         })
         .setWordWrapWidth(this.tooltipWidth - this.padding * 2);
       this.container.add(t);
       this.modifierTexts.push(t);
     }
+
+    // "[SHIFT] for more info" hint
+    this.shiftHintText = scene.add.text(this.padding, 0, "[SHIFT] for more info", {
+      fontSize: `${Math.round(9 * S)}px`,
+      color: "#888888",
+      fontFamily: "monospace",
+      fontStyle: "italic",
+    });
+    this.container.add(this.shiftHintText);
   }
 
   show(
@@ -103,9 +130,12 @@ export class DungeonTooltip {
     modifierIds: number[],
     modifierTiers: number[],
     lootRarityBoost: number,
-    lootQuantityBoost: number
+    lootQuantityBoost: number,
+    shiftHeld: boolean = false
   ): void {
-    if (this.visible) return; // already showing
+    // Allow re-render when shift state changes
+    if (this.visible && shiftHeld === this.lastShiftHeld) return;
+    this.lastShiftHeld = shiftHeld;
 
     const S = this.S;
 
@@ -126,11 +156,24 @@ export class DungeonTooltip {
     this.nameText.setText(dungeonName);
     this.nameText.setColor(nameColor);
 
+    // Difficulty rating
+    let diffLabel = "Unknown";
+    let diffColor = "#ffffff";
+    if (portalType === PortalType.InfernalPitEntrance) {
+      diffLabel = "Hard";
+      diffColor = "#ff8844";
+    } else if (portalType === PortalType.VoidSanctumEntrance) {
+      diffLabel = "Extreme";
+      diffColor = "#ff4444";
+    }
+    this.difficultyText.setText(`Difficulty: ${diffLabel}`);
+    this.difficultyText.setColor(diffColor);
+
     this.rarityText.setText(`Loot Rarity: +${lootRarityBoost}%`);
     this.quantityText.setText(`Loot Quantity: +${lootQuantityBoost}%`);
 
     // Divider line position
-    const dividerY = this.padding + Math.round(50 * S);
+    const dividerY = this.padding + Math.round(62 * S);
     this.dividerGfx.clear();
     this.dividerGfx.lineStyle(1, 0x666666, 0.6);
     this.dividerGfx.lineBetween(
@@ -150,8 +193,12 @@ export class DungeonTooltip {
         if (def) {
           const tier = modifierTiers[i] ?? 1;
           const pct = getModifierTierValue(modId, tier);
-          this.modifierTexts[i].setText(`${def.name} - ${def.description} (${pct}%)`);
-          this.modifierTexts[i].setColor(def.color);
+          const valueStr = modId === DungeonModifierId.EnemyCountUp
+            ? `(+${pct} enemies)`
+            : `(${pct}%)`;
+          const tierStr = shiftHeld ? ` [Tier ${tier}]` : "";
+          this.modifierTexts[i].setText(`${def.name}${tierStr} - ${def.description} ${valueStr}`);
+          this.modifierTexts[i].setColor("#ffffff");
           this.modifierTexts[i].setY(modY);
           this.modifierTexts[i].setVisible(true);
           modY += this.modifierTexts[i].height + modSpacing;
@@ -161,6 +208,15 @@ export class DungeonTooltip {
       } else {
         this.modifierTexts[i].setVisible(false);
       }
+    }
+
+    // "[SHIFT] for more info" hint
+    if (!shiftHeld) {
+      this.shiftHintText.setY(modY + Math.round(2 * S));
+      this.shiftHintText.setVisible(true);
+      modY += this.shiftHintText.height + Math.round(6 * S);
+    } else {
+      this.shiftHintText.setVisible(false);
     }
 
     // Calculate total height

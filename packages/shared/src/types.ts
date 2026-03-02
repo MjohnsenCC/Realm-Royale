@@ -176,5 +176,6 @@ export const ClientMessage = {
   EquipItem: "equipItem",
   UseAbility: "useAbility",
   InteractPortal: "interactPortal",
+  ZoneReady: "zoneReady",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

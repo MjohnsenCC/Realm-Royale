@@ -212,7 +212,7 @@ export class EnemyAI {
     let nearestDist = Infinity;
 
     state.players.forEach((player) => {
-      if (!player.alive || player.zone !== enemy.zone) return;
+      if (!player.alive || player.invulnerable || player.zone !== enemy.zone) return;
       const dist = distanceBetween(enemy.x, enemy.y, player.x, player.y);
       if (dist < range && dist < nearestDist) {
         // In dungeons, check line-of-sight through walls
@@ -268,7 +268,7 @@ export class EnemyAI {
     let near = false;
     state.players.forEach((player) => {
       if (near) return;
-      if (!player.alive || player.zone !== enemy.zone) return;
+      if (!player.alive || player.invulnerable || player.zone !== enemy.zone) return;
       if (distanceBetween(enemy.x, enemy.y, player.x, player.y) < range) {
         near = true;
       }
