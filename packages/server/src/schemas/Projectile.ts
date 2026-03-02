@@ -10,7 +10,6 @@ export class Projectile extends Schema {
   @type("number") speed: number = 0;
   @type("uint8") projType: number = ProjectileType.BowArrow;
 
-  // Server-only
   ownerId: string = "";
   damage: number = 0;
   startX: number = 0;

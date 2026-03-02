@@ -21,10 +21,16 @@ import {
   ClientMessage,
   PlayerInput,
   PortalType,
+  ProjectileType,
+  EntityType,
+  ItemCategory,
+  WeaponSubtype,
   applyMovement,
   getBiomeAtPosition,
   getZoneDimensions,
   isDungeonZone,
+  computePlayerStats,
+  getItemSubtype,
   BIOME_VISUALS,
   DUNGEON_VISUALS,
   ZONE_TO_DUNGEON,
@@ -34,6 +40,7 @@ import {
   generateNexusMap,
   resolveWallCollision,
   DungeonTile,
+  ITEM_DEFS,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 
@@ -145,6 +152,18 @@ export class GameScene extends Phaser.Scene {
   private lastSentAimAngle: number = 0;
   private lastSentShooting: boolean = false;
   private lastSentUseAbility: boolean = false;
+
+  // Client-side predicted projectiles (visual only — server remains authoritative)
+  private predictedProjectiles: Array<{
+    sprite: ProjectileSprite;
+    angle: number;
+    startX: number;
+    startY: number;
+    maxRange: number;
+    createdAt: number;
+  }> = [];
+  private lastLocalShootTime: number = 0;
+  private lastLocalAbilityTime: number = 0;
 
   // Track XP/level changes for visual effects
   private lastKnownXp: number = 0;
@@ -784,15 +803,44 @@ export class GameScene extends Phaser.Scene {
 
     // Projectiles
     state.projectiles.onAdd((proj, id) => {
-      const sprite = new ProjectileSprite(
-        this,
-        proj.x as number,
-        proj.y as number,
-        proj.ownerType as number,
-        proj.angle as number,
-        proj.speed as number,
-        (proj.projType as number) ?? 0
-      );
+      let sprite: ProjectileSprite;
+
+      // Match server projectile to a predicted one by ownerType + angle + projType.
+      // This avoids needing to sync ownerId to all clients.
+      const ANGLE_THRESHOLD = 0.15; // ~8.6 degrees tolerance
+      let matchIdx = -1;
+      if (
+        (proj.ownerType as number) === EntityType.Player &&
+        this.predictedProjectiles.length > 0
+      ) {
+        for (let i = 0; i < this.predictedProjectiles.length; i++) {
+          const p = this.predictedProjectiles[i];
+          const angleDiff = Math.abs(p.angle - (proj.angle as number));
+          if (angleDiff < ANGLE_THRESHOLD) {
+            matchIdx = i;
+            break;
+          }
+        }
+      }
+
+      if (matchIdx >= 0) {
+        // Adopt the predicted projectile as the server-tracked sprite.
+        // This avoids creating a duplicate — the predicted sprite seamlessly
+        // becomes the authoritative one, with no visual pop or double.
+        const predicted = this.predictedProjectiles.splice(matchIdx, 1)[0];
+        sprite = predicted.sprite;
+      } else {
+        sprite = new ProjectileSprite(
+          this,
+          proj.x as number,
+          proj.y as number,
+          proj.ownerType as number,
+          proj.angle as number,
+          proj.speed as number,
+          (proj.projType as number) ?? 0
+        );
+      }
+
       this.projectileSprites.set(id, sprite);
 
       proj.onChange(() => {
@@ -926,6 +974,127 @@ export class GameScene extends Phaser.Scene {
     const localPlayer = state.players.get(sessionId);
     const localSpeed = (localPlayer?.cachedSpeed as number) ?? 200;
 
+    // --- Immediate input send on shooting/ability START ---
+    // When shooting or ability transitions false→true, send input immediately
+    // instead of waiting for the next 50ms tick. Eliminates up to 50ms of delay.
+    const shootingJustStarted = shooting && !this.lastSentShooting;
+    const abilityJustStarted = useAbility && !this.lastSentUseAbility;
+
+    if (shootingJustStarted || abilityJustStarted) {
+      this.inputSequence++;
+      const sendDt = Math.min(this.accumulatedDt, TICK_INTERVAL);
+      this.accumulatedDt = Math.max(0, this.accumulatedDt - sendDt);
+
+      if (localSprite) {
+        this.pendingInputs.push({
+          seq: this.inputSequence,
+          movementX: mx,
+          movementY: my,
+          dt: sendDt,
+        });
+        if (this.pendingInputs.length > 60) {
+          this.pendingInputs = this.pendingInputs.slice(-30);
+        }
+      }
+
+      const input: PlayerInput = {
+        seq: this.inputSequence,
+        movement: { x: mx, y: my },
+        aimAngle,
+        shooting,
+        useAbility,
+        dt: sendDt,
+      };
+      this.network.sendInput(input);
+      this.lastSentMX = mx;
+      this.lastSentMY = my;
+      this.lastSentAimAngle = aimAngle;
+      this.lastSentShooting = shooting;
+      this.lastSentUseAbility = useAbility;
+      // Reset tick timer so the regular throttled loop doesn't double-send
+      this.inputSendTimer = 0;
+    }
+
+    // --- Client-side predicted projectile spawning ---
+    // Spawn visual-only projectiles instantly so shooting/abilities feel responsive.
+    if (localSprite && localPlayer && this.localZone !== "nexus") {
+      const now = performance.now();
+      const equipment = localPlayer.equipment as { length: number; [i: number]: number };
+      const level = (localPlayer.level as number) ?? 1;
+
+      // Predicted weapon projectiles
+      if (shooting) {
+        const weaponId = equipment[ItemCategory.Weapon] ?? -1;
+        if (weaponId >= 0) {
+          const stats = computePlayerStats(level, Array.from({ length: equipment.length }, (_, i) => equipment[i] as number));
+          if (now - this.lastLocalShootTime >= stats.shootCooldown) {
+            this.lastLocalShootTime = now;
+            const weaponDef = ITEM_DEFS[weaponId];
+            const isSword = getItemSubtype(weaponId) === WeaponSubtype.Sword;
+            const projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
+            const spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
+
+            for (let p = 0; p < projectileCount; p++) {
+              let angle = aimAngle;
+              if (projectileCount > 1 && spreadAngle > 0) {
+                const startAngle = aimAngle - spreadAngle / 2;
+                angle = startAngle + (spreadAngle / (projectileCount - 1)) * p;
+              }
+              const projSprite = new ProjectileSprite(
+                this,
+                localSprite.displayX,
+                localSprite.displayY,
+                EntityType.Player,
+                angle,
+                stats.weaponProjSpeed,
+                isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow
+              );
+              this.predictedProjectiles.push({
+                sprite: projSprite,
+                angle,
+                startX: localSprite.displayX,
+                startY: localSprite.displayY,
+                maxRange: stats.weaponRange,
+                createdAt: now,
+              });
+            }
+          }
+        }
+      }
+
+      // Predicted ability projectiles
+      if (useAbility) {
+        const abilityId = equipment[ItemCategory.Ability] ?? -1;
+        if (abilityId >= 0) {
+          const abilityDef = ITEM_DEFS[abilityId];
+          const as = abilityDef?.abilityStats;
+          if (as && now - this.lastLocalAbilityTime >= as.cooldown) {
+            const mana = (localPlayer.mana as number) ?? 0;
+            if (mana >= as.manaCost) {
+              this.lastLocalAbilityTime = now;
+              const projSprite = new ProjectileSprite(
+                this,
+                localSprite.displayX,
+                localSprite.displayY,
+                EntityType.Player,
+                aimAngle,
+                as.projectileSpeed,
+                ProjectileType.QuiverShot
+              );
+              this.predictedProjectiles.push({
+                sprite: projSprite,
+                angle: aimAngle,
+                startX: localSprite.displayX,
+                startY: localSprite.displayY,
+                maxRange: as.range,
+                createdAt: now,
+              });
+            }
+          }
+        }
+      }
+    }
+
     // Client-side prediction — runs EVERY FRAME for smooth visuals
     if (localSprite) {
       this.accumulatedDt += delta;
@@ -1011,12 +1180,27 @@ export class GameScene extends Phaser.Scene {
     this.enemySprites.forEach((sprite) => sprite.update(delta));
     this.projectileSprites.forEach((sprite) => sprite.update(delta));
 
+    // Update and clean up predicted projectiles (range exhaustion + safety timeout)
+    const nowCleanup = performance.now();
+    for (let i = this.predictedProjectiles.length - 1; i >= 0; i--) {
+      const pp = this.predictedProjectiles[i];
+      pp.sprite.update(delta);
+      const dx = pp.sprite.x - pp.startX;
+      const dy = pp.sprite.y - pp.startY;
+      const distSq = dx * dx + dy * dy;
+      if (distSq > pp.maxRange * pp.maxRange || nowCleanup - pp.createdAt > 500) {
+        pp.sprite.destroy();
+        this.predictedProjectiles.splice(i, 1);
+      }
+    }
+
     // Zone-based visibility filtering
     const inNexus = this.localZone === "nexus";
 
     // Enemies, projectiles, bags visible in hostile + dungeon zones (not nexus)
     this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
     this.projectileSprites.forEach((sprite) => sprite.setVisible(!inNexus));
+    for (const pp of this.predictedProjectiles) pp.sprite.setVisible(!inNexus);
     this.bagSprites.forEach((sprite) => sprite.setVisible(!inNexus));
 
     // Dungeon portal sprites: always visible (server filterChildren handles zone filtering)
@@ -1128,6 +1312,10 @@ export class GameScene extends Phaser.Scene {
     this.lastSentAimAngle = 0;
     this.lastSentShooting = false;
     this.lastSentUseAbility = false;
+    for (const pp of this.predictedProjectiles) pp.sprite.destroy();
+    this.predictedProjectiles = [];
+    this.lastLocalShootTime = 0;
+    this.lastLocalAbilityTime = 0;
     this.isDead = false;
     this.lastKnownXp = 0;
     this.lastKnownLevel = 1;
