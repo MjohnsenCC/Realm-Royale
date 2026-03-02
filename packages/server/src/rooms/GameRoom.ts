@@ -257,7 +257,7 @@ export class GameRoom extends Room<GameState> {
       ClientMessage.PickupItem,
       (client, data: { bagId: string; slotIndex: number }) => {
         const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive || player.zone === "nexus") return;
+        if (!player || !player.alive) return;
 
         const bag = this.state.lootBags.get(data.bagId);
         if (!bag) return;
@@ -302,7 +302,7 @@ export class GameRoom extends Room<GameState> {
       ClientMessage.DropItem,
       (client, data: { slotIndex: number }) => {
         const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive || player.zone === "nexus") return;
+        if (!player || !player.alive) return;
 
         const slotIndex = data.slotIndex;
         if (slotIndex < 0 || slotIndex >= INVENTORY_SIZE) return;
@@ -472,7 +472,6 @@ export class GameRoom extends Room<GameState> {
     this.state.players.forEach((player) => {
       if (!player.alive) return;
 
-      const isNexus = player.zone === "nexus";
       const dims = getZoneDimensions(player.zone);
       const zoneW = dims.width;
       const zoneH = dims.height;
@@ -529,8 +528,8 @@ export class GameRoom extends Room<GameState> {
         player.pendingInputs.length = 0;
       }
 
-      // Handle shooting (only outside nexus)
-      if (!isNexus && player.inputShooting) {
+      // Handle shooting
+      if (player.inputShooting) {
         const now = Date.now();
         if (now - player.lastShootTime >= player.cachedShootCooldown) {
           player.lastShootTime = now;
@@ -571,8 +570,8 @@ export class GameRoom extends Room<GameState> {
         }
       }
 
-      // Handle ability (Space key, only outside nexus)
-      if (!isNexus && player.inputUseAbility) {
+      // Handle ability (Space key)
+      if (player.inputUseAbility) {
         const now = Date.now();
         const abilityId = player.equipment[ItemCategory.Ability] ?? -1;
         if (abilityId >= 0) {
@@ -830,7 +829,7 @@ export class GameRoom extends Room<GameState> {
 
     // 9. Bag proximity detection
     this.state.players.forEach((player) => {
-      if (!player.alive || player.zone === "nexus") {
+      if (!player.alive) {
         if (player.openBagId) {
           player.openBagId = "";
           const client = this.clients.find((c) => c.sessionId === player.id);

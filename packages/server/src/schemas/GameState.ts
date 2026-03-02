@@ -35,7 +35,7 @@ export class GameState extends Schema {
     value: Projectile
   ): boolean {
     const player = this.players.get(client.sessionId);
-    if (!player || !player.alive || player.zone === "nexus") return false;
+    if (!player || !player.alive) return false;
     if (player.zone !== value.zone) return false;
     const dx = player.x - value.x;
     const dy = player.y - value.y;
@@ -51,7 +51,7 @@ export class GameState extends Schema {
     value: LootBag
   ): boolean {
     const player = this.players.get(client.sessionId);
-    if (!player || !player.alive || player.zone === "nexus") return false;
+    if (!player || !player.alive) return false;
     if (player.zone !== value.zone) return false;
     const dx = player.x - value.x;
     const dy = player.y - value.y;

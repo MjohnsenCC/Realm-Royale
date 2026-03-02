@@ -13,7 +13,7 @@ export function getUISize(): UISize {
   if (stored === "small" || stored === "medium" || stored === "large") {
     return stored;
   }
-  return "small";
+  return "medium";
 }
 
 export function setUISize(size: UISize): void {

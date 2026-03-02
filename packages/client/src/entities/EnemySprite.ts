@@ -2,6 +2,15 @@ import Phaser from "phaser";
 import { ENEMY_DEFS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
 
+interface DamageText {
+  text: Phaser.GameObjects.Text;
+  elapsed: number;
+  startY: number;
+}
+
+const DAMAGE_TEXT_DURATION = 800;
+const DAMAGE_TEXT_FLOAT = 30;
+
 export class EnemySprite {
   private scene: Phaser.Scene;
   private graphics: Phaser.GameObjects.Graphics;
@@ -11,7 +20,7 @@ export class EnemySprite {
   private snapshots: SnapshotBuffer;
   private enemyType: number;
   private radius: number;
-  private hitFlashTimer: number = 0;
+  private damageTexts: DamageText[] = [];
   private lastHp: number;
 
   public x: number = 0;
@@ -45,7 +54,6 @@ export class EnemySprite {
   }
 
   private getColor(): number {
-    if (this.hitFlashTimer > 0) return 0xffffff;
     const def = ENEMY_DEFS[this.enemyType];
     return def ? def.color : 0xcc3333;
   }
@@ -148,7 +156,17 @@ export class EnemySprite {
     this.snapshots.push(x, y);
 
     if (hp < this.lastHp) {
-      this.hitFlashTimer = 120;
+      const damage = this.lastHp - hp;
+      const startY = -this.radius - 10;
+      const text = this.scene.add.text(this.x, this.y + startY, `-${damage}`, {
+        fontFamily: "monospace",
+        fontSize: "14px",
+        fontStyle: "bold",
+        color: "#ff0000",
+      });
+      text.setOrigin(0.5, 1);
+      text.setDepth(1000);
+      this.damageTexts.push({ text, elapsed: 0, startY });
     }
     this.lastHp = hp;
 
@@ -166,9 +184,21 @@ export class EnemySprite {
     this.hpBarBg.setPosition(this.x, this.y);
     this.hpBarFill.setPosition(this.x, this.y);
 
-    if (this.hitFlashTimer > 0) {
-      this.hitFlashTimer -= delta;
+    for (let i = this.damageTexts.length - 1; i >= 0; i--) {
+      const dt = this.damageTexts[i];
+      dt.elapsed += delta;
+      const progress = Math.min(dt.elapsed / DAMAGE_TEXT_DURATION, 1);
+      dt.text.setPosition(
+        this.x,
+        this.y + dt.startY - DAMAGE_TEXT_FLOAT * progress
+      );
+      dt.text.setAlpha(1 - progress);
+      if (progress >= 1) {
+        dt.text.destroy();
+        this.damageTexts.splice(i, 1);
+      }
     }
+
     this.drawBody();
   }
 
@@ -186,5 +216,7 @@ export class EnemySprite {
     this.graphics.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
+    for (const dt of this.damageTexts) dt.text.destroy();
+    this.damageTexts.length = 0;
   }
 }

@@ -161,6 +161,8 @@ export class GameScene extends Phaser.Scene {
     startY: number;
     maxRange: number;
     createdAt: number;
+    confirmed: boolean;
+    serverProjectileId?: string;
   }> = [];
   private lastLocalShootTime: number = 0;
   private lastLocalAbilityTime: number = 0;
@@ -824,22 +826,25 @@ export class GameScene extends Phaser.Scene {
       }
 
       if (matchIdx >= 0) {
-        // Adopt the predicted projectile as the server-tracked sprite.
-        // This avoids creating a duplicate — the predicted sprite seamlessly
-        // becomes the authoritative one, with no visual pop or double.
-        const predicted = this.predictedProjectiles.splice(matchIdx, 1)[0];
-        sprite = predicted.sprite;
-      } else {
-        sprite = new ProjectileSprite(
-          this,
-          proj.x as number,
-          proj.y as number,
-          proj.ownerType as number,
-          proj.angle as number,
-          proj.speed as number,
-          (proj.projType as number) ?? 0
-        );
+        // Local player's projectile — mark the predicted sprite as confirmed
+        // so it stays alive (no 500ms safety timeout). We skip creating a
+        // server-tracked sprite entirely; the player only sees the smooth,
+        // client-predicted projectile with no server corrections/jitter.
+        this.predictedProjectiles[matchIdx].confirmed = true;
+        this.predictedProjectiles[matchIdx].serverProjectileId = id;
+        return; // nothing to add to projectileSprites
       }
+
+      // Enemy or other-player projectile — render from server state
+      sprite = new ProjectileSprite(
+        this,
+        proj.x as number,
+        proj.y as number,
+        proj.ownerType as number,
+        proj.angle as number,
+        proj.speed as number,
+        (proj.projType as number) ?? 0
+      );
 
       this.projectileSprites.set(id, sprite);
 
@@ -856,6 +861,15 @@ export class GameScene extends Phaser.Scene {
       if (sprite) {
         sprite.destroy();
         this.projectileSprites.delete(id);
+      }
+
+      // Also remove any confirmed predicted projectile linked to this server projectile
+      const ppIdx = this.predictedProjectiles.findIndex(
+        (pp) => pp.serverProjectileId === id
+      );
+      if (ppIdx >= 0) {
+        this.predictedProjectiles[ppIdx].sprite.destroy();
+        this.predictedProjectiles.splice(ppIdx, 1);
       }
     });
 
@@ -954,7 +968,7 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Space key — use ability (hostile + dungeons)
-      if (this.keys.SPACE.isDown && this.localZone !== "nexus") {
+      if (this.keys.SPACE.isDown) {
         useAbility = true;
       }
 
@@ -1017,7 +1031,7 @@ export class GameScene extends Phaser.Scene {
 
     // --- Client-side predicted projectile spawning ---
     // Spawn visual-only projectiles instantly so shooting/abilities feel responsive.
-    if (localSprite && localPlayer && this.localZone !== "nexus") {
+    if (localSprite && localPlayer) {
       const now = performance.now();
       const equipment = localPlayer.equipment as { length: number; [i: number]: number };
       const level = (localPlayer.level as number) ?? 1;
@@ -1056,6 +1070,7 @@ export class GameScene extends Phaser.Scene {
                 startY: localSprite.displayY,
                 maxRange: stats.weaponRange,
                 createdAt: now,
+                confirmed: false,
               });
             }
           }
@@ -1088,6 +1103,7 @@ export class GameScene extends Phaser.Scene {
                 startY: localSprite.displayY,
                 maxRange: as.range,
                 createdAt: now,
+                confirmed: false,
               });
             }
           }
@@ -1188,7 +1204,10 @@ export class GameScene extends Phaser.Scene {
       const dx = pp.sprite.x - pp.startX;
       const dy = pp.sprite.y - pp.startY;
       const distSq = dx * dx + dy * dy;
-      if (distSq > pp.maxRange * pp.maxRange || nowCleanup - pp.createdAt > 500) {
+      const expired = pp.confirmed
+        ? distSq > pp.maxRange * pp.maxRange
+        : distSq > pp.maxRange * pp.maxRange || nowCleanup - pp.createdAt > 500;
+      if (expired) {
         pp.sprite.destroy();
         this.predictedProjectiles.splice(i, 1);
       }
@@ -1197,11 +1216,11 @@ export class GameScene extends Phaser.Scene {
     // Zone-based visibility filtering
     const inNexus = this.localZone === "nexus";
 
-    // Enemies, projectiles, bags visible in hostile + dungeon zones (not nexus)
+    // Enemies only visible outside nexus; projectiles and bags visible everywhere
     this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
-    this.projectileSprites.forEach((sprite) => sprite.setVisible(!inNexus));
-    for (const pp of this.predictedProjectiles) pp.sprite.setVisible(!inNexus);
-    this.bagSprites.forEach((sprite) => sprite.setVisible(!inNexus));
+    this.projectileSprites.forEach((sprite) => sprite.setVisible(true));
+    for (const pp of this.predictedProjectiles) pp.sprite.setVisible(true);
+    this.bagSprites.forEach((sprite) => sprite.setVisible(true));
 
     // Dungeon portal sprites: always visible (server filterChildren handles zone filtering)
     this.dungeonPortalSprites.forEach((ps) => {
