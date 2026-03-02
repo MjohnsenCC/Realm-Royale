@@ -138,6 +138,7 @@ export interface EnemyDefinition {
   xpValue: number;
   shape: EnemyShape;
   color: number;
+  projectileCollisionRadius?: number;
 }
 
 // --- All 15 Enemy Definitions ---

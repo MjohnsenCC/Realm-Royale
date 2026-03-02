@@ -20,6 +20,10 @@ export class Enemy extends Schema {
   spiralAngleOffset: number = 0;
   lastShootTime: number = 0;
 
+  // Dungeon modifier effects (server-only)
+  damageResist: number = 0; // percentage damage reduction (0-100)
+  hpRegenRate: number = 0; // HP per second
+
   // Zone and boss tracking (server-only)
   zone: string = "hostile";
   bossPhase: number = 0; // 0=not boss, 1=phase1, 2=phase2

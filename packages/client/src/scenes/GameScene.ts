@@ -6,6 +6,7 @@ import { SnapshotBuffer } from "../entities/SnapshotBuffer";
 import { ProjectileSprite } from "../entities/ProjectileSprite";
 import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
+import { DungeonTooltip } from "../ui/DungeonTooltip";
 import {
   ARENA_WIDTH,
   ARENA_HEIGHT,
@@ -104,6 +105,9 @@ export class GameScene extends Phaser.Scene {
   // "Press E" proximity prompt
   private pressEText!: Phaser.GameObjects.Text;
 
+  // Dungeon tooltip (shows stats when near a portal)
+  private dungeonTooltip!: DungeonTooltip;
+
   // Q key cooldown to prevent spam
   private returnToNexusCooldown: number = 0;
 
@@ -179,6 +183,9 @@ export class GameScene extends Phaser.Scene {
 
     // Create HUD
     this.hud = new HUD(this);
+
+    // Create dungeon tooltip (shows portal stats above minimap)
+    this.dungeonTooltip = new DungeonTooltip(this);
 
     // Listen to state changes
     const state = room.state as unknown as DecodedState;
@@ -914,6 +921,9 @@ export class GameScene extends Phaser.Scene {
     // Update "Press E" proximity prompt
     this.updatePressEPrompt(localSprite);
 
+    // Update dungeon tooltip (shows stats when near a dungeon entrance portal)
+    this.updateDungeonTooltip(localSprite);
+
     // Update HUD
     if (localPlayer) {
       const currentXp = localPlayer.xp as number;
@@ -983,6 +993,7 @@ export class GameScene extends Phaser.Scene {
     this.clearNexusLabels();
     this.clearDungeonPortalSprites();
     this.pressEText?.destroy();
+    this.dungeonTooltip?.hide();
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.inputSendTimer = 0;
@@ -1253,6 +1264,79 @@ export class GameScene extends Phaser.Scene {
       this.pressEText.setVisible(true);
     } else {
       this.pressEText.setVisible(false);
+    }
+  }
+
+  private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {
+    if (!localSprite || this.isDead) {
+      this.dungeonTooltip.hide();
+      return;
+    }
+
+    const px = localSprite.x;
+    const py = localSprite.y;
+
+    // Check proximity to dungeon entrance portals only
+    let foundPortalType = -1;
+    let foundModifierIds: number[] = [];
+    let foundModifierTiers: number[] = [];
+    let foundRarityBoost = 0;
+    let foundQuantityBoost = 0;
+
+    this.dungeonPortalSprites.forEach((ps, id) => {
+      if (foundPortalType >= 0) return;
+      // Only show tooltip for entrance portals, not exit portals
+      if (
+        ps.portalType !== PortalType.InfernalPitEntrance &&
+        ps.portalType !== PortalType.VoidSanctumEntrance
+      ) {
+        return;
+      }
+
+      const dx = px - ps.x;
+      const dy = py - ps.y;
+      if (
+        dx * dx + dy * dy <
+        DUNGEON_PORTAL_INTERACT_RADIUS * DUNGEON_PORTAL_INTERACT_RADIUS
+      ) {
+        // Read synced data from the portal schema
+        const portalSchema = this.decodedState.dungeonPortals.get(id);
+        if (portalSchema) {
+          const modIds: number[] = [];
+          const modArray = portalSchema.modifierIds as unknown as {
+            forEach(cb: (v: unknown) => void): void;
+          };
+          if (modArray && typeof modArray.forEach === "function") {
+            modArray.forEach((v: unknown) => modIds.push(v as number));
+          }
+
+          const modTiers: number[] = [];
+          const tierArray = portalSchema.modifierTiers as unknown as {
+            forEach(cb: (v: unknown) => void): void;
+          };
+          if (tierArray && typeof tierArray.forEach === "function") {
+            tierArray.forEach((v: unknown) => modTiers.push(v as number));
+          }
+
+          foundPortalType = ps.portalType;
+          foundModifierIds = modIds;
+          foundModifierTiers = modTiers;
+          foundRarityBoost = (portalSchema.lootRarityBoost as number) ?? 0;
+          foundQuantityBoost = (portalSchema.lootQuantityBoost as number) ?? 0;
+        }
+      }
+    });
+
+    if (foundPortalType >= 0) {
+      this.dungeonTooltip.show(
+        foundPortalType,
+        foundModifierIds,
+        foundModifierTiers,
+        foundRarityBoost,
+        foundQuantityBoost
+      );
+    } else {
+      this.dungeonTooltip.hide();
     }
   }
 }

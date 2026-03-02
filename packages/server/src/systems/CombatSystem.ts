@@ -98,7 +98,10 @@ export class CombatSystem {
           const def = ENEMY_DEFS[enemy.enemyType];
           const enemyRadius = def ? def.radius : 14;
           if (circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, enemyRadius)) {
-            enemy.hp -= proj.damage;
+            const effectiveDamage = enemy.damageResist > 0
+              ? Math.round(proj.damage * (1 - enemy.damageResist / 100))
+              : proj.damage;
+            enemy.hp -= effectiveDamage;
 
             if (proj.piercing) {
               proj.hitEnemies.add(enemy.id);

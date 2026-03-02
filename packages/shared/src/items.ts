@@ -456,7 +456,17 @@ export function rollBossLoot(_dungeonType: number): {
   bagRarity: number;
   items: number[];
 } {
-  const isBlack = Math.random() < 0.3;
+  return rollBossLootWithRarity(_dungeonType, 0.3);
+}
+
+/**
+ * Roll boss loot with a custom black bag chance (for dungeon rarity boosts).
+ */
+export function rollBossLootWithRarity(
+  _dungeonType: number,
+  blackBagChance: number
+): { bagRarity: number; items: number[] } {
+  const isBlack = Math.random() < blackBagChance;
   const bagRarity = isBlack ? BagRarity.Black : BagRarity.Red;
 
   if (bagRarity === BagRarity.Black) {

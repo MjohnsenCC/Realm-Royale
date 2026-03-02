@@ -2,6 +2,7 @@ import { GameState } from "../schemas/GameState";
 import { Enemy } from "../schemas/Enemy";
 import { DungeonPortal } from "../schemas/DungeonPortal";
 import { generateId } from "../utils/idGenerator";
+import { ArraySchema } from "@colyseus/schema";
 import {
   DungeonType,
   EnemyType,
@@ -18,13 +19,23 @@ import {
   TILE_SIZE,
   generateDungeonMap,
   isTileWalkable,
+  generateDungeonStats,
+  DungeonModifierId,
+  getModifierTierValue,
+  isDungeonZone,
 } from "@rotmg-lite/shared";
-import type { DungeonMapData, DungeonRoom } from "@rotmg-lite/shared";
+import type {
+  DungeonMapData,
+  DungeonRoom,
+  DungeonStats,
+  EnemyDefinition,
+} from "@rotmg-lite/shared";
 
 export class DungeonSystem {
   // Active dungeon seeds and cached maps per zone
   private activeDungeonSeeds = new Map<string, number>();
   private activeDungeonMaps = new Map<string, DungeonMapData>();
+  private activeDungeonStats = new Map<string, DungeonStats>();
 
   /**
    * Get the dungeon map for an active dungeon zone.
@@ -38,6 +49,13 @@ export class DungeonSystem {
    */
   getDungeonSeed(zone: string): number | undefined {
     return this.activeDungeonSeeds.get(zone);
+  }
+
+  /**
+   * Get the active dungeon stats for a zone.
+   */
+  getDungeonStats(zone: string): DungeonStats | undefined {
+    return this.activeDungeonStats.get(zone);
   }
 
   /**
@@ -75,6 +93,13 @@ export class DungeonSystem {
     portal.createdAt = Date.now();
     portal.dungeonType = dungeonType;
 
+    // Generate random dungeon modifiers
+    const stats = generateDungeonStats();
+    portal.modifierIds = new ArraySchema<number>(...stats.modifierIds);
+    portal.lootRarityBoost = stats.lootRarityBoost;
+    portal.lootQuantityBoost = stats.lootQuantityBoost;
+    portal.modifierTiers = new ArraySchema<number>(...stats.modifierTiers);
+
     state.dungeonPortals.set(portal.id, portal);
     return true;
   }
@@ -82,9 +107,18 @@ export class DungeonSystem {
   /**
    * Create a dungeon instance: generate map, place enemies in rooms, place boss.
    */
-  createDungeonInstance(dungeonType: number, state: GameState): void {
+  createDungeonInstance(
+    dungeonType: number,
+    state: GameState,
+    stats?: DungeonStats
+  ): void {
     const zone = DUNGEON_TO_ZONE[dungeonType];
     if (!zone) return;
+
+    // Store dungeon stats for this zone
+    if (stats) {
+      this.activeDungeonStats.set(zone, stats);
+    }
 
     // Clear any existing enemies in this dungeon zone
     const toRemove: string[] = [];
@@ -113,6 +147,19 @@ export class DungeonSystem {
     this.activeDungeonSeeds.set(zone, seed);
     this.activeDungeonMaps.set(zone, mapData);
 
+    // Determine extra enemy count from EnemyCountUp modifier
+    let extraEnemiesPerRoom = 0;
+    if (stats) {
+      for (let i = 0; i < stats.modifierIds.length; i++) {
+        if (stats.modifierIds[i] === DungeonModifierId.EnemyCountUp) {
+          extraEnemiesPerRoom = getModifierTierValue(
+            DungeonModifierId.EnemyCountUp,
+            stats.modifierTiers[i]
+          );
+        }
+      }
+    }
+
     // Place enemies in rooms using room-based config
     const roomEnemies = DUNGEON_ROOM_ENEMIES[dungeonType];
     if (roomEnemies) {
@@ -127,6 +174,15 @@ export class DungeonSystem {
         for (const enemyType of config.enemies) {
           const pos = this.randomPositionInRoom(room, mapData);
           this.spawnDungeonEnemy(enemyType, pos.x, pos.y, zone, state);
+        }
+
+        // Spawn extra enemies from Swarming modifier (skip spawn room and boss room)
+        if (extraEnemiesPerRoom > 0 && config.enemies.length > 0 && room.type !== "spawn" && room.type !== "boss") {
+          for (let e = 0; e < extraEnemiesPerRoom; e++) {
+            const randomType = config.enemies[Math.floor(Math.random() * config.enemies.length)];
+            const pos = this.randomPositionInRoom(room, mapData);
+            this.spawnDungeonEnemy(randomType, pos.x, pos.y, zone, state);
+          }
         }
       }
     }
@@ -147,12 +203,77 @@ export class DungeonSystem {
   }
 
   /**
-   * Get the spawn position for a dungeon zone (center of spawn room).
+   * Get spawn position for a dungeon zone (center of spawn room).
    */
   getSpawnPosition(zone: string): { x: number; y: number } | undefined {
     const mapData = this.activeDungeonMaps.get(zone);
     if (!mapData) return undefined;
     return { x: mapData.spawnRoom.centerX, y: mapData.spawnRoom.centerY };
+  }
+
+  /**
+   * Get effective enemy def with dungeon modifier buffs applied.
+   * Used by EnemyAI at runtime for speed/damage/fire rate/aggro/proj speed.
+   */
+  getModifiedEnemyDef(
+    baseDef: EnemyDefinition,
+    zone: string
+  ): EnemyDefinition {
+    const stats = this.activeDungeonStats.get(zone);
+    if (!stats) return baseDef;
+
+    let speed = baseDef.speed;
+    let shootCooldown = baseDef.shootCooldown;
+    let projectileDamage = baseDef.projectileDamage;
+    let projectileSpeed = baseDef.projectileSpeed;
+    let aggroRange = baseDef.aggroRange;
+    let projectileCollisionRadius = baseDef.projectileCollisionRadius;
+
+    for (let i = 0; i < stats.modifierIds.length; i++) {
+      const modId = stats.modifierIds[i];
+      const tier = stats.modifierTiers[i];
+      const value = getModifierTierValue(modId, tier);
+
+      switch (modId) {
+        case DungeonModifierId.EnemyDamageUp:
+          projectileDamage = Math.round(
+            projectileDamage * (1 + value / 100)
+          );
+          break;
+        case DungeonModifierId.EnemySpeedUp:
+          speed = Math.round(speed * (1 + value / 100));
+          break;
+        case DungeonModifierId.EnemyFireRateUp:
+          shootCooldown = Math.max(
+            100,
+            Math.round(shootCooldown * (1 - value / 100))
+          );
+          break;
+        case DungeonModifierId.EnemyAggroUp:
+          aggroRange = Math.round(aggroRange * (1 + value / 100));
+          break;
+        case DungeonModifierId.EnemyProjSpeedUp:
+          projectileSpeed = Math.round(
+            projectileSpeed * (1 + value / 100)
+          );
+          break;
+        case DungeonModifierId.EnemyProjSizeUp:
+          projectileCollisionRadius = Math.round(
+            5 * (1 + value / 100)
+          );
+          break;
+      }
+    }
+
+    return {
+      ...baseDef,
+      speed,
+      shootCooldown,
+      projectileDamage,
+      projectileSpeed,
+      aggroRange,
+      projectileCollisionRadius,
+    };
   }
 
   private randomPositionInRoom(
@@ -193,13 +314,38 @@ export class DungeonSystem {
     enemy.y = y;
     enemy.spawnX = x;
     enemy.spawnY = y;
-    enemy.hp = def ? def.hp : 100;
-    enemy.maxHp = def ? def.hp : 100;
     enemy.enemyType = enemyType;
     enemy.aiState = EnemyAIState.Idle;
     enemy.idleTargetX = x + (Math.random() - 0.5) * 60;
     enemy.idleTargetY = y + (Math.random() - 0.5) * 60;
     enemy.zone = zone;
+
+    // Base HP from definition
+    let hp = def ? def.hp : 100;
+
+    // Apply spawn-time modifiers
+    const stats = this.activeDungeonStats.get(zone);
+    if (stats) {
+      for (let i = 0; i < stats.modifierIds.length; i++) {
+        const modId = stats.modifierIds[i];
+        const value = getModifierTierValue(modId, stats.modifierTiers[i]);
+
+        switch (modId) {
+          case DungeonModifierId.EnemyHpUp:
+            hp = Math.round(hp * (1 + value / 100));
+            break;
+          case DungeonModifierId.EnemyDamageResist:
+            enemy.damageResist = value;
+            break;
+          case DungeonModifierId.EnemyRegenUp:
+            enemy.hpRegenRate = value;
+            break;
+        }
+      }
+    }
+
+    enemy.hp = hp;
+    enemy.maxHp = hp;
 
     state.enemies.set(enemy.id, enemy);
     return enemy;
@@ -283,9 +429,10 @@ export class DungeonSystem {
     for (const zone of dungeonZones) {
       if (occupiedZones.has(zone)) continue;
 
-      // Clear seed and cached map for this zone
+      // Clear seed, cached map, and stats for this zone
       this.activeDungeonSeeds.delete(zone);
       this.activeDungeonMaps.delete(zone);
+      this.activeDungeonStats.delete(zone);
 
       const enemiesToRemove: string[] = [];
       state.enemies.forEach((enemy, id) => {

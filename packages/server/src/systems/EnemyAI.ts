@@ -14,6 +14,7 @@ import {
   resolveWallCollision,
   isTileWalkable,
   hasLineOfSight,
+  isDungeonZone,
 } from "@rotmg-lite/shared";
 import type { EnemyDefinition, DungeonMapData } from "@rotmg-lite/shared";
 
@@ -24,7 +25,8 @@ export class EnemyAI {
     deltaTime: number,
     state: GameState,
     shootingSystem: ShootingPatternSystem,
-    dungeonMaps?: Map<string, DungeonMapData>
+    dungeonMaps?: Map<string, DungeonMapData>,
+    getModifiedDef?: (baseDef: EnemyDefinition, zone: string) => EnemyDefinition
   ): void {
     const dt = deltaTime / 1000;
 
@@ -32,8 +34,13 @@ export class EnemyAI {
       // Performance: skip AI for enemies far from all players
       if (!this.isNearAnyPlayer(enemy, state, AI_UPDATE_RANGE)) return;
 
-      const def = ENEMY_DEFS[enemy.enemyType];
+      let def = ENEMY_DEFS[enemy.enemyType];
       if (!def) return;
+
+      // Apply dungeon modifier overrides to enemy definition
+      if (getModifiedDef && isDungeonZone(enemy.zone)) {
+        def = getModifiedDef(def, enemy.zone);
+      }
 
       const mapData = dungeonMaps?.get(enemy.zone);
 
@@ -55,6 +62,11 @@ export class EnemyAI {
         case EnemyAIState.Returning:
           this.updateReturning(enemy, def, dt, state, mapData);
           break;
+      }
+
+      // Apply HP regeneration
+      if (enemy.hpRegenRate > 0 && enemy.hp < enemy.maxHp) {
+        enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.hpRegenRate * dt);
       }
     });
   }

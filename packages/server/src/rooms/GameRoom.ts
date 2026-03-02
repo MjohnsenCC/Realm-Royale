@@ -53,12 +53,15 @@ import {
   ITEM_DEFS,
   rollBagDrop,
   rollBagLoot,
-  rollBossLoot,
+  rollBossLootWithRarity,
   isDungeonZone,
   DUNGEON_TO_ZONE,
   ZONE_TO_DUNGEON,
   resolveWallCollision,
+  generateDungeonStats,
+  makeItemId,
 } from "@rotmg-lite/shared";
+import { ArraySchema } from "@colyseus/schema";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
 const FILTER_REFRESH_INTERVAL = 2; // every 2 ticks (100ms at 20Hz)
@@ -198,7 +201,13 @@ export class GameRoom extends Room<GameState> {
           if (!dungeonAlreadyActive) {
             this.dungeonSystem.createDungeonInstance(
               dungeonType,
-              this.state
+              this.state,
+              {
+                modifierIds: Array.from(portal.modifierIds) as number[],
+                modifierTiers: Array.from(portal.modifierTiers) as number[],
+                lootRarityBoost: portal.lootRarityBoost,
+                lootQuantityBoost: portal.lootQuantityBoost,
+              }
             );
           }
 
@@ -395,6 +404,11 @@ export class GameRoom extends Room<GameState> {
     infernal.zone = "nexus";
     infernal.createdAt = 0; // never expires (DungeonSystem skips nexus portals)
     infernal.dungeonType = DungeonType.InfernalPit;
+    const infernalStats = generateDungeonStats();
+    infernal.modifierIds = new ArraySchema<number>(...infernalStats.modifierIds);
+    infernal.lootRarityBoost = infernalStats.lootRarityBoost;
+    infernal.lootQuantityBoost = infernalStats.lootQuantityBoost;
+    infernal.modifierTiers = new ArraySchema<number>(...infernalStats.modifierTiers);
     this.state.dungeonPortals.set(infernal.id, infernal);
 
     // Void Sanctum test portal (right side of bottom nexus)
@@ -406,6 +420,11 @@ export class GameRoom extends Room<GameState> {
     voidPortal.zone = "nexus";
     voidPortal.createdAt = 0;
     voidPortal.dungeonType = DungeonType.VoidSanctum;
+    const voidStats = generateDungeonStats();
+    voidPortal.modifierIds = new ArraySchema<number>(...voidStats.modifierIds);
+    voidPortal.lootRarityBoost = voidStats.lootRarityBoost;
+    voidPortal.lootQuantityBoost = voidStats.lootQuantityBoost;
+    voidPortal.modifierTiers = new ArraySchema<number>(...voidStats.modifierTiers);
     this.state.dungeonPortals.set(voidPortal.id, voidPortal);
   }
 
@@ -578,7 +597,13 @@ export class GameRoom extends Room<GameState> {
       const mapData = this.dungeonSystem.getDungeonMap(zone);
       if (mapData) dungeonMaps.set(zone, mapData);
     }
-    this.enemyAI.update(deltaTime, this.state, this.shootingSystem, dungeonMaps);
+    this.enemyAI.update(
+      deltaTime,
+      this.state,
+      this.shootingSystem,
+      dungeonMaps,
+      (baseDef, zone) => this.dungeonSystem.getModifiedEnemyDef(baseDef, zone)
+    );
 
     // 2b. The Architect minion spawning
     const now = Date.now();
@@ -642,7 +667,30 @@ export class GameRoom extends Room<GameState> {
             // Boss killed: guaranteed good loot + exit portal
             const dungeonType = ZONE_TO_DUNGEON[zone];
             if (dungeonType !== undefined) {
-              const bossLoot = rollBossLoot(dungeonType);
+              const dungeonStats = this.dungeonSystem.getDungeonStats(zone);
+
+              // Apply rarity boost: increase black bag chance
+              const baseBlackChance = 0.3;
+              const boostedBlackChance = dungeonStats
+                ? Math.min(0.8, baseBlackChance + dungeonStats.lootRarityBoost * 0.005)
+                : baseBlackChance;
+              const bossLoot = rollBossLootWithRarity(dungeonType, boostedBlackChance);
+
+              // Apply quantity boost: add extra items to non-black bags
+              if (dungeonStats && dungeonStats.lootQuantityBoost > 0 && bossLoot.bagRarity !== BagRarity.Black) {
+                const extraItems = Math.min(4, Math.floor(dungeonStats.lootQuantityBoost / 25));
+                const categories = [ItemCategory.Weapon, ItemCategory.Ability, ItemCategory.Armor, ItemCategory.Ring];
+                for (let i = 0; i < extraItems; i++) {
+                  const category = categories[Math.floor(Math.random() * categories.length)];
+                  const tier = Math.random() < 0.5 ? 5 : 6;
+                  let subtype = 0;
+                  if (category === ItemCategory.Weapon) {
+                    subtype = Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+                  }
+                  bossLoot.items.push(makeItemId(category, subtype, tier));
+                }
+              }
+
               this.spawnLootBag(
                 event.enemyX,
                 event.enemyY,
@@ -650,6 +698,11 @@ export class GameRoom extends Room<GameState> {
                 bossLoot.items,
                 zone
               );
+
+              // Spawn exit portal at boss room center
+              const dungeonMap = this.dungeonSystem.getDungeonMap(zone);
+              const portalX = dungeonMap ? dungeonMap.bossRoom.centerX : event.enemyX;
+              const portalY = dungeonMap ? dungeonMap.bossRoom.centerY : event.enemyY;
 
               // Find return position and zone from any player in this dungeon
               let returnX = ARENA_CENTER_X;
@@ -664,8 +717,8 @@ export class GameRoom extends Room<GameState> {
               });
 
               this.dungeonSystem.spawnExitPortal(
-                event.enemyX,
-                event.enemyY,
+                portalX,
+                portalY,
                 zone,
                 returnX,
                 returnY,
@@ -688,8 +741,9 @@ export class GameRoom extends Room<GameState> {
     // 6. HP Regeneration
     this.state.players.forEach((player) => {
       if (!player.alive) return;
-      if (player.cachedHpRegen > 0 && player.hp < player.maxHp) {
-        player.hp = Math.min(player.maxHp, player.hp + player.cachedHpRegen * (deltaTime / 1000));
+      const regenRate = player.cachedHpRegen;
+      if (regenRate > 0 && player.hp < player.maxHp) {
+        player.hp = Math.min(player.maxHp, player.hp + regenRate * (deltaTime / 1000));
       }
     });
 
