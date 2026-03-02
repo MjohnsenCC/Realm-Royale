@@ -31,6 +31,9 @@ export class EnemyAI {
     const dt = deltaTime / 1000;
 
     state.enemies.forEach((enemy) => {
+      // Switches are stationary, no AI
+      if (enemy.isSwitch) return;
+
       // Performance: skip AI for enemies far from all players
       if (!this.isNearAnyPlayer(enemy, state, AI_UPDATE_RANGE)) return;
 
@@ -44,8 +47,18 @@ export class EnemyAI {
 
       const mapData = dungeonMaps?.get(enemy.zone);
 
-      // Boss phase transitions
-      if (enemy.isBoss && enemy.bossPhase === 1) {
+      // Boss phase transitions for The Architect (3 phases)
+      if (enemy.isBoss && enemy.enemyType === EnemyType.TheArchitect && enemy.bossPhase >= 1) {
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio <= 0.33 && enemy.bossPhase < 3) {
+          enemy.bossPhase = 3;
+        } else if (hpRatio <= 0.66 && enemy.bossPhase < 2) {
+          enemy.bossPhase = 2;
+        }
+      }
+
+      // Boss phase transitions for Molten Wyrm (2 phases, unchanged)
+      if (enemy.isBoss && enemy.enemyType === EnemyType.MoltenWyrm && enemy.bossPhase === 1) {
         const hpRatio = enemy.hp / enemy.maxHp;
         if (hpRatio <= 0.5) {
           enemy.bossPhase = 2;
@@ -61,6 +74,9 @@ export class EnemyAI {
           break;
         case EnemyAIState.Returning:
           this.updateReturning(enemy, def, dt, state, mapData);
+          break;
+        case EnemyAIState.Sleeping:
+          // Boss is dormant, do nothing -- wake handled by DungeonSystem
           break;
       }
 
@@ -305,19 +321,53 @@ export class EnemyAI {
     }
 
     if (enemy.enemyType === EnemyType.TheArchitect) {
+      if (enemy.bossPhase === 0) {
+        // Sleeping -- safety fallback (should not be shooting)
+        return { ...baseDef, shootCooldown: 999999 };
+      }
+
       if (enemy.bossPhase === 1) {
+        // Phase 1 (100%-66%): Alternating Spiral8 + aimed Spread5
+        const useSpiral = Math.floor(enemy.spiralAngleOffset * 3) % 2 === 0;
         return {
           ...baseDef,
-          shootingPattern: ShootingPatternType.Spiral8,
-        };
-      } else {
-        return {
-          ...baseDef,
-          shootCooldown: 650,
-          shootingPattern: ShootingPatternType.BurstRing16,
-          projectileDamage: 30,
+          shootingPattern: useSpiral
+            ? ShootingPatternType.Spiral8
+            : ShootingPatternType.Spread5,
+          shootCooldown: 900,
+          projectileDamage: 22,
+          speed: 30,
         };
       }
+
+      if (enemy.bossPhase === 2) {
+        // Phase 2 (66%-33%): Counter-rotating double spiral + aimed spread
+        const useSpiral = Math.floor(enemy.spiralAngleOffset * 3) % 3 !== 0;
+        return {
+          ...baseDef,
+          shootingPattern: useSpiral
+            ? ShootingPatternType.CounterSpiralDouble
+            : ShootingPatternType.Spread5,
+          shootCooldown: 650,
+          projectileDamage: 28,
+          speed: 40,
+        };
+      }
+
+      // Phase 3 (<33%): Dense multi-speed rings + rotating cross + aimed bursts
+      const patternCycle = Math.floor(enemy.spiralAngleOffset * 2) % 3;
+      let pattern: number;
+      if (patternCycle === 0) pattern = ShootingPatternType.MultiSpeedRing;
+      else if (patternCycle === 1) pattern = ShootingPatternType.RotatingCross;
+      else pattern = ShootingPatternType.Spread5;
+
+      return {
+        ...baseDef,
+        shootingPattern: pattern,
+        shootCooldown: 450,
+        projectileDamage: 35,
+        speed: 50,
+      };
     }
 
     return baseDef;

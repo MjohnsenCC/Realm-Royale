@@ -610,6 +610,25 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     shape: "circle",
     color: 0x9944ff,
   },
+  // Destructible switch (stationary, no AI)
+  [EnemyType.VoidSwitch]: {
+    type: EnemyType.VoidSwitch,
+    biome: DungeonBiomeType.VoidSanctum,
+    name: "Void Switch",
+    hp: 300,
+    speed: 0,
+    radius: 18,
+    aggroRange: 0,
+    leashRange: 0,
+    shootCooldown: 999999,
+    projectileDamage: 0,
+    projectileSpeed: 0,
+    projectileRange: 0,
+    shootingPattern: ShootingPatternType.SingleAimed,
+    xpValue: 25,
+    shape: "hexagon",
+    color: 0x00ccff,
+  },
 };
 
 // Merge dungeon defs into main ENEMY_DEFS for lookup
@@ -724,10 +743,18 @@ export const DUNGEON_ROOM_ENEMIES: Record<number, DungeonRoomEnemyConfig[]> = {
     { enemies: [EnemyType.VoidAcolyte, EnemyType.VoidAcolyte, EnemyType.ShadowWeaver] },
     // Room 2: mid dungeon
     { enemies: [EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte] },
-    // Room 3: pre-boss
+    // Room 3: crossroads (connects to switchA and preBoss)
     { enemies: [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte, EnemyType.VoidAcolyte] },
-    // Room 4: boss room - boss spawned separately
+    // Room 4: switchRoomA (guarded dead-end)
+    { enemies: [EnemyType.ShadowWeaver, EnemyType.VoidAcolyte] },
+    // Room 5: preBoss room (heavy guard)
+    { enemies: [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver] },
+    // Room 6: boss room - boss spawned separately after switches
     { enemies: [] },
+    // Room 7: switchRoomB (guarded dead-end, left of boss)
+    { enemies: [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte] },
+    // Room 8: switchRoomC (guarded dead-end, right of boss)
+    { enemies: [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte] },
   ],
 };
 

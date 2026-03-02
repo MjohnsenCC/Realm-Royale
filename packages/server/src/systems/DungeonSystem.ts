@@ -11,6 +11,7 @@ import {
   BiomeType,
   DUNGEON_BOSS_TYPE,
   DUNGEON_TO_ZONE,
+  ZONE_TO_DUNGEON,
   DUNGEON_PORTAL_LIFETIME,
   INFERNAL_PORTAL_CHANCE,
   VOID_PORTAL_CHANCE,
@@ -36,6 +37,10 @@ export class DungeonSystem {
   private activeDungeonSeeds = new Map<string, number>();
   private activeDungeonMaps = new Map<string, DungeonMapData>();
   private activeDungeonStats = new Map<string, DungeonStats>();
+
+  // Switch mechanic tracking (VoidSanctum)
+  private switchesRemaining = new Map<string, number>();
+  private bossWakeTimers = new Map<string, number>(); // zone -> wake timestamp
 
   /**
    * Get the dungeon map for an active dungeon zone.
@@ -187,18 +192,37 @@ export class DungeonSystem {
       }
     }
 
-    // Place boss in boss room center
-    const bossType = DUNGEON_BOSS_TYPE[dungeonType];
-    if (bossType !== undefined) {
-      const boss = this.spawnDungeonEnemy(
-        bossType,
-        mapData.bossRoom.centerX,
-        mapData.bossRoom.centerY,
-        zone,
-        state
-      );
-      boss.isBoss = true;
-      boss.bossPhase = 1;
+    // Spawn switches in switch rooms (VoidSanctum)
+    if (mapData.switchRooms && mapData.switchRooms.length > 0) {
+      for (const switchRoom of mapData.switchRooms) {
+        const switchEnemy = this.spawnDungeonEnemy(
+          EnemyType.VoidSwitch,
+          switchRoom.centerX,
+          switchRoom.centerY,
+          zone,
+          state
+        );
+        switchEnemy.isSwitch = true;
+      }
+      this.switchesRemaining.set(zone, mapData.switchRooms.length);
+    }
+
+    // Place boss: VoidSanctum defers boss until all switches destroyed
+    if (dungeonType === DungeonType.VoidSanctum) {
+      // Boss will be spawned by onSwitchDestroyed when all switches are gone
+    } else {
+      const bossType = DUNGEON_BOSS_TYPE[dungeonType];
+      if (bossType !== undefined) {
+        const boss = this.spawnDungeonEnemy(
+          bossType,
+          mapData.bossRoom.centerX,
+          mapData.bossRoom.centerY,
+          zone,
+          state
+        );
+        boss.isBoss = true;
+        boss.bossPhase = 1;
+      }
     }
   }
 
@@ -394,7 +418,51 @@ export class DungeonSystem {
   }
 
   /**
-   * Update: despawn expired entrance portals, cleanup empty dungeons.
+   * Called when a VoidSwitch is destroyed. Returns remaining count.
+   * Spawns boss when all switches are destroyed.
+   */
+  onSwitchDestroyed(zone: string, state: GameState): number {
+    const remaining = Math.max(0, (this.switchesRemaining.get(zone) ?? 0) - 1);
+    this.switchesRemaining.set(zone, remaining);
+
+    if (remaining <= 0) {
+      this.spawnBossAfterSwitches(zone, state);
+    }
+
+    return remaining;
+  }
+
+  /**
+   * Get remaining switch count for a zone.
+   */
+  getSwitchesRemaining(zone: string): number {
+    return this.switchesRemaining.get(zone) ?? 0;
+  }
+
+  private spawnBossAfterSwitches(zone: string, state: GameState): void {
+    const mapData = this.activeDungeonMaps.get(zone);
+    if (!mapData) return;
+
+    const dungeonType = ZONE_TO_DUNGEON[zone];
+    if (dungeonType === undefined) return;
+
+    const bossType = DUNGEON_BOSS_TYPE[dungeonType];
+    if (bossType === undefined) return;
+
+    const boss = this.spawnDungeonEnemy(
+      bossType,
+      mapData.bossRoom.centerX,
+      mapData.bossRoom.centerY,
+      zone,
+      state
+    );
+    boss.isBoss = true;
+    boss.bossPhase = 0; // Sleeping
+    boss.aiState = EnemyAIState.Sleeping;
+  }
+
+  /**
+   * Update: despawn expired entrance portals, cleanup empty dungeons, boss wake timer.
    */
   update(_deltaTime: number, state: GameState): void {
     const now = Date.now();
@@ -415,6 +483,52 @@ export class DungeonSystem {
       state.dungeonPortals.delete(id);
     }
 
+    // Boss wake timer (VoidSanctum)
+    for (const [zone, mapData] of this.activeDungeonMaps) {
+      const dungeonType = ZONE_TO_DUNGEON[zone];
+      if (dungeonType !== DungeonType.VoidSanctum) continue;
+      if ((this.switchesRemaining.get(zone) ?? 0) > 0) continue;
+
+      // Check if there's a sleeping boss in this zone
+      let hasSleepingBoss = false;
+      state.enemies.forEach((enemy) => {
+        if (enemy.zone === zone && enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
+          hasSleepingBoss = true;
+        }
+      });
+      if (!hasSleepingBoss) continue;
+
+      const wakeTime = this.bossWakeTimers.get(zone);
+
+      if (wakeTime === undefined) {
+        // Check if any player is inside the boss room bounds
+        const room = mapData.bossRoom;
+        let playerInBossRoom = false;
+        state.players.forEach((player) => {
+          if (player.zone !== zone || !player.alive) return;
+          const px = player.x / TILE_SIZE;
+          const py = player.y / TILE_SIZE;
+          if (px >= room.x && px <= room.x + room.w &&
+              py >= room.y && py <= room.y + room.h) {
+            playerInBossRoom = true;
+          }
+        });
+
+        if (playerInBossRoom) {
+          this.bossWakeTimers.set(zone, now + 5000);
+        }
+      } else if (now >= wakeTime) {
+        // Wake the boss
+        state.enemies.forEach((enemy) => {
+          if (enemy.zone === zone && enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
+            enemy.aiState = EnemyAIState.Idle;
+            enemy.bossPhase = 1;
+          }
+        });
+        this.bossWakeTimers.delete(zone);
+      }
+    }
+
     // Cleanup empty dungeons (no players = remove enemies, projectiles, bags, portals)
     this.cleanupEmptyDungeons(state);
   }
@@ -429,10 +543,12 @@ export class DungeonSystem {
     for (const zone of dungeonZones) {
       if (occupiedZones.has(zone)) continue;
 
-      // Clear seed, cached map, and stats for this zone
+      // Clear seed, cached map, stats, and switch state for this zone
       this.activeDungeonSeeds.delete(zone);
       this.activeDungeonMaps.delete(zone);
       this.activeDungeonStats.delete(zone);
+      this.switchesRemaining.delete(zone);
+      this.bossWakeTimers.delete(zone);
 
       const enemiesToRemove: string[] = [];
       state.enemies.forEach((enemy, id) => {

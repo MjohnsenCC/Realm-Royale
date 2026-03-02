@@ -26,7 +26,8 @@ export class Enemy extends Schema {
 
   // Zone and boss tracking (server-only)
   zone: string = "hostile";
-  bossPhase: number = 0; // 0=not boss, 1=phase1, 2=phase2
+  bossPhase: number = 0; // 0=sleeping, 1=phase1, 2=phase2, 3=phase3
   isBoss: boolean = false;
+  isSwitch: boolean = false;
   lastMinionSpawnTime: number = 0;
 }

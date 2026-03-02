@@ -80,6 +80,12 @@ export class ShootingPatternSystem {
         return this.spiral(enemy, 8);
       case ShootingPatternType.DoubleSingle:
         return this.doubleSingle(aimAngle);
+      case ShootingPatternType.CounterSpiralDouble:
+        return this.counterSpiralDouble(enemy, 5);
+      case ShootingPatternType.MultiSpeedRing:
+        return this.multiSpeedRing(16);
+      case ShootingPatternType.RotatingCross:
+        return this.rotatingCross(enemy);
       default:
         return this.singleAimed(aimAngle);
     }
@@ -165,5 +171,71 @@ export class ShootingPatternSystem {
         offsetY: 0,
       },
     ];
+  }
+
+  /** Two interleaved spirals rotating in opposite directions (DNA helix). */
+  private counterSpiralDouble(enemy: Enemy, armsPerSpiral: number): ProjectileSpawn[] {
+    const spawns: ProjectileSpawn[] = [];
+    const step = (Math.PI * 2) / armsPerSpiral;
+
+    // Spiral A: rotates clockwise
+    for (let i = 0; i < armsPerSpiral; i++) {
+      spawns.push({
+        angle: enemy.spiralAngleOffset + i * step,
+        speedMultiplier: 1,
+        damageMultiplier: 0.85,
+        offsetX: 0,
+        offsetY: 0,
+      });
+    }
+
+    // Spiral B: rotates counter-clockwise (offset by half step)
+    for (let i = 0; i < armsPerSpiral; i++) {
+      spawns.push({
+        angle: -enemy.spiralAngleOffset + i * step + step / 2,
+        speedMultiplier: 0.9,
+        damageMultiplier: 0.85,
+        offsetX: 0,
+        offsetY: 0,
+      });
+    }
+
+    enemy.spiralAngleOffset += Math.PI / 8;
+    return spawns;
+  }
+
+  /** Ring burst with alternating fast/slow projectiles creating layered waves. */
+  private multiSpeedRing(count: number): ProjectileSpawn[] {
+    const spawns: ProjectileSpawn[] = [];
+    const step = (Math.PI * 2) / count;
+    for (let i = 0; i < count; i++) {
+      spawns.push({
+        angle: i * step,
+        speedMultiplier: i % 2 === 0 ? 1.3 : 0.7,
+        damageMultiplier: 0.75,
+        offsetX: 0,
+        offsetY: 0,
+      });
+    }
+    return spawns;
+  }
+
+  /** 4-armed cross with stacked projectiles at different speeds, rotates each volley. */
+  private rotatingCross(enemy: Enemy): ProjectileSpawn[] {
+    const spawns: ProjectileSpawn[] = [];
+    for (let arm = 0; arm < 4; arm++) {
+      const baseAngle = enemy.spiralAngleOffset + (Math.PI / 2) * arm;
+      for (let p = 0; p < 3; p++) {
+        spawns.push({
+          angle: baseAngle,
+          speedMultiplier: 0.8 + p * 0.3,
+          damageMultiplier: 0.7,
+          offsetX: 0,
+          offsetY: 0,
+        });
+      }
+    }
+    enemy.spiralAngleOffset += Math.PI / 12;
+    return spawns;
   }
 }

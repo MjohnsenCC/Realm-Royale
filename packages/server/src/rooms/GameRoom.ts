@@ -620,7 +620,7 @@ export class GameRoom extends Room<GameState> {
       (baseDef, zone) => this.dungeonSystem.getModifiedEnemyDef(baseDef, zone)
     );
 
-    // 2b. The Architect minion spawning
+    // 2b. The Architect minion spawning (scales across 3 phases)
     const now = Date.now();
     this.state.enemies.forEach((enemy) => {
       if (
@@ -628,7 +628,11 @@ export class GameRoom extends Room<GameState> {
         enemy.isBoss &&
         enemy.aiState === EnemyAIState.Aggro
       ) {
-        const minionCooldown = enemy.bossPhase === 2 ? 2000 : 4000;
+        let minionCooldown: number;
+        if (enemy.bossPhase === 3) minionCooldown = 1500;
+        else if (enemy.bossPhase === 2) minionCooldown = 3000;
+        else if (enemy.bossPhase === 1) minionCooldown = 5000;
+        else minionCooldown = 999999; // Phase 0 (sleeping): no minions
         if (now - enemy.lastMinionSpawnTime >= minionCooldown) {
           enemy.lastMinionSpawnTime = now;
           this.dungeonSystem.spawnVoidMinion(
@@ -677,7 +681,23 @@ export class GameRoom extends Room<GameState> {
             );
           }
         } else if (isDungeonZone(zone)) {
-          // Dungeon kill
+          // Dungeon kill: check for switch destruction
+          if (event.enemyType === EnemyType.VoidSwitch) {
+            const remaining = this.dungeonSystem.onSwitchDestroyed(zone, this.state);
+            // Notify all players in the dungeon
+            this.state.players.forEach((p) => {
+              if (p.zone === zone) {
+                const c = this.clients.find((cl) => cl.sessionId === p.id);
+                if (c) {
+                  c.send(ServerMessage.SwitchDestroyed, { remaining });
+                  if (remaining <= 0) {
+                    c.send(ServerMessage.BossAwakened, {});
+                  }
+                }
+              }
+            });
+          }
+
           if (event.isBoss && event.enemyX !== undefined && event.enemyY !== undefined) {
             // Boss killed: guaranteed good loot + exit portal
             const dungeonType = ZONE_TO_DUNGEON[zone];

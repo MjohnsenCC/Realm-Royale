@@ -319,9 +319,47 @@ export class GameScene extends Phaser.Scene {
       });
     });
 
+    // Listen for switch destruction and boss awakening (Void Sanctum)
+    room.onMessage(ServerMessage.SwitchDestroyed, (data: { remaining: number }) => {
+      if (data.remaining > 0) {
+        this.showDungeonNotification(`Void Switch destroyed! ${data.remaining} remaining...`);
+      } else {
+        this.showDungeonNotification("All switches destroyed! The Architect stirs...");
+      }
+    });
+
+    room.onMessage(ServerMessage.BossAwakened, () => {
+      this.showDungeonNotification("The Architect has awakened!");
+    });
+
     // Handle room leave/error
     room.onLeave(() => {
       this.cleanup();
+    });
+  }
+
+  private showDungeonNotification(message: string): void {
+    const cam = this.cameras.main;
+    const text = this.add
+      .text(cam.width / 2, cam.height * 0.25, message, {
+        fontSize: "18px",
+        color: "#00ccff",
+        fontFamily: "monospace",
+        stroke: "#000000",
+        strokeThickness: 3,
+      })
+      .setOrigin(0.5)
+      .setDepth(100)
+      .setScrollFactor(0);
+
+    // Fade out and destroy after 3 seconds
+    this.tweens.add({
+      targets: text,
+      alpha: 0,
+      y: text.y - 30,
+      duration: 3000,
+      ease: "Power2",
+      onComplete: () => text.destroy(),
     });
   }
 

@@ -41,6 +41,7 @@ export const EnemyType = {
   AbyssalSentry: 21,
   TheArchitect: 22, // Boss
   VoidMinion: 23, // Spawned add
+  VoidSwitch: 24, // Destructible switch in Void Sanctum
 } as const;
 export type EnemyType = (typeof EnemyType)[keyof typeof EnemyType];
 
@@ -57,6 +58,7 @@ export const EnemyAIState = {
   Idle: 0,
   Aggro: 1,
   Returning: 2,
+  Sleeping: 3,
 } as const;
 export type EnemyAIState = (typeof EnemyAIState)[keyof typeof EnemyAIState];
 
@@ -72,6 +74,9 @@ export const ShootingPatternType = {
   Spiral5: 8,
   Spiral8: 9,
   DoubleSingle: 10,
+  CounterSpiralDouble: 11,
+  MultiSpeedRing: 12,
+  RotatingCross: 13,
 } as const;
 export type ShootingPatternType =
   (typeof ShootingPatternType)[keyof typeof ShootingPatternType];
@@ -164,6 +169,8 @@ export const ServerMessage = {
   BagClosed: "bagClosed",
   BagUpdated: "bagUpdated",
   PortalPrompt: "portalPrompt",
+  SwitchDestroyed: "switchDestroyed",
+  BossAwakened: "bossAwakened",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 

@@ -25,6 +25,13 @@ export interface DungeonConfig {
   normalH: [number, number];
   bossW: [number, number];
   bossH: [number, number];
+  // Circular room support (VoidSanctum)
+  circularRooms?: boolean;
+  corridorWidth?: number; // default 2
+  spawnRadius?: [number, number];
+  normalRadius?: [number, number];
+  bossRadius?: [number, number];
+  switchRadius?: [number, number];
 }
 
 export const DUNGEON_CONFIGS: Record<number, DungeonConfig> = {
@@ -39,27 +46,33 @@ export const DUNGEON_CONFIGS: Record<number, DungeonConfig> = {
     bossH: [14, 16],
   },
   [DungeonType.VoidSanctum]: {
-    tilesX: 44,
-    tilesY: 80,
+    tilesX: 64,
+    tilesY: 120,
     spawnW: [12, 14],
-    spawnH: [10, 12],
+    spawnH: [12, 14],
     normalW: [12, 14],
-    normalH: [10, 13],
-    bossW: [20, 24],
-    bossH: [17, 20],
+    normalH: [12, 14],
+    bossW: [22, 26],
+    bossH: [22, 26],
+    circularRooms: true,
+    corridorWidth: 3,
+    spawnRadius: [6, 7],
+    normalRadius: [6, 7],
+    bossRadius: [11, 13],
+    switchRadius: [4, 5],
   },
 };
 
 // --- Interfaces ---
 
 export interface DungeonRoom {
-  x: number; // tile x of room top-left
-  y: number; // tile y of room top-left
-  w: number; // room width in tiles
-  h: number; // room height in tiles
+  x: number; // tile x of room top-left (bounding box)
+  y: number; // tile y of room top-left (bounding box)
+  w: number; // room width in tiles (bounding box)
+  h: number; // room height in tiles (bounding box)
   centerX: number; // pixel center X
   centerY: number; // pixel center Y
-  type: "spawn" | "normal" | "boss";
+  type: "spawn" | "normal" | "boss" | "switch";
 }
 
 export interface DungeonMapData {
@@ -69,6 +82,7 @@ export interface DungeonMapData {
   rooms: DungeonRoom[];
   spawnRoom: DungeonRoom;
   bossRoom: DungeonRoom;
+  switchRooms?: DungeonRoom[];
 }
 
 // --- Seeded PRNG (mulberry32) ---
@@ -86,11 +100,13 @@ function mulberry32(seed: number): () => number {
 // --- Map Generation ---
 
 export function generateDungeonMap(seed: number, dungeonType?: number): DungeonMapData {
-  const config = DUNGEON_CONFIGS[dungeonType ?? DungeonType.InfernalPit] ?? DUNGEON_CONFIGS[DungeonType.InfernalPit];
+  const dType = dungeonType ?? DungeonType.InfernalPit;
+  const config = DUNGEON_CONFIGS[dType] ?? DUNGEON_CONFIGS[DungeonType.InfernalPit];
   const rng = mulberry32(seed);
   const W = config.tilesX;
   const H = config.tilesY;
   const tiles = new Uint8Array(W * H); // all Wall=0
+  const corridorW = config.corridorWidth ?? 2;
 
   const rooms: DungeonRoom[] = [];
 
@@ -107,13 +123,13 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
     return Math.max(1, Math.min(H - 2, ty));
   }
 
-  // Helper: carve a room into the tile grid
+  // Helper: carve a rectangular room into the tile grid
   function carveRoom(
     rx: number,
     ry: number,
     rw: number,
     rh: number,
-    type: "spawn" | "normal" | "boss"
+    type: "spawn" | "normal" | "boss" | "switch"
   ): DungeonRoom {
     // Ensure room fits within grid (1-tile border from edges)
     const x = Math.max(1, Math.min(rx, W - rw - 1));
@@ -138,27 +154,72 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
     };
   }
 
-  // Helper: carve a horizontal line of floor tiles (2 tiles wide)
-  function carveHLine(x1: number, x2: number, y: number): void {
+  // Helper: carve a circular room into the tile grid
+  function carveCircularRoom(
+    cx: number,
+    cy: number,
+    radius: number,
+    type: "spawn" | "normal" | "boss" | "switch"
+  ): DungeonRoom {
+    // Clamp center so circle fits within grid (1-tile border)
+    const clampedCX = Math.max(radius + 1, Math.min(W - radius - 2, cx));
+    const clampedCY = Math.max(radius + 1, Math.min(H - radius - 2, cy));
+    const rSq = radius * radius;
+
+    for (let ty = clampedCY - radius; ty <= clampedCY + radius; ty++) {
+      for (let tx = clampedCX - radius; tx <= clampedCX + radius; tx++) {
+        const dx = tx - clampedCX;
+        const dy = ty - clampedCY;
+        if (dx * dx + dy * dy <= rSq) {
+          if (tx >= 1 && tx < W - 1 && ty >= 1 && ty < H - 1) {
+            tiles[ty * W + tx] = DungeonTile.Floor;
+          }
+        }
+      }
+    }
+
+    // Bounding box for compatibility
+    const bx = clampedCX - radius;
+    const by = clampedCY - radius;
+    const bw = radius * 2;
+    const bh = radius * 2;
+
+    return {
+      x: bx,
+      y: by,
+      w: bw,
+      h: bh,
+      centerX: clampedCX * TILE_SIZE + TILE_SIZE / 2,
+      centerY: clampedCY * TILE_SIZE + TILE_SIZE / 2,
+      type,
+    };
+  }
+
+  // Helper: carve a horizontal line of floor tiles
+  function carveHLine(x1: number, x2: number, y: number, width: number = 2): void {
     const minX = Math.min(x1, x2);
     const maxX = Math.max(x1, x2);
+    const halfW = Math.floor(width / 2);
     for (let x = minX; x <= maxX; x++) {
-      const cx = clampTX(x);
-      const cy = clampTY(y);
-      tiles[cy * W + cx] = DungeonTile.Floor;
-      if (cy + 1 < H - 1) tiles[(cy + 1) * W + cx] = DungeonTile.Floor;
+      for (let dy = -halfW; dy < width - halfW; dy++) {
+        const cx = clampTX(x);
+        const cy = clampTY(y + dy);
+        tiles[cy * W + cx] = DungeonTile.Floor;
+      }
     }
   }
 
-  // Helper: carve a vertical line of floor tiles (2 tiles wide)
-  function carveVLine(x: number, y1: number, y2: number): void {
+  // Helper: carve a vertical line of floor tiles
+  function carveVLine(x: number, y1: number, y2: number, width: number = 2): void {
     const minY = Math.min(y1, y2);
     const maxY = Math.max(y1, y2);
+    const halfW = Math.floor(width / 2);
     for (let y = minY; y <= maxY; y++) {
-      const cx = clampTX(x);
-      const cy = clampTY(y);
-      tiles[cy * W + cx] = DungeonTile.Floor;
-      if (cx + 1 < W - 1) tiles[cy * W + (cx + 1)] = DungeonTile.Floor;
+      for (let dx = -halfW; dx < width - halfW; dx++) {
+        const cx = clampTX(x + dx);
+        const cy = clampTY(y);
+        tiles[cy * W + cx] = DungeonTile.Floor;
+      }
     }
   }
 
@@ -171,15 +232,97 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
 
     // Randomly choose horizontal-first or vertical-first
     if (rng() > 0.5) {
-      carveHLine(fromCX, toCX, fromCY);
-      carveVLine(toCX, fromCY, toCY);
+      carveHLine(fromCX, toCX, fromCY, corridorW);
+      carveVLine(toCX, fromCY, toCY, corridorW);
     } else {
-      carveVLine(fromCX, fromCY, toCY);
-      carveHLine(fromCX, toCX, toCY);
+      carveVLine(fromCX, fromCY, toCY, corridorW);
+      carveHLine(fromCX, toCX, toCY, corridorW);
     }
   }
 
-  // --- Place rooms ---
+  // --- Void Sanctum: branching layout with circular rooms ---
+  if (dType === DungeonType.VoidSanctum) {
+    const spawnR = randInt(config.spawnRadius![0], config.spawnRadius![1]);
+    const normalR = config.normalRadius!;
+    const bossR = randInt(config.bossRadius![0], config.bossRadius![1]);
+    const switchR = config.switchRadius!;
+
+    // Room 0: Spawn room (bottom center)
+    const spawnCX = Math.floor(W / 2) + randInt(-2, 2);
+    const spawnCY = H - spawnR - 3;
+    const spawnRoom = carveCircularRoom(spawnCX, spawnCY, spawnR, "spawn");
+    rooms.push(spawnRoom);
+
+    // Room 1: offset to one side
+    const r1R = randInt(normalR[0], normalR[1]);
+    const r1Left = rng() > 0.5;
+    const r1CX = r1Left ? randInt(r1R + 3, Math.floor(W / 3)) : randInt(Math.floor(W * 2 / 3), W - r1R - 3);
+    const r1CY = spawnCY - spawnR - r1R - randInt(1, 2);
+    const room1 = carveCircularRoom(r1CX, r1CY, r1R, "normal");
+    rooms.push(room1);
+    carveCorridor(spawnRoom, room1);
+
+    // Room 2: offset to the other side
+    const r2R = randInt(normalR[0], normalR[1]);
+    const r2CX = r1Left ? randInt(Math.floor(W * 2 / 3), W - r2R - 3) : randInt(r2R + 3, Math.floor(W / 3));
+    const r2CY = r1CY - r1R - r2R - randInt(1, 2);
+    const room2 = carveCircularRoom(r2CX, r2CY, r2R, "normal");
+    rooms.push(room2);
+    carveCorridor(room1, room2);
+
+    // Room 3: center-ish (crossroads - connects to switchA and preBoss)
+    const r3R = randInt(normalR[0], normalR[1]);
+    const r3CX = Math.floor(W / 2) + randInt(-3, 3);
+    const r3CY = r2CY - r2R - r3R - randInt(1, 2);
+    const room3 = carveCircularRoom(r3CX, r3CY, r3R, "normal");
+    rooms.push(room3);
+    carveCorridor(room2, room3);
+
+    // Room 4: switchRoomA (dead-end branch from room3, off to one side)
+    const sAR = randInt(switchR[0], switchR[1]);
+    const sALeft = r1Left; // branch same direction as room1 for variety
+    const sACX = sALeft ? randInt(sAR + 3, Math.floor(W / 4)) : randInt(Math.floor(W * 3 / 4), W - sAR - 3);
+    const sACY = r3CY + randInt(-2, 2); // roughly same Y level
+    const switchRoomA = carveCircularRoom(sACX, sACY, sAR, "switch");
+    rooms.push(switchRoomA);
+    carveCorridor(room3, switchRoomA);
+
+    // Room 5: preBoss room (above room3, center)
+    const pbR = randInt(normalR[0], normalR[1]);
+    const pbCX = Math.floor(W / 2) + randInt(-2, 2);
+    const pbCY = r3CY - r3R - pbR - randInt(1, 2);
+    const preBossRoom = carveCircularRoom(pbCX, pbCY, pbR, "normal");
+    rooms.push(preBossRoom);
+    carveCorridor(room3, preBossRoom);
+
+    // Room 6: Boss room (large, above preBoss, center)
+    const bossCX = Math.floor(W / 2);
+    const bossCY = Math.max(bossR + 3, pbCY - pbR - bossR - randInt(1, 2));
+    const bossRoom = carveCircularRoom(bossCX, bossCY, bossR, "boss");
+    rooms.push(bossRoom);
+    carveCorridor(preBossRoom, bossRoom);
+
+    // Room 7: switchRoomB (dead-end branch left from boss)
+    const sBR = randInt(switchR[0], switchR[1]);
+    const sBCX = randInt(sBR + 3, Math.floor(W / 4));
+    const sBCY = bossCY + randInt(-2, 2);
+    const switchRoomB = carveCircularRoom(sBCX, sBCY, sBR, "switch");
+    rooms.push(switchRoomB);
+    carveCorridor(bossRoom, switchRoomB);
+
+    // Room 8: switchRoomC (dead-end branch right from boss)
+    const sCR = randInt(switchR[0], switchR[1]);
+    const sCCX = randInt(Math.floor(W * 3 / 4), W - sCR - 3);
+    const sCCY = bossCY + randInt(-2, 2);
+    const switchRoomC = carveCircularRoom(sCCX, sCCY, sCR, "switch");
+    rooms.push(switchRoomC);
+    carveCorridor(bossRoom, switchRoomC);
+
+    const switchRooms = [switchRoomA, switchRoomB, switchRoomC];
+    return { tiles, width: W, height: H, rooms, spawnRoom, bossRoom, switchRooms };
+  }
+
+  // --- Default layout (InfernalPit): 5 linear rooms ---
 
   // Spawn room (bottom area)
   const spawnW = randInt(config.spawnW[0], config.spawnW[1]);
