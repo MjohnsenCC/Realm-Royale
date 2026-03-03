@@ -68,6 +68,12 @@ export interface RingStats {
   projSpeedBonus?: number;
 }
 
+export interface ConsumableStats {
+  maxStack: number;
+  healAmount?: number;
+  manaAmount?: number;
+}
+
 export interface ItemDefinition {
   id: number;
   name: string;
@@ -81,6 +87,7 @@ export interface ItemDefinition {
   abilityStats?: AbilityStats;
   armorStats?: ArmorStats;
   ringStats?: RingStats;
+  consumableStats?: ConsumableStats;
 }
 
 // --- Tier colors ---
@@ -329,6 +336,26 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "The void amplifies power but offers no shelter.",
     ringStats: { speedBonus: 30, damageBonus: 25, hpRegenBonus: 0, maxHpBonus: 0, maxManaBonus: 0, projSpeedBonus: 100 },
   },
+
+  // ===== CONSUMABLES (category=4) =====
+  [makeItemId(4, 0, 1)]: {
+    id: 401, name: "Health Potion", category: 4, subtype: 0, tier: 1,
+    color: 0xcc3333, tierColor: TIER_COLORS[1],
+    description: "Restores 100 HP. Press F to use.",
+    consumableStats: { maxStack: 6, healAmount: 100 },
+  },
+  [makeItemId(4, 1, 1)]: {
+    id: 411, name: "Mana Potion", category: 4, subtype: 1, tier: 1,
+    color: 0x4466cc, tierColor: TIER_COLORS[1],
+    description: "Restores 100 Mana. Press G to use.",
+    consumableStats: { maxStack: 6, manaAmount: 100 },
+  },
+  [makeItemId(4, 2, 1)]: {
+    id: 421, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
+    color: 0xaa44ff, tierColor: TIER_COLORS[1],
+    description: "Teleport anywhere on the map. Right-click minimap to target.",
+    consumableStats: { maxStack: 20 },
+  },
 };
 
 // --- Category display names ---
@@ -338,10 +365,19 @@ const CATEGORY_NAMES: Record<number, string> = {
   [ItemCategory.Ability]: "Ability",
   [ItemCategory.Armor]: "Armor",
   [ItemCategory.Ring]: "Ring",
+  [ItemCategory.Consumable]: "Consumable",
 };
 
 export function getCategoryName(category: number): string {
   return CATEGORY_NAMES[category] ?? "Unknown";
+}
+
+export function isConsumableItem(itemId: number): boolean {
+  return getItemCategory(itemId) === ItemCategory.Consumable;
+}
+
+export function getConsumableSlotIndex(itemId: number): number {
+  return getItemSubtype(itemId);
 }
 
 // --- Drop chance per difficulty zone ---
@@ -455,6 +491,14 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
     }
 
     items.push(makeItemId(category, subtype, tier));
+  }
+
+  // Consumable drops (Lowlands and above)
+  if (biome >= DifficultyZone.Lowlands && Math.random() < 0.4) {
+    const roll = Math.random();
+    if (roll < 0.4) items.push(makeItemId(4, 0, 1)); // Health Pot
+    else if (roll < 0.8) items.push(makeItemId(4, 1, 1)); // Mana Pot
+    else items.push(makeItemId(4, 2, 1)); // Portal Gem
   }
 
   return items;

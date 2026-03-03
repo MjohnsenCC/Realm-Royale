@@ -103,6 +103,8 @@ export class GameScene extends Phaser.Scene {
     D: Phaser.Input.Keyboard.Key;
     Q: Phaser.Input.Keyboard.Key;
     E: Phaser.Input.Keyboard.Key;
+    F: Phaser.Input.Keyboard.Key;
+    G: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
     SHIFT: Phaser.Input.Keyboard.Key;
   };
@@ -141,6 +143,12 @@ export class GameScene extends Phaser.Scene {
 
   // E key (portal interact) cooldown
   private portalInteractCooldown: number = 0;
+
+  // F key (health pot) cooldown
+  private healthPotCooldown: number = 0;
+
+  // G key (mana pot) cooldown
+  private manaPotCooldown: number = 0;
 
   // Dungeon map data (for rendering and client-side prediction)
   private dungeonSeed: number = 0;
@@ -259,6 +267,8 @@ export class GameScene extends Phaser.Scene {
         D: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.D),
         Q: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.Q),
         E: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.E),
+        F: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.F),
+        G: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
         SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
       };
@@ -269,6 +279,11 @@ export class GameScene extends Phaser.Scene {
 
     // Create HUD
     this.hud = new HUD(this);
+
+    // Portal gem: right-click minimap → teleport
+    this.hud.setPortalGemCallback((worldX: number, worldY: number) => {
+      this.network.sendUsePortalGem(worldX, worldY);
+    });
 
     // Create dungeon tooltip (shows portal stats above minimap)
     this.dungeonTooltip = new DungeonTooltip(this);
@@ -1583,6 +1598,24 @@ export class GameScene extends Phaser.Scene {
           this.network.sendInteractPortal();
           this.portalInteractCooldown = 500;
         }
+
+        // F key — use health potion
+        if (this.healthPotCooldown > 0) {
+          this.healthPotCooldown -= delta;
+        }
+        if (this.keys.F.isDown && this.healthPotCooldown <= 0) {
+          this.network.sendUseHealthPot();
+          this.healthPotCooldown = 500;
+        }
+
+        // G key — use mana potion
+        if (this.manaPotCooldown > 0) {
+          this.manaPotCooldown -= delta;
+        }
+        if (this.keys.G.isDown && this.manaPotCooldown <= 0) {
+          this.network.sendUseManaPot();
+          this.manaPotCooldown = 500;
+        }
       }
 
       // Calculate aim angle
@@ -1952,7 +1985,10 @@ export class GameScene extends Phaser.Scene {
         localSprite?.displayY ?? 0,
         this.playerSprites,
         this.enemySprites,
-        this.localZone
+        this.localZone,
+        (localPlayer.healthPots as number) ?? 0,
+        (localPlayer.manaPots as number) ?? 0,
+        (localPlayer.portalGems as number) ?? 0
       );
 
       // XP gain floating text
@@ -1971,12 +2007,15 @@ export class GameScene extends Phaser.Scene {
 
       // Update inventory UI from synced player inventory
       const inv = localPlayer.inventory as unknown as { length: number; [index: number]: number };
+      const invCounts = localPlayer.inventoryCounts as unknown as { length: number; [index: number]: number };
       if (inv && typeof inv.length === "number") {
         const items: number[] = [];
+        const counts: number[] = [];
         for (let i = 0; i < inv.length; i++) {
           items.push(inv[i]);
+          counts.push(invCounts?.[i] ?? 0);
         }
-        this.hud.inventoryUI.updateInventory(items);
+        this.hud.inventoryUI.updateInventory(items, counts);
       }
 
       // Update equipment UI from synced player equipment

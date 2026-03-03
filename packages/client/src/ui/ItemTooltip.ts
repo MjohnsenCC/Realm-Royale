@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { ITEM_DEFS, getCategoryName } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
+import { getSlotBorderColor } from "./ItemIcons";
 
 const BASE_TOOLTIP_WIDTH = 160;
 const BASE_TOOLTIP_PADDING = 8;
@@ -90,10 +91,9 @@ export class ItemTooltip {
     const S = this.S;
     const statsStartY = this.tooltipPadding + Math.round(32 * S);
 
-    // Name (colored by tier)
+    // Name (white for all items)
     this.nameText.setText(def.name);
-    const tierHex = "#" + def.tierColor.toString(16).padStart(6, "0");
-    this.nameText.setColor(tierHex);
+    this.nameText.setColor("#ffffff");
 
     // Tier + category
     const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
@@ -132,6 +132,14 @@ export class ItemTooltip {
       if (r.maxHpBonus) statsLines.push(`+${r.maxHpBonus} Max HP`);
       if (r.maxManaBonus) statsLines.push(`+${r.maxManaBonus} Max Mana`);
       if (r.projSpeedBonus) statsLines.push(`+${r.projSpeedBonus} Proj Speed`);
+    } else if (def.consumableStats) {
+      if (def.consumableStats.healAmount) {
+        statsLines.push(`Heals: ${def.consumableStats.healAmount} HP`);
+      }
+      if (def.consumableStats.manaAmount) {
+        statsLines.push(`Restores: ${def.consumableStats.manaAmount} Mana`);
+      }
+      statsLines.push(`Max Stack: ${def.consumableStats.maxStack}`);
     }
     this.statsText.setText(statsLines.join("\n"));
     this.statsText.setY(statsStartY);
@@ -148,7 +156,7 @@ export class ItemTooltip {
     this.bg.clear();
     this.bg.fillStyle(0x111122, 0.95);
     this.bg.fillRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
-    this.bg.lineStyle(1, def.tierColor, 0.8);
+    this.bg.lineStyle(1, getSlotBorderColor(def.tier), 0.8);
     this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
 
     // Position: above the cursor, centered horizontally

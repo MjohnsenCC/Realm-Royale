@@ -5,9 +5,11 @@ import {
   ITEM_DEFS,
   ClientMessage,
   getCategoryName,
+  isConsumableItem,
 } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
+import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
@@ -30,11 +32,15 @@ export class InventoryUI {
   private slotZones: Phaser.GameObjects.Zone[] = [];
   private room: any = null;
   private currentInventory: number[] = new Array(INVENTORY_SIZE).fill(-1);
+  private currentCounts: number[] = new Array(INVENTORY_SIZE).fill(0);
+
+  private tierTexts: Phaser.GameObjects.Text[] = [];
 
   // Equipment
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
+  private eqTierTexts: Phaser.GameObjects.Text[] = [];
   private currentEquipment: number[] = new Array(EQUIPMENT_SLOTS).fill(-1);
 
   // Tooltip
@@ -66,6 +72,7 @@ export class InventoryUI {
     this.invY = config.invY;
 
     const slotFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
 
     // --- Equipment slot graphics ---
     this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
@@ -111,6 +118,17 @@ export class InventoryUI {
         .setDepth(102)
         .setWordWrapWidth(this.slotSize - 4);
       this.eqItemTexts.push(text);
+
+      const tierText = scene.add
+        .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
+          fontSize: tierFontSize,
+          color: "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(1, 1)
+        .setScrollFactor(0)
+        .setDepth(102);
+      this.eqTierTexts.push(tierText);
     }
 
     // --- Inventory slot graphics ---
@@ -167,6 +185,17 @@ export class InventoryUI {
         .setDepth(102)
         .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
+
+      const tierText = scene.add
+        .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
+          fontSize: tierFontSize,
+          color: "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(1, 1)
+        .setScrollFactor(0)
+        .setDepth(102);
+      this.tierTexts.push(tierText);
     }
 
     this.drawSlots();
@@ -193,12 +222,14 @@ export class InventoryUI {
     return this.slotGap;
   }
 
-  updateInventory(inventory: number[]): void {
+  updateInventory(inventory: number[], counts?: number[]): void {
     let changed = false;
     for (let i = 0; i < INVENTORY_SIZE; i++) {
       const val = i < inventory.length ? inventory[i] : -1;
-      if (this.currentInventory[i] !== val) {
+      const cnt = counts && i < counts.length ? counts[i] : 0;
+      if (this.currentInventory[i] !== val || this.currentCounts[i] !== cnt) {
         this.currentInventory[i] = val;
+        this.currentCounts[i] = cnt;
         changed = true;
       }
     }
@@ -234,25 +265,41 @@ export class InventoryUI {
       const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
 
       if (def) {
-        this.slotGraphics.fillStyle(def.color, 0.4);
+        this.slotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const borderColor = def ? def.tierColor : 0x333344;
+      const borderColor = def ? getSlotBorderColor(def.tier) : 0x333344;
       this.slotGraphics.lineStyle(1, borderColor, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
+      // Draw item icon shape instead of text name
+      this.itemTexts[i].setText("");
       if (def) {
-        const shortName =
-          def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
-        this.itemTexts[i].setText(shortName);
-        this.itemTexts[i].setColor("#ffffff");
+        const iconSize = this.slotSize * 0.55;
+        drawItemIcon(
+          this.slotGraphics,
+          sx + this.slotSize / 2,
+          sy + this.slotSize / 2 - this.slotSize * 0.05,
+          iconSize,
+          def.category,
+          def.subtype,
+          def.color
+        );
+        // Tier or stack count label at bottom-right
+        if (isConsumableItem(itemType) && this.currentCounts[i] > 0) {
+          this.tierTexts[i].setText(`x${this.currentCounts[i]}`);
+        } else {
+          const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+          this.tierTexts[i].setText(tierLabel);
+        }
       } else {
-        this.itemTexts[i].setText("");
+        this.tierTexts[i].setText("");
       }
 
+      this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
@@ -269,26 +316,39 @@ export class InventoryUI {
       const def = itemId >= 0 ? ITEM_DEFS[itemId] : null;
 
       if (def) {
-        this.eqSlotGraphics.fillStyle(def.color, 0.4);
+        this.eqSlotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.eqSlotGraphics.fillStyle(0x222233, 0.6);
       }
       this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const borderColor = def ? def.tierColor : 0x444455;
+      const borderColor = def ? getSlotBorderColor(def.tier) : 0x444455;
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
       if (def) {
-        const shortName =
-          def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
-        this.eqItemTexts[i].setText(shortName);
-        this.eqItemTexts[i].setColor("#ffffff");
+        // Draw icon shape instead of text name
+        this.eqItemTexts[i].setText("");
+        const iconSize = this.slotSize * 0.55;
+        drawItemIcon(
+          this.eqSlotGraphics,
+          sx + this.slotSize / 2,
+          sy + this.slotSize / 2 - this.slotSize * 0.05,
+          iconSize,
+          def.category,
+          def.subtype,
+          def.color
+        );
+        // Tier label at bottom-right
+        const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+        this.eqTierTexts[i].setText(tierLabel);
       } else {
         this.eqItemTexts[i].setText(EQ_SLOT_LABELS[i]);
         this.eqItemTexts[i].setColor("#666666");
+        this.eqTierTexts[i].setText("");
       }
 
+      this.eqTierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.eqItemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.eqSlotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }

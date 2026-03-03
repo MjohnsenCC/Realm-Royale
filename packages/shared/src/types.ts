@@ -205,6 +205,7 @@ export const ItemCategory = {
   Ability: 1,
   Armor: 2,
   Ring: 3,
+  Consumable: 4,
 } as const;
 export type ItemCategory = (typeof ItemCategory)[keyof typeof ItemCategory];
 
@@ -221,6 +222,15 @@ export const AbilitySubtype = {
 } as const;
 export type AbilitySubtype =
   (typeof AbilitySubtype)[keyof typeof AbilitySubtype];
+
+// Consumable subtypes
+export const ConsumableSubtype = {
+  HealthPot: 0,
+  ManaPot: 1,
+  PortalGem: 2,
+} as const;
+export type ConsumableSubtype =
+  (typeof ConsumableSubtype)[keyof typeof ConsumableSubtype];
 
 // Item tier (1-6)
 export const ItemTier = {
@@ -274,5 +284,8 @@ export const ClientMessage = {
   UseAbility: "useAbility",
   InteractPortal: "interactPortal",
   ZoneReady: "zoneReady",
+  UseHealthPot: "useHealthPot",
+  UseManaPot: "useManaPot",
+  UsePortalGem: "usePortalGem",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

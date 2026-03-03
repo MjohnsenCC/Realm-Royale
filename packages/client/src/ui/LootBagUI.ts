@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { BAG_SIZE, BagRarity, ITEM_DEFS, ClientMessage } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
+import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
@@ -34,6 +35,7 @@ export class LootBagUI {
   private panelBg: Phaser.GameObjects.Graphics;
   private slotGraphics: Phaser.GameObjects.Graphics;
   private itemTexts: Phaser.GameObjects.Text[] = [];
+  private tierTexts: Phaser.GameObjects.Text[] = [];
   private slotZones: Phaser.GameObjects.Zone[] = [];
   private headerText: Phaser.GameObjects.Text;
   private room: any = null;
@@ -74,6 +76,7 @@ export class LootBagUI {
 
     const headerFontSize = `${Math.round(12 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
@@ -135,6 +138,17 @@ export class LootBagUI {
         .setDepth(102)
         .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
+
+      const tierText = scene.add
+        .text(0, 0, "", {
+          fontSize: tierFontSize,
+          color: "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(1, 1)
+        .setScrollFactor(0)
+        .setDepth(102);
+      this.tierTexts.push(tierText);
     }
 
     this.setVisible(false);
@@ -195,6 +209,9 @@ export class LootBagUI {
     for (const text of this.itemTexts) {
       text.setVisible(v);
     }
+    for (const text of this.tierTexts) {
+      text.setVisible(v);
+    }
   }
 
   private redraw(): void {
@@ -225,23 +242,35 @@ export class LootBagUI {
       const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
 
       if (def) {
-        this.slotGraphics.fillStyle(def.color, 0.4);
+        this.slotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const slotBorder = def ? def.tierColor : 0x333344;
+      const slotBorder = def ? getSlotBorderColor(def.tier) : 0x333344;
       this.slotGraphics.lineStyle(1, slotBorder, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
+      // Draw item icon shape instead of text name
+      this.itemTexts[i].setText("");
       if (def) {
-        const shortName = def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
-        this.itemTexts[i].setText(shortName);
-        this.itemTexts[i].setColor("#ffffff");
+        const iconSize = this.slotSize * 0.55;
+        drawItemIcon(
+          this.slotGraphics,
+          sx + this.slotSize / 2,
+          sy + this.slotSize / 2 - this.slotSize * 0.05,
+          iconSize,
+          def.category,
+          def.subtype,
+          def.color
+        );
+        const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+        this.tierTexts[i].setText(tierLabel);
       } else {
-        this.itemTexts[i].setText("");
+        this.tierTexts[i].setText("");
       }
+      this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }

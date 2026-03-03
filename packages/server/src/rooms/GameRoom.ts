@@ -70,6 +70,14 @@ import {
   makeItemId,
   generateNexusMap,
   getPackDef,
+  isConsumableItem,
+  getConsumableSlotIndex,
+  CONSUMABLE_MAX_STACKS,
+  HEALTH_POT_HEAL,
+  MANA_POT_RESTORE,
+  HOSTILE_WIDTH,
+  HOSTILE_HEIGHT,
+  PORTAL_GEM_INVULN_MS,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import * as fs from "fs";
@@ -286,17 +294,24 @@ export class GameRoom extends Room<GameState> {
         const bagItem = bag.items[slotIndex];
         if (!bagItem || bagItem.itemType === -1) return;
 
-        let emptySlot = -1;
-        for (let i = 0; i < player.inventory.length; i++) {
-          if (player.inventory[i] === -1) {
-            emptySlot = i;
-            break;
+        // Consumable items go to dedicated slots first, then inventory
+        if (isConsumableItem(bagItem.itemType)) {
+          if (!this.addConsumableToPlayer(player, bagItem.itemType)) return;
+          bagItem.itemType = -1;
+        } else {
+          let emptySlot = -1;
+          for (let i = 0; i < player.inventory.length; i++) {
+            if (player.inventory[i] === -1) {
+              emptySlot = i;
+              break;
+            }
           }
-        }
-        if (emptySlot === -1) return;
+          if (emptySlot === -1) return;
 
-        player.inventory[emptySlot] = bagItem.itemType;
-        bagItem.itemType = -1;
+          player.inventory[emptySlot] = bagItem.itemType;
+          player.inventoryCounts[emptySlot] = 1;
+          bagItem.itemType = -1;
+        }
 
         const allEmpty = bag.items.every((item) => item.itemType === -1);
         if (allEmpty) {
@@ -326,7 +341,19 @@ export class GameRoom extends Room<GameState> {
         const itemType = player.inventory[slotIndex] ?? -1;
         if (itemType === -1) return;
 
-        player.inventory[slotIndex] = -1;
+        // Handle consumable stacks: drop one, keep rest
+        if (isConsumableItem(itemType)) {
+          const count = player.inventoryCounts[slotIndex] || 1;
+          if (count > 1) {
+            player.inventoryCounts[slotIndex] = count - 1;
+          } else {
+            player.inventory[slotIndex] = -1;
+            player.inventoryCounts[slotIndex] = 0;
+          }
+        } else {
+          player.inventory[slotIndex] = -1;
+          player.inventoryCounts[slotIndex] = 0;
+        }
 
         if (player.openBagId) {
           const openBag = this.state.lootBags.get(player.openBagId);
@@ -358,6 +385,23 @@ export class GameRoom extends Room<GameState> {
         const itemId = player.inventory[slot] ?? -1;
         if (itemId === -1) return;
 
+        // Consumable: move from inventory to dedicated slot
+        if (isConsumableItem(itemId)) {
+          const slotIdx = getConsumableSlotIndex(itemId);
+          const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
+          const current = this.getConsumableCount(player, slotIdx);
+          if (current >= maxStack) return;
+          this.setConsumableCount(player, slotIdx, current + 1);
+          const invCount = player.inventoryCounts[slot] || 1;
+          if (invCount > 1) {
+            player.inventoryCounts[slot] = invCount - 1;
+          } else {
+            player.inventory[slot] = -1;
+            player.inventoryCounts[slot] = 0;
+          }
+          return;
+        }
+
         const category = getItemCategory(itemId);
         if (category < 0 || category >= EQUIPMENT_SLOTS) return;
 
@@ -366,6 +410,50 @@ export class GameRoom extends Room<GameState> {
         player.inventory[slot] = currentEquipped;
 
         recalcPlayerStats(player);
+      }
+    );
+
+    // Listen for health potion use (F key)
+    this.onMessage(ClientMessage.UseHealthPot, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (player.healthPots <= 0) return;
+      if (player.hp >= player.maxHp) return;
+      player.healthPots--;
+      player.hp = Math.min(player.maxHp, player.hp + HEALTH_POT_HEAL);
+    });
+
+    // Listen for mana potion use (G key)
+    this.onMessage(ClientMessage.UseManaPot, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (player.manaPots <= 0) return;
+      if (player.mana >= player.maxMana) return;
+      player.manaPots--;
+      player.mana = Math.min(player.maxMana, player.mana + MANA_POT_RESTORE);
+    });
+
+    // Listen for portal gem use (right-click minimap → teleport)
+    this.onMessage(
+      ClientMessage.UsePortalGem,
+      (client, data: { targetX: number; targetY: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+        if (player.zone !== "hostile") return;
+        if (player.portalGems <= 0) return;
+        const { targetX, targetY } = data;
+        if (
+          typeof targetX !== "number" || typeof targetY !== "number" ||
+          targetX < 0 || targetX >= HOSTILE_WIDTH ||
+          targetY < 0 || targetY >= HOSTILE_HEIGHT
+        ) return;
+        player.portalGems--;
+        player.x = targetX;
+        player.y = targetY;
+        player.invulnerable = true;
+        player.invulnerableSince = Date.now();
+        player.invulnerableUntil = Date.now() + PORTAL_GEM_INVULN_MS;
+        this.removePlayerProjectiles(player.id);
       }
     );
 
@@ -398,6 +486,11 @@ export class GameRoom extends Room<GameState> {
     player.equipment[ItemCategory.Ability] = DEFAULT_ABILITY;
     player.equipment[ItemCategory.Armor] = DEFAULT_ARMOR;
     player.equipment[ItemCategory.Ring] = DEFAULT_RING;
+
+    // Starting consumables
+    player.healthPots = 3;
+    player.manaPots = 3;
+    player.portalGems = 5;
 
     recalcPlayerStats(player);
     player.hp = player.maxHp;
@@ -460,6 +553,53 @@ export class GameRoom extends Room<GameState> {
     voidPortal.lootQuantityBoost = voidStats.lootQuantityBoost;
     voidPortal.modifierTiers = new ArraySchema<number>(...voidStats.modifierTiers);
     this.state.dungeonPortals.set(voidPortal.id, voidPortal);
+  }
+
+  private getConsumableCount(player: Player, slotIndex: number): number {
+    if (slotIndex === 0) return player.healthPots;
+    if (slotIndex === 1) return player.manaPots;
+    return player.portalGems;
+  }
+
+  private setConsumableCount(player: Player, slotIndex: number, count: number): void {
+    if (slotIndex === 0) player.healthPots = count;
+    else if (slotIndex === 1) player.manaPots = count;
+    else player.portalGems = count;
+  }
+
+  /** Try to add a consumable to dedicated slot first, then inventory stack, then empty inv slot. */
+  private addConsumableToPlayer(player: Player, itemId: number): boolean {
+    const slotIdx = getConsumableSlotIndex(itemId);
+    const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
+
+    // 1. Try dedicated slot
+    const current = this.getConsumableCount(player, slotIdx);
+    if (current < maxStack) {
+      this.setConsumableCount(player, slotIdx, current + 1);
+      return true;
+    }
+
+    // 2. Try stacking in existing inventory slot with same item
+    for (let i = 0; i < player.inventory.length; i++) {
+      if (player.inventory[i] === itemId) {
+        const count = player.inventoryCounts[i] || 1;
+        if (count < maxStack) {
+          player.inventoryCounts[i] = count + 1;
+          return true;
+        }
+      }
+    }
+
+    // 3. Try empty inventory slot
+    for (let i = 0; i < player.inventory.length; i++) {
+      if (player.inventory[i] === -1) {
+        player.inventory[i] = itemId;
+        player.inventoryCounts[i] = 1;
+        return true;
+      }
+    }
+
+    return false;
   }
 
   private teleportPlayerToNexus(player: Player, client: Client): void {
@@ -918,7 +1058,11 @@ export class GameRoom extends Room<GameState> {
 
     // 7b. Clear stale invulnerability (safety net if client never sends ZoneReady)
     this.state.players.forEach((player) => {
-      if (player.invulnerable && now - player.invulnerableSince > 5000) {
+      if (!player.invulnerable) return;
+      if (player.invulnerableUntil > 0 && now >= player.invulnerableUntil) {
+        player.invulnerable = false;
+        player.invulnerableUntil = 0;
+      } else if (player.invulnerableUntil === 0 && now - player.invulnerableSince > 5000) {
         player.invulnerable = false;
       }
     });

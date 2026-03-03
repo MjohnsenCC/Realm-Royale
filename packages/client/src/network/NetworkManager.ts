@@ -49,6 +49,18 @@ export class NetworkManager {
     this.room?.send(ClientMessage.ZoneReady);
   }
 
+  sendUseHealthPot(): void {
+    this.room?.send(ClientMessage.UseHealthPot);
+  }
+
+  sendUseManaPot(): void {
+    this.room?.send(ClientMessage.UseManaPot);
+  }
+
+  sendUsePortalGem(targetX: number, targetY: number): void {
+    this.room?.send(ClientMessage.UsePortalGem, { targetX, targetY });
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }

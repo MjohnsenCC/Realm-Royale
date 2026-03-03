@@ -111,3 +111,15 @@ export const DUNGEON_PORTAL_INTERACT_RADIUS = 50;
 export const INFERNAL_PORTAL_CHANCE = 0.02; // legacy — no longer used
 export const VOID_PORTAL_CHANCE = 0.015; // legacy — no longer used
 export const DUNGEON_DROP_CHANCE = 0.30; // 30% for specific Godlands enemies
+
+// Consumables
+export const HEALTH_POT_MAX_STACK = 6;
+export const MANA_POT_MAX_STACK = 6;
+export const PORTAL_GEM_MAX_STACK = 20;
+export const HEALTH_POT_HEAL = 100;
+export const MANA_POT_RESTORE = 100;
+export const HEALTH_POT_ID = 401; // category=4, subtype=0, tier=1
+export const MANA_POT_ID = 411; // category=4, subtype=1, tier=1
+export const PORTAL_GEM_ID = 421; // category=4, subtype=2, tier=1
+export const CONSUMABLE_MAX_STACKS = [HEALTH_POT_MAX_STACK, MANA_POT_MAX_STACK, PORTAL_GEM_MAX_STACK];
+export const PORTAL_GEM_INVULN_MS = 2000; // 2s invulnerability after portal gem teleport

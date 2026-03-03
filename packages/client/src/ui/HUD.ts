@@ -70,8 +70,27 @@ export class HUD {
   // Q hint
   private qHintText: Phaser.GameObjects.Text;
 
-  // Placeholder icon buttons
-  private iconBtnGraphics: Phaser.GameObjects.Graphics;
+  // Consumable slots (below equipment)
+  private consumableGraphics: Phaser.GameObjects.Graphics;
+  private consumableCountTexts: Phaser.GameObjects.Text[] = [];
+  private consumableKeyTexts: Phaser.GameObjects.Text[] = [];
+  private consumableSlotPositions: { x: number; y: number }[] = [];
+  private consumableSlotSize: number = 0;
+  private currentConsumables: [number, number, number] = [0, 0, 0];
+
+  // Portal gem targeting
+  private portalGemCallback: ((worldX: number, worldY: number) => void) | null = null;
+  private portalGemTarget: { worldX: number; worldY: number } | null = null;
+  private teleportButton: Phaser.GameObjects.Text | null = null;
+  private teleportMarker: Phaser.GameObjects.Graphics | null = null;
+
+  // Minimap view params (for portal gem coord conversion)
+  private mmScreenX: number = 0;
+  private mmScreenY: number = 0;
+  private mmViewX: number = 0;
+  private mmViewY: number = 0;
+  private mmVisibleW: number = 0;
+  private mmVisibleH: number = 0;
 
   // Minimap
   private minimapBg: Phaser.GameObjects.Graphics;
@@ -217,7 +236,7 @@ export class HUD {
     // --- Q hint (below zone text) ---
     const hintY = 15 + Math.round(23 * S);
     this.qHintText = scene.add
-      .text(screenW / 2, hintY, "Q: Return to Nexus  |  SPACE: Ability  |  E: Use Portal", {
+      .text(screenW / 2, hintY, "Q: Nexus  |  SPACE: Ability  |  E: Portal  |  F: HP Pot  |  G: MP Pot", {
         fontSize: hintFontSize,
         color: "#888888",
         fontFamily: "monospace",
@@ -227,18 +246,47 @@ export class HUD {
       .setDepth(100)
       .setVisible(false);
 
-    // --- Placeholder icon buttons (below equipment slots) ---
-    this.iconBtnGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    // --- Consumable slots (below equipment slots) ---
+    this.consumableGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.consumableSlotSize = iconBtnSize;
     const iconRowW = 3 * iconBtnSize + 2 * iconGap;
     const iconRowX = eqX + Math.round((eqW - iconRowW) / 2);
     const iconRowY = eqY + slotSize + iconGap;
+
+    const keyLabels = ["F", "G", ""];
+    const countFontSm = `${Math.round(8 * S)}px`;
+    const keyFontSm = `${Math.round(7 * S)}px`;
+
     for (let i = 0; i < 3; i++) {
       const ix = iconRowX + i * (iconBtnSize + iconGap);
-      this.iconBtnGraphics.fillStyle(0x333344, 0.7);
-      this.iconBtnGraphics.fillRect(ix, iconRowY, iconBtnSize, iconBtnSize);
-      this.iconBtnGraphics.lineStyle(1, 0x555566, 0.8);
-      this.iconBtnGraphics.strokeRect(ix, iconRowY, iconBtnSize, iconBtnSize);
+      this.consumableSlotPositions.push({ x: ix, y: iconRowY });
+
+      // Count text (bottom-right)
+      const countText = scene.add
+        .text(ix + iconBtnSize - 1, iconRowY + iconBtnSize - 1, "", {
+          fontSize: countFontSm,
+          color: "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(1, 1)
+        .setScrollFactor(0)
+        .setDepth(103);
+      this.consumableCountTexts.push(countText);
+
+      // Key label (top-left)
+      const keyText = scene.add
+        .text(ix + 2, iconRowY + 1, keyLabels[i], {
+          fontSize: keyFontSm,
+          color: "#aaaaaa",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(103);
+      this.consumableKeyTexts.push(keyText);
     }
+
+    this.drawConsumableSlots();
 
     // --- Minimap (top-right) ---
     this.minimapBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
@@ -426,7 +474,10 @@ export class HUD {
     localY: number,
     players: Map<string, PlayerSprite>,
     enemies: Map<string, EnemySprite>,
-    zone: string
+    zone: string,
+    healthPots: number = 0,
+    manaPots: number = 0,
+    portalGems: number = 0
   ): void {
     // Compute hpRegen from equipment
     const equipment = this.inventoryUI.getEquipment();
@@ -466,6 +517,17 @@ export class HUD {
     const mmPad = Math.round(16 * this.S);
     this.playerCountText.setX(this.scene.scale.width - mmPad - this.mmWidth / 2);
 
+    // Update consumable slot display
+    const newConsumables: [number, number, number] = [healthPots, manaPots, portalGems];
+    if (
+      newConsumables[0] !== this.currentConsumables[0] ||
+      newConsumables[1] !== this.currentConsumables[1] ||
+      newConsumables[2] !== this.currentConsumables[2]
+    ) {
+      this.currentConsumables = newConsumables;
+      this.drawConsumableSlots();
+    }
+
     // Draw minimap
     this.drawMinimap(localX, localY, players, enemies, zone);
   }
@@ -474,6 +536,134 @@ export class HUD {
     this.minimapBiomeCached = false;
     this.minimapBiomeCachedZone = "";
     this.minimapBiomeGraphics.clear();
+  }
+
+  private drawConsumableSlots(): void {
+    this.consumableGraphics.clear();
+    const size = this.consumableSlotSize;
+    const colors = [0xcc3333, 0x4466cc, 0xaa44ff];
+
+    for (let i = 0; i < 3; i++) {
+      const pos = this.consumableSlotPositions[i];
+      const count = this.currentConsumables[i];
+
+      // Background
+      this.consumableGraphics.fillStyle(count > 0 ? colors[i] : 0x333344, count > 0 ? 0.3 : 0.5);
+      this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
+
+      // Border
+      this.consumableGraphics.lineStyle(1, count > 0 ? colors[i] : 0x555566, 0.8);
+      this.consumableGraphics.strokeRect(pos.x, pos.y, size, size);
+
+      // Icon
+      if (count > 0) {
+        const cx = pos.x + size / 2;
+        const cy = pos.y + size / 2;
+        this.consumableGraphics.fillStyle(colors[i], 0.9);
+        if (i <= 1) {
+          // Potion bottle
+          const bw = size * 0.35;
+          const bh = size * 0.45;
+          this.consumableGraphics.fillRect(cx - bw / 2, cy - bh / 2 + size * 0.05, bw, bh);
+          this.consumableGraphics.fillRect(cx - bw / 4, cy - bh / 2 - size * 0.1, bw / 2, size * 0.15);
+        } else {
+          // Portal gem: diamond
+          const half = size * 0.3;
+          this.consumableGraphics.beginPath();
+          this.consumableGraphics.moveTo(cx, cy - half);
+          this.consumableGraphics.lineTo(cx + half * 0.7, cy);
+          this.consumableGraphics.lineTo(cx, cy + half);
+          this.consumableGraphics.lineTo(cx - half * 0.7, cy);
+          this.consumableGraphics.closePath();
+          this.consumableGraphics.fillPath();
+        }
+      }
+
+      // Count text
+      this.consumableCountTexts[i].setText(count > 0 ? `${count}` : "");
+    }
+  }
+
+  setPortalGemCallback(cb: (worldX: number, worldY: number) => void): void {
+    this.portalGemCallback = cb;
+
+    this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.rightButtonDown()) return;
+      if (this.currentConsumables[2] <= 0) return;
+
+      // Check if click is within minimap bounds
+      if (
+        pointer.x >= this.mmScreenX &&
+        pointer.x <= this.mmScreenX + this.mmWidth &&
+        pointer.y >= this.mmScreenY &&
+        pointer.y <= this.mmScreenY + this.mmHeight
+      ) {
+        const worldCoords = this.minimapToWorld(pointer.x, pointer.y);
+        if (worldCoords) {
+          this.showTeleportConfirmation(worldCoords.worldX, worldCoords.worldY, pointer.x, pointer.y);
+        }
+      }
+    });
+  }
+
+  private minimapToWorld(screenX: number, screenY: number): { worldX: number; worldY: number } | null {
+    if (this.mmVisibleW <= 0 || this.mmVisibleH <= 0) return null;
+    const relX = (screenX - this.mmScreenX) / this.mmWidth;
+    const relY = (screenY - this.mmScreenY) / this.mmHeight;
+    if (relX < 0 || relX > 1 || relY < 0 || relY > 1) return null;
+    return {
+      worldX: this.mmViewX + relX * this.mmVisibleW,
+      worldY: this.mmViewY + relY * this.mmVisibleH,
+    };
+  }
+
+  private showTeleportConfirmation(worldX: number, worldY: number, screenX: number, screenY: number): void {
+    this.hideTeleportConfirmation();
+    this.portalGemTarget = { worldX, worldY };
+
+    // Marker on minimap
+    this.teleportMarker = this.scene.add.graphics().setScrollFactor(0).setDepth(104);
+    this.teleportMarker.fillStyle(0xaa44ff, 1);
+    this.teleportMarker.fillCircle(screenX, screenY, 4);
+    this.teleportMarker.lineStyle(1, 0xffffff, 0.8);
+    this.teleportMarker.strokeCircle(screenX, screenY, 4);
+
+    // Teleport button below minimap
+    const S = this.S;
+    this.teleportButton = this.scene.add
+      .text(
+        this.mmScreenX + this.mmWidth / 2,
+        this.mmScreenY + this.mmHeight + Math.round(8 * S),
+        "TELEPORT  -1\u25C6",
+        {
+          fontSize: `${Math.round(11 * S)}px`,
+          color: "#aa44ff",
+          fontFamily: "monospace",
+          backgroundColor: "#222233",
+          padding: { x: Math.round(8 * S), y: Math.round(4 * S) },
+        }
+      )
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(104)
+      .setInteractive({ useHandCursor: true });
+
+    this.teleportButton.on("pointerdown", () => {
+      if (this.portalGemTarget && this.portalGemCallback) {
+        this.portalGemCallback(this.portalGemTarget.worldX, this.portalGemTarget.worldY);
+      }
+      this.hideTeleportConfirmation();
+    });
+    this.teleportButton.on("pointerover", () => this.teleportButton?.setColor("#cc66ff"));
+    this.teleportButton.on("pointerout", () => this.teleportButton?.setColor("#aa44ff"));
+  }
+
+  hideTeleportConfirmation(): void {
+    this.teleportButton?.destroy();
+    this.teleportButton = null;
+    this.teleportMarker?.destroy();
+    this.teleportMarker = null;
+    this.portalGemTarget = null;
   }
 
   private drawMinimap(
@@ -500,6 +690,14 @@ export class HUD {
     // Top-right position
     const mmX = this.scene.scale.width - this.mmWidth - Math.round(16 * this.S);
     const mmY = Math.round(16 * this.S);
+
+    // Store for portal gem coord conversion
+    this.mmScreenX = mmX;
+    this.mmScreenY = mmY;
+    this.mmViewX = viewX;
+    this.mmViewY = viewY;
+    this.mmVisibleW = visibleW;
+    this.mmVisibleH = visibleH;
 
     // Background
     this.minimapBg.clear();

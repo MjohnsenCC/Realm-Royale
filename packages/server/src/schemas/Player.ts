@@ -34,6 +34,16 @@ export class Player extends Schema {
   @type("number") maxMana: number = BASE_MAX_MANA;
   @type("number") cachedSpeed: number = PLAYER_SPEED; // synced for client prediction
 
+  // Consumable dedicated slots
+  @type("int8") healthPots: number = 0;
+  @type("int8") manaPots: number = 0;
+  @type("int8") portalGems: number = 0;
+
+  // Inventory stack counts (parallel to inventory array; 1 for non-stackable items)
+  @type(["int8"]) inventoryCounts = new ArraySchema<number>(
+    ...new Array(INVENTORY_SIZE).fill(0)
+  );
+
   // Server-only fields (not synced — no @type decorator)
   lastShootTime: number = 0;
   lastAbilityTime: number = 0;
@@ -74,7 +84,8 @@ export class Player extends Schema {
   dungeonReturnY: number = 0;
   dungeonReturnZone: string = "";
 
-  // Server-only: invulnerable during zone loading transition
+  // Server-only: invulnerable during zone loading transition or portal gem
   invulnerable: boolean = false;
   invulnerableSince: number = 0;
+  invulnerableUntil: number = 0; // explicit end time (0 = use ZoneReady or 5s safety net)
 }
