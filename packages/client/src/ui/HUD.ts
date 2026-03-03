@@ -347,14 +347,44 @@ export class HUD {
     if (!mapData) return false;
 
     const step = 3; // Sample every 3 minimap pixels
+    const tilesPerPxX = mapData.width / this.mmWidth;
+    const tilesPerPxY = mapData.height / this.mmHeight;
+
     for (let mx = 0; mx < this.mmWidth; mx += step) {
       for (let my = 0; my < this.mmHeight; my += step) {
-        const tileX = Math.floor((mx / this.mmWidth) * mapData.width);
-        const tileY = Math.floor((my / this.mmHeight) * mapData.height);
-        const biome = mapData.biomes[tileY * mapData.width + tileX];
-        const visual = REALM_BIOME_VISUALS[biome];
-        if (visual) {
-          this.minimapBiomeGraphics.fillStyle(visual.groundFill, 0.8);
+        // Tile range covered by this minimap sample
+        const tileX0 = Math.floor(mx * tilesPerPxX);
+        const tileY0 = Math.floor(my * tilesPerPxY);
+        const tileX1 = Math.min(mapData.width - 1, Math.floor((mx + step) * tilesPerPxX));
+        const tileY1 = Math.min(mapData.height - 1, Math.floor((my + step) * tilesPerPxY));
+
+        const centerIdx = tileY0 * mapData.width + tileX0;
+        const biome = mapData.biomes[centerIdx];
+
+        // Scan tile region for thin features (roads 2px wide, rivers 1-4px)
+        let hasRoad = false;
+        let hasRiver = false;
+        for (let ty = tileY0; ty <= tileY1; ty++) {
+          for (let tx = tileX0; tx <= tileX1; tx++) {
+            const idx = ty * mapData.width + tx;
+            if (mapData.roads[idx] > 0) { hasRoad = true; break; }
+            if (mapData.rivers[idx] > 0) hasRiver = true;
+          }
+          if (hasRoad) break;
+        }
+
+        let color: number | null = null;
+        if (hasRoad) {
+          color = 0x8a7a5a;
+        } else if (hasRiver && biome !== 0 && biome !== 1 && biome !== 15) {
+          color = 0x2a6a9a;
+        } else {
+          const visual = REALM_BIOME_VISUALS[biome];
+          color = visual ? visual.groundFill : null;
+        }
+
+        if (color !== null) {
+          this.minimapBiomeGraphics.fillStyle(color, 0.8);
           this.minimapBiomeGraphics.fillRect(mmX + mx, mmY + my, step, step);
         }
       }

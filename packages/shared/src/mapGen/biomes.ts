@@ -23,22 +23,18 @@ export function assignBiomes(polygons: Polygon[]): number[] {
 }
 
 export function getBiome(elevation: number, moisture: number): number {
-  // Shallow water / beach zone
-  if (elevation < 0.05) return RealmBiome.Beach;
-  if (elevation < 0.1) {
-    if (moisture > 0.7) return RealmBiome.Marsh;
-    return RealmBiome.Beach;
-  }
+  // Shore zone — always Beach
+  if (elevation < 0.15) return RealmBiome.Beach;
 
-  // Low elevation (0.1 - 0.3)
-  if (elevation < 0.3) {
+  // Low elevation (0.15 - 0.35)
+  if (elevation < 0.35) {
     if (moisture < 0.2) return RealmBiome.Desert;
     if (moisture < 0.4) return RealmBiome.DryPlains;
     if (moisture < 0.7) return RealmBiome.Grassland;
     return RealmBiome.Jungle;
   }
 
-  // Medium elevation (0.3 - 0.55)
+  // Medium elevation (0.35 - 0.55)
   if (elevation < 0.55) {
     if (moisture < 0.2) return RealmBiome.Desert;
     if (moisture < 0.5) return RealmBiome.Grassland;

@@ -103,20 +103,46 @@ export function assignElevation(
 }
 
 /**
- * Redistribute elevation using curve: y = x^1.8
- * This keeps most land at lower elevations (more shore/lowlands, less godlands).
- * Approximate zone distribution: Shore 33%, Lowlands 21%, Midlands 17%,
- * Highlands 14%, Godlands 15%.
+ * Redistribute elevation via piecewise linear mapping from rank to elevation.
+ * Sorted by BFS distance from coast to guarantee strict onion-layer ordering.
+ * Each segment controls exact zone size: [rank range] -> [elevation range].
+ *   Shore    20%  (rank 0.00-0.20 -> elev 0.00-0.15)
+ *   Lowlands 26%  (rank 0.20-0.46 -> elev 0.15-0.35)
+ *   Midlands 21%  (rank 0.46-0.67 -> elev 0.35-0.55)
+ *   Highlands 18% (rank 0.67-0.85 -> elev 0.55-0.75)
+ *   Godlands 15%  (rank 0.85-1.00 -> elev 0.75-1.00)
  */
+const ZONE_SEGMENTS = [
+  { rankEnd: 0.20, elevEnd: 0.15 },
+  { rankEnd: 0.46, elevEnd: 0.35 },
+  { rankEnd: 0.67, elevEnd: 0.55 },
+  { rankEnd: 0.85, elevEnd: 0.75 },
+  { rankEnd: 1.00, elevEnd: 1.00 },
+];
+
 function redistributeElevation(polygons: Polygon[]): void {
   const landPolygons = polygons
     .filter((p) => !p.isWater)
-    .sort((a, b) => a.elevation - b.elevation);
+    .sort(
+      (a, b) =>
+        a.distanceFromCoast - b.distanceFromCoast ||
+        a.elevation - b.elevation
+    );
 
   if (landPolygons.length < 2) return;
 
   for (let i = 0; i < landPolygons.length; i++) {
     const x = i / (landPolygons.length - 1);
-    landPolygons[i].elevation = Math.pow(x, 1.8);
+    let prevRank = 0;
+    let prevElev = 0;
+    for (const seg of ZONE_SEGMENTS) {
+      if (x <= seg.rankEnd) {
+        const t = (x - prevRank) / (seg.rankEnd - prevRank);
+        landPolygons[i].elevation = prevElev + t * (seg.elevEnd - prevElev);
+        break;
+      }
+      prevRank = seg.rankEnd;
+      prevElev = seg.elevEnd;
+    }
   }
 }

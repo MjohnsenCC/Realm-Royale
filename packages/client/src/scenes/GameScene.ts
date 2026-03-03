@@ -651,22 +651,30 @@ export class GameScene extends Phaser.Scene {
     }
 
     const ts = HOSTILE_TILE_SIZE; // 40px per tile (matches TILE_SIZE)
-    const numBiomes = 16;
+    const RIVER_TILE = 16;
+    const ROAD_TILE = 17;
+    const numTiles = 18; // 16 biomes + river + road
 
-    // Generate tileset texture: 16 colored squares in a horizontal strip
-    const tilesetKey = "realm-biome-tileset";
+    // Generate tileset texture: 18 colored squares in a horizontal strip
+    const tilesetKey = "realm-biome-tileset-v2";
     if (!this.textures.exists(tilesetKey)) {
       const canvas = document.createElement("canvas");
-      canvas.width = ts * numBiomes;
+      canvas.width = ts * numTiles;
       canvas.height = ts;
       const ctx = canvas.getContext("2d")!;
-      for (let i = 0; i < numBiomes; i++) {
-        const visual = REALM_BIOME_VISUALS[i];
-        if (visual) {
-          const hex = visual.groundFill.toString(16).padStart(6, "0");
-          ctx.fillStyle = `#${hex}`;
+      for (let i = 0; i < numTiles; i++) {
+        if (i < 16) {
+          const visual = REALM_BIOME_VISUALS[i];
+          if (visual) {
+            const hex = visual.groundFill.toString(16).padStart(6, "0");
+            ctx.fillStyle = `#${hex}`;
+          } else {
+            ctx.fillStyle = "#ff00ff"; // debug magenta
+          }
+        } else if (i === RIVER_TILE) {
+          ctx.fillStyle = "#2a6a9a";
         } else {
-          ctx.fillStyle = "#ff00ff"; // debug magenta
+          ctx.fillStyle = "#8a7a5a";
         }
         ctx.fillRect(i * ts, 0, ts, ts);
 
@@ -678,12 +686,24 @@ export class GameScene extends Phaser.Scene {
       this.textures.addCanvas(tilesetKey, canvas);
     }
 
-    // Convert biome array to 2D tile data array
+    // Convert biome array to 2D tile data array, overlaying rivers and roads
     const tileData: number[][] = [];
     for (let y = 0; y < mapData.height; y++) {
       const row: number[] = [];
       for (let x = 0; x < mapData.width; x++) {
-        row.push(mapData.biomes[y * mapData.width + x]);
+        const idx = y * mapData.width + x;
+        let tile = mapData.biomes[idx];
+
+        // Rivers on land biomes (skip water — already blue)
+        if (mapData.rivers[idx] > 0 && tile !== 0 && tile !== 1 && tile !== 15) {
+          tile = RIVER_TILE;
+        }
+        // Roads take priority over rivers
+        if (mapData.roads[idx] > 0) {
+          tile = ROAD_TILE;
+        }
+
+        row.push(tile);
       }
       tileData.push(row);
     }

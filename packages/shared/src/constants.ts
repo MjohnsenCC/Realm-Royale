@@ -1,12 +1,12 @@
 export const TILE_SIZE = 40; // used by nexus + dungeons
 
 // Hostile zone island map
-export const HOSTILE_TILES = 800; // tile grid dimensions
+export const HOSTILE_TILES = 2048; // tile grid dimensions
 export const HOSTILE_TILE_SIZE = 40; // pixels per tile (matches TILE_SIZE)
-export const HOSTILE_WIDTH = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 32000
-export const HOSTILE_HEIGHT = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 32000
-export const HOSTILE_CENTER_X = HOSTILE_WIDTH / 2; // 16000
-export const HOSTILE_CENTER_Y = HOSTILE_HEIGHT / 2; // 16000
+export const HOSTILE_WIDTH = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 81920
+export const HOSTILE_HEIGHT = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 81920
+export const HOSTILE_CENTER_X = HOSTILE_WIDTH / 2; // 40960
+export const HOSTILE_CENTER_Y = HOSTILE_HEIGHT / 2; // 40960
 
 // Player
 export const PLAYER_SPEED = 200; // pixels per second

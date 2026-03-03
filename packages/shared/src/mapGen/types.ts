@@ -58,9 +58,9 @@ export interface Edge {
 
 export const DEFAULT_CONFIG: MapConfig = {
   seed: 42,
-  mapSize: 800,
+  mapSize: 2048,
   numPoints: 2000,
-  poissonMinDistance: 15,
+  poissonMinDistance: 40,
   islandFalloffRate: 1.2,
   noiseScale: 0.01,
   elevationNoiseFactor: 0.15,
