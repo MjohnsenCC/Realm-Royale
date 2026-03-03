@@ -3,7 +3,6 @@ import {
   DUNGEON_MODIFIER_DEFS,
   DungeonModifierId,
   PortalType,
-  MINIMAP_HEIGHT,
   getModifierTierValue,
 } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
@@ -229,13 +228,9 @@ export class DungeonTooltip {
     this.bg.lineStyle(1, borderColor, 0.8);
     this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 6);
 
-    // Position: above the minimap, right-aligned with minimap's right edge
-    const mmPadding = 16;
-    const mmY =
-      this.scene.scale.height - Math.round(MINIMAP_HEIGHT * S) - mmPadding;
-
-    const tx = this.scene.scale.width - mmPadding - this.tooltipWidth;
-    const ty = mmY - totalHeight - 8;
+    // Position: bottom-right corner of the screen
+    const tx = this.scene.scale.width - this.tooltipWidth - Math.round(16 * S);
+    const ty = this.scene.scale.height - totalHeight - Math.round(16 * S);
 
     this.container.setPosition(tx, ty);
     this.container.setVisible(true);

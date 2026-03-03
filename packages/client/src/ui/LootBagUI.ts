@@ -51,13 +51,15 @@ export class LootBagUI {
   private header: number;
   private panelWidth: number;
   private panelHeight: number;
-  private invPanelWidth: number;
 
-  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invPanelWidth: number) {
+  // Position: above the unified panel, aligned with inventory section
+  private anchorX: number;
+  private anchorY: number;
+
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invSectionX: number, unifiedPanelY: number) {
     this.scene = scene;
     this.tooltip = tooltip;
 
-    // Compute scaled dimensions
     this.S = getUIScale();
     const S = this.S;
     this.slotSize = Math.round(BASE_SLOT_SIZE * S);
@@ -66,18 +68,18 @@ export class LootBagUI {
     this.header = Math.round(BASE_HEADER * S);
     this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
     this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
-    this.invPanelWidth = invPanelWidth;
+
+    this.anchorX = invSectionX - this.padding;
+    this.anchorY = unifiedPanelY - this.panelHeight - Math.round(8 * S);
 
     const headerFontSize = `${Math.round(12 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
-    // Background panel
     this.panelBg = scene.add.graphics();
     this.container.add(this.panelBg);
 
-    // Header
     this.headerText = scene.add
       .text(0, 0, "Loot Bag", {
         fontSize: headerFontSize,
@@ -86,11 +88,9 @@ export class LootBagUI {
       });
     this.container.add(this.headerText);
 
-    // Slot graphics
     this.slotGraphics = scene.add.graphics();
     this.container.add(this.slotGraphics);
 
-    // Create slot zones and texts
     for (let i = 0; i < BAG_SIZE; i++) {
       const zone = scene.add
         .zone(0, 0, this.slotSize, this.slotSize)
@@ -107,9 +107,14 @@ export class LootBagUI {
       zone.on("pointerover", () => {
         const itemId = this.currentItems[i];
         if (itemId >= 0) {
-          const panelX = 16 + this.invPanelWidth + 8;
-          const panelY = this.scene.scale.height - this.panelHeight - 16;
-          this.tooltip.show(itemId, panelX, panelY - Math.round(8 * S));
+          const ptr = this.scene.input.activePointer;
+          this.tooltip.show(itemId, ptr.x, ptr.y);
+        }
+      });
+      zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        const itemId = this.currentItems[i];
+        if (itemId >= 0) {
+          this.tooltip.show(itemId, pointer.x, pointer.y);
         }
       });
       zone.on("pointerout", () => {
@@ -155,7 +160,6 @@ export class LootBagUI {
     this.setVisible(false);
   }
 
-  /** Update bag contents (called when bag state changes while open) */
   updateItems(items: number[]): void {
     if (!this.visible) return;
     let changed = false;
@@ -194,11 +198,9 @@ export class LootBagUI {
   }
 
   private redraw(): void {
-    // Position: next to inventory panel (to the right of it)
-    const panelX = 16 + this.invPanelWidth + 8;
-    const panelY = this.scene.scale.height - this.panelHeight - 16;
+    const panelX = this.anchorX;
+    const panelY = this.anchorY;
 
-    // Background
     this.panelBg.clear();
     const borderColor = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
     this.panelBg.fillStyle(0x111122, 0.9);
@@ -206,14 +208,12 @@ export class LootBagUI {
     this.panelBg.lineStyle(2, borderColor, 1);
     this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
 
-    // Header
     const headerColor = BAG_HEADER_COLORS[this.currentBagRarity] ?? "#44aa44";
     const headerName = BAG_HEADER_NAMES[this.currentBagRarity] ?? "Loot Bag";
     this.headerText.setText(headerName);
     this.headerText.setColor(headerColor);
     this.headerText.setPosition(panelX + this.padding, panelY + 4);
 
-    // Slots
     this.slotGraphics.clear();
     for (let i = 0; i < BAG_SIZE; i++) {
       const col = i % COLS;
@@ -231,7 +231,6 @@ export class LootBagUI {
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Use tier color for border
       const slotBorder = def ? def.tierColor : 0x333344;
       this.slotGraphics.lineStyle(1, slotBorder, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
@@ -257,11 +256,10 @@ export class LootBagUI {
     });
   }
 
-  /** Returns true if the given screen coordinates are over the loot bag panel */
   isOverPanel(screenX: number, screenY: number): boolean {
     if (!this.visible) return false;
-    const panelX = 16 + this.invPanelWidth + 8;
-    const panelY = this.scene.scale.height - this.panelHeight - 16;
+    const panelX = this.anchorX;
+    const panelY = this.anchorY;
     return (
       screenX >= panelX &&
       screenX <= panelX + this.panelWidth &&

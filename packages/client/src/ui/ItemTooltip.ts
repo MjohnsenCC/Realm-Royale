@@ -151,15 +151,16 @@ export class ItemTooltip {
     this.bg.lineStyle(1, def.tierColor, 0.8);
     this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
 
-    // Position: above the given point, clamped to screen
-    let tx = screenX;
-    let ty = screenY - totalHeight;
+    // Position: above the cursor, centered horizontally
+    let tx = screenX - this.tooltipWidth / 2;
+    let ty = screenY - totalHeight - Math.round(8 * S);
 
     // Clamp to screen bounds
     const sw = this.scene.scale.width;
-    if (tx + this.tooltipWidth > sw) tx = sw - this.tooltipWidth - 4;
+    const sh = this.scene.scale.height;
+    if (tx + this.tooltipWidth > sw - 4) tx = sw - this.tooltipWidth - 4;
     if (tx < 4) tx = 4;
-    if (ty < 4) ty = screenY + Math.round(40 * S); // flip below if too high
+    if (ty < 4) ty = screenY + Math.round(20 * S); // flip below if too high
 
     this.container.setPosition(tx, ty);
     this.container.setVisible(true);

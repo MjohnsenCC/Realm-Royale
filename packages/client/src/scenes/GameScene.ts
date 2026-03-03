@@ -198,6 +198,7 @@ export class GameScene extends Phaser.Scene {
 
   // Loading screen state
   private isLoadingZone: boolean = false;
+  private loadingStartTime: number = 0;
   private loadingOverlay: Phaser.GameObjects.Graphics | null = null;
   private loadingText: Phaser.GameObjects.Text | null = null;
   private loadingSubText: Phaser.GameObjects.Text | null = null;
@@ -283,7 +284,10 @@ export class GameScene extends Phaser.Scene {
       }
 
       // Load realm map data for hostile zone (if not already loaded)
-      const doTransition = () => {
+      const MIN_LOADING_MS = 2000;
+
+      // Finish transition: swap zone visuals, show player, fade out loading screen
+      const finishTransition = () => {
         this.transitionToZone(data.zone);
 
         const sprite = this.playerSprites.get(this.network.getSessionId());
@@ -294,25 +298,43 @@ export class GameScene extends Phaser.Scene {
         this.network.sendZoneReady();
       };
 
+      // Ensure loading screen is visible for at least MIN_LOADING_MS, then run
+      // heavy work (if any) and finish. Uses double-rAF so the loading screen
+      // paints at full opacity before any synchronous work begins.
+      const scheduleTransition = (work?: () => void) => {
+        // Wait for the loading screen to be fully painted
+        requestAnimationFrame(() => {
+          requestAnimationFrame(() => {
+            // Run heavy prep work (JSON parsing, grid building) while loading screen is visible
+            if (work) work();
+
+            // Ensure minimum display time
+            const elapsed = Date.now() - this.loadingStartTime;
+            const remaining = Math.max(0, MIN_LOADING_MS - elapsed);
+            this.time.delayedCall(remaining, finishTransition);
+          });
+        });
+      };
+
       if (data.zone === "hostile" && !getRealmMap()) {
         // Fetch realm map JSON from server assets
         fetch("/assets/realm-map.json")
           .then((resp) => resp.text())
           .then((json) => {
-            const mapData = loadRealmMapFromJSON(json);
-            setRealmMap(mapData);
-            console.log(
-              `[GameScene] Loaded realm map: ${mapData.width}x${mapData.height}, seed=${mapData.seed}`
-            );
-            doTransition();
+            scheduleTransition(() => {
+              const mapData = loadRealmMapFromJSON(json);
+              setRealmMap(mapData);
+              console.log(
+                `[GameScene] Loaded realm map: ${mapData.width}x${mapData.height}, seed=${mapData.seed}`
+              );
+            });
           })
           .catch((err) => {
             console.error("[GameScene] Failed to load realm map:", err);
-            doTransition(); // proceed anyway with fallback rendering
+            scheduleTransition(); // proceed anyway with fallback rendering
           });
       } else {
-        // Delay the visual transition until loading screen ends
-        this.time.delayedCall(2000, doTransition);
+        scheduleTransition();
       }
     });
 
@@ -523,17 +545,8 @@ export class GameScene extends Phaser.Scene {
       .setScrollFactor(0)
       .setDepth(201);
 
-    const fadeTargets = [this.loadingOverlay, this.loadingText, this.loadingSubText];
-    if (this.loadingDifficultyText) fadeTargets.push(this.loadingDifficultyText as any);
-
-    for (const t of fadeTargets) t.setAlpha(0);
-
-    this.tweens.add({
-      targets: fadeTargets,
-      alpha: 1,
-      duration: 300,
-      ease: "Power2",
-    });
+    // Start fully opaque so loading screen is visible immediately
+    this.loadingStartTime = Date.now();
   }
 
   private hideLoadingScreen(): void {
@@ -1419,9 +1432,7 @@ export class GameScene extends Phaser.Scene {
 
       // Only shoot if not clicking on UI panels
       const pointer = this.input.activePointer;
-      const overUI =
-        this.hud.inventoryUI.isOverPanel(pointer.x, pointer.y) ||
-        this.hud.lootBagUI.isOverPanel(pointer.x, pointer.y);
+      const overUI = this.hud.isOverPanel(pointer.x, pointer.y);
       shooting = pointer.isDown && !overUI;
     }
 

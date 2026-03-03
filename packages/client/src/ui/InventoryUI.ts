@@ -13,98 +13,66 @@ const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
 const COLS = 4;
 const ROWS = 2;
-const BASE_PADDING = 8;
-const BASE_HEADER = 18;
-const BASE_EQ_GAP = 4;
 
 const EQ_SLOT_LABELS = ["Wpn", "Abl", "Arm", "Rng"];
 
+export interface InventoryUIConfig {
+  eqX: number;
+  eqY: number;
+  invX: number;
+  invY: number;
+}
+
 export class InventoryUI {
   private scene: Phaser.Scene;
-  private container: Phaser.GameObjects.Container;
-  private panelBg: Phaser.GameObjects.Graphics;
   private slotGraphics: Phaser.GameObjects.Graphics;
   private itemTexts: Phaser.GameObjects.Text[] = [];
   private slotZones: Phaser.GameObjects.Zone[] = [];
-  private headerText: Phaser.GameObjects.Text;
   private room: any = null;
   private currentInventory: number[] = new Array(INVENTORY_SIZE).fill(-1);
 
   // Equipment
-  private eqPanelBg: Phaser.GameObjects.Graphics;
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
-  private eqHeaderText: Phaser.GameObjects.Text;
   private currentEquipment: number[] = new Array(EQUIPMENT_SLOTS).fill(-1);
 
   // Tooltip
   private tooltip: ItemTooltip;
 
-  // Scaled dimensions (instance-level)
+  // Scaled dimensions
   private S: number;
   private slotSize: number;
   private slotGap: number;
-  private padding: number;
-  private header: number;
-  private eqGap: number;
-  private panelWidth: number;
-  private invPanelHeight: number;
-  private eqRowHeight: number;
-  private totalHeight: number;
 
-  constructor(scene: Phaser.Scene) {
+  // Layout origins (set by HUD)
+  private eqX: number;
+  private eqY: number;
+  private invX: number;
+  private invY: number;
+
+  constructor(scene: Phaser.Scene, config: InventoryUIConfig) {
     this.scene = scene;
     this.tooltip = new ItemTooltip(scene);
 
-    // Compute scaled dimensions
     this.S = getUIScale();
     const S = this.S;
     this.slotSize = Math.round(BASE_SLOT_SIZE * S);
     this.slotGap = Math.round(BASE_SLOT_GAP * S);
-    this.padding = Math.round(BASE_PADDING * S);
-    this.header = Math.round(BASE_HEADER * S);
-    this.eqGap = Math.round(BASE_EQ_GAP * S);
-    this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
-    this.invPanelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
-    this.eqRowHeight = this.slotSize + this.padding * 2 + this.header;
-    this.totalHeight = this.invPanelHeight + this.eqGap + this.eqRowHeight;
 
-    const panelX = 16;
-    const invPanelY = scene.scale.height - this.invPanelHeight - 16;
-    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
+    this.eqX = config.eqX;
+    this.eqY = config.eqY;
+    this.invX = config.invX;
+    this.invY = config.invY;
 
-    const headerFontSize = `${Math.round(12 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
 
-    this.container = scene.add
-      .container(0, 0)
-      .setScrollFactor(0)
-      .setDepth(100);
+    // --- Equipment slot graphics ---
+    this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
-    // --- Equipment panel background ---
-    this.eqPanelBg = scene.add.graphics();
-    this.eqPanelBg.fillStyle(0x111122, 0.85);
-    this.eqPanelBg.fillRoundedRect(panelX, eqPanelY, this.panelWidth, this.eqRowHeight, 6);
-    this.eqPanelBg.lineStyle(1, 0x666688, 1);
-    this.eqPanelBg.strokeRoundedRect(panelX, eqPanelY, this.panelWidth, this.eqRowHeight, 6);
-    this.container.add(this.eqPanelBg);
-
-    this.eqHeaderText = scene.add
-      .text(panelX + this.padding, eqPanelY + 4, "Equipment", {
-        fontSize: headerFontSize,
-        color: "#cccc88",
-        fontFamily: "monospace",
-      });
-    this.container.add(this.eqHeaderText);
-
-    this.eqSlotGraphics = scene.add.graphics();
-    this.container.add(this.eqSlotGraphics);
-
-    // Equipment slot zones and texts
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
-      const sx = panelX + this.padding + i * (this.slotSize + this.slotGap);
-      const sy = eqPanelY + this.header + this.padding;
+      const sx = this.eqX + i * (this.slotSize + this.slotGap);
+      const sy = this.eqY;
 
       const zone = scene.add
         .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
@@ -115,7 +83,14 @@ export class InventoryUI {
       zone.on("pointerover", () => {
         const itemId = this.currentEquipment[i];
         if (itemId >= 0) {
-          this.tooltip.show(itemId, sx, eqPanelY - Math.round(8 * S));
+          const ptr = this.scene.input.activePointer;
+          this.tooltip.show(itemId, ptr.x, ptr.y);
+        }
+      });
+      zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        const itemId = this.currentEquipment[i];
+        if (itemId >= 0) {
+          this.tooltip.show(itemId, pointer.x, pointer.y);
         }
       });
       zone.on("pointerout", () => {
@@ -138,31 +113,14 @@ export class InventoryUI {
       this.eqItemTexts.push(text);
     }
 
-    // --- Inventory panel background ---
-    this.panelBg = scene.add.graphics();
-    this.panelBg.fillStyle(0x111122, 0.85);
-    this.panelBg.fillRoundedRect(panelX, invPanelY, this.panelWidth, this.invPanelHeight, 6);
-    this.panelBg.lineStyle(1, 0x444466, 1);
-    this.panelBg.strokeRoundedRect(panelX, invPanelY, this.panelWidth, this.invPanelHeight, 6);
-    this.container.add(this.panelBg);
+    // --- Inventory slot graphics ---
+    this.slotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
-    this.headerText = scene.add
-      .text(panelX + this.padding, invPanelY + 4, "Inventory", {
-        fontSize: headerFontSize,
-        color: "#aaaacc",
-        fontFamily: "monospace",
-      });
-    this.container.add(this.headerText);
-
-    this.slotGraphics = scene.add.graphics();
-    this.container.add(this.slotGraphics);
-
-    // Inventory slot zones and texts
     for (let i = 0; i < INVENTORY_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
-      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
-      const sy = invPanelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
+      const sx = this.invX + col * (this.slotSize + this.slotGap);
+      const sy = this.invY + row * (this.slotSize + this.slotGap);
 
       const zone = scene.add
         .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
@@ -181,7 +139,14 @@ export class InventoryUI {
       zone.on("pointerover", () => {
         const itemId = this.currentInventory[i];
         if (itemId >= 0) {
-          this.tooltip.show(itemId, sx, invPanelY - Math.round(8 * S));
+          const ptr = this.scene.input.activePointer;
+          this.tooltip.show(itemId, ptr.x, ptr.y);
+        }
+      });
+      zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        const itemId = this.currentInventory[i];
+        if (itemId >= 0) {
+          this.tooltip.show(itemId, pointer.x, pointer.y);
         }
       });
       zone.on("pointerout", () => {
@@ -216,12 +181,16 @@ export class InventoryUI {
     return this.tooltip;
   }
 
-  getPanelWidth(): number {
-    return this.panelWidth;
+  getEquipment(): number[] {
+    return this.currentEquipment;
   }
 
-  getInvPanelHeight(): number {
-    return this.invPanelHeight;
+  getSlotSize(): number {
+    return this.slotSize;
+  }
+
+  getSlotGap(): number {
+    return this.slotGap;
   }
 
   updateInventory(inventory: number[]): void {
@@ -254,19 +223,16 @@ export class InventoryUI {
 
   private drawSlots(): void {
     this.slotGraphics.clear();
-    const panelX = 16;
-    const panelY = this.scene.scale.height - this.invPanelHeight - 16;
 
     for (let i = 0; i < INVENTORY_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
-      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
-      const sy = panelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
+      const sx = this.invX + col * (this.slotSize + this.slotGap);
+      const sy = this.invY + row * (this.slotSize + this.slotGap);
 
       const itemType = this.currentInventory[i];
       const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
 
-      // Slot background
       if (def) {
         this.slotGraphics.fillStyle(def.color, 0.4);
       } else {
@@ -274,12 +240,10 @@ export class InventoryUI {
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Border: use tier color if item present
       const borderColor = def ? def.tierColor : 0x333344;
       this.slotGraphics.lineStyle(1, borderColor, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Update text
       if (def) {
         const shortName =
           def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
@@ -289,25 +253,21 @@ export class InventoryUI {
         this.itemTexts[i].setText("");
       }
 
-      // Update zone position
+      this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
   }
 
   private drawEquipmentSlots(): void {
     this.eqSlotGraphics.clear();
-    const panelX = 16;
-    const invPanelY = this.scene.scale.height - this.invPanelHeight - 16;
-    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
 
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
-      const sx = panelX + this.padding + i * (this.slotSize + this.slotGap);
-      const sy = eqPanelY + this.header + this.padding;
+      const sx = this.eqX + i * (this.slotSize + this.slotGap);
+      const sy = this.eqY;
 
       const itemId = this.currentEquipment[i];
       const def = itemId >= 0 ? ITEM_DEFS[itemId] : null;
 
-      // Slot background
       if (def) {
         this.eqSlotGraphics.fillStyle(def.color, 0.4);
       } else {
@@ -315,12 +275,10 @@ export class InventoryUI {
       }
       this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Border: tier color
       const borderColor = def ? def.tierColor : 0x444455;
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Text
       if (def) {
         const shortName =
           def.name.length > 8 ? def.name.substring(0, 7) + "." : def.name;
@@ -331,6 +289,7 @@ export class InventoryUI {
         this.eqItemTexts[i].setColor("#666666");
       }
 
+      this.eqItemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.eqSlotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
   }
@@ -347,16 +306,13 @@ export class InventoryUI {
     this.room.send(ClientMessage.EquipItem, { inventorySlot: slotIndex });
   }
 
-  /** Returns true if the given screen coordinates are over either panel */
-  isOverPanel(screenX: number, screenY: number): boolean {
-    const panelX = 16;
-    const invPanelY = this.scene.scale.height - this.invPanelHeight - 16;
-    const eqPanelY = invPanelY - this.eqGap - this.eqRowHeight;
+  /** Returns true if the given screen coordinates are over the unified HUD panel area */
+  isOverPanel(screenX: number, screenY: number, panelX: number, panelY: number, panelW: number, panelH: number): boolean {
     return (
       screenX >= panelX &&
-      screenX <= panelX + this.panelWidth &&
-      screenY >= eqPanelY &&
-      screenY <= invPanelY + this.invPanelHeight
+      screenX <= panelX + panelW &&
+      screenY >= panelY &&
+      screenY <= panelY + panelH
     );
   }
 }

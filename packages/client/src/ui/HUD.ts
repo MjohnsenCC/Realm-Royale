@@ -18,6 +18,7 @@ import {
   xpForLevel,
   getRealmMap,
   getDifficultyAt,
+  computePlayerStats,
 } from "@rotmg-lite/shared";
 
 export class HUD {
@@ -29,8 +30,18 @@ export class HUD {
   // Scaled dimensions
   private barWidth: number;
   private barHeight: number;
+  private barGap: number;
   private mmWidth: number;
   private mmHeight: number;
+
+  // Unified panel dimensions
+  private panelX: number;
+  private panelY: number;
+  private panelW: number;
+  private panelH: number;
+
+  // Unified panel background
+  private panelBg: Phaser.GameObjects.Graphics;
 
   // Health bar
   private hpBarBg: Phaser.GameObjects.Graphics;
@@ -42,8 +53,10 @@ export class HUD {
   private manaBarFill: Phaser.GameObjects.Graphics;
   private manaText: Phaser.GameObjects.Text;
 
-  // Level & XP
-  private levelText: Phaser.GameObjects.Text;
+  // Level/XP bar
+  private lvlBarBg: Phaser.GameObjects.Graphics;
+  private lvlBarFill: Phaser.GameObjects.Graphics;
+  private lvlText: Phaser.GameObjects.Text;
 
   // Zone/Biome display
   private zoneText: Phaser.GameObjects.Text;
@@ -53,6 +66,9 @@ export class HUD {
 
   // Q hint
   private qHintText: Phaser.GameObjects.Text;
+
+  // Placeholder icon buttons
+  private iconBtnGraphics: Phaser.GameObjects.Graphics;
 
   // Minimap
   private minimapBg: Phaser.GameObjects.Graphics;
@@ -64,27 +80,78 @@ export class HUD {
   inventoryUI: InventoryUI;
   lootBagUI: LootBagUI;
 
+  // Section origins (stored for bar drawing)
+  private barsX: number;
+  private barsY: number;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
     this.S = getUIScale();
     const S = this.S;
+
+    // Scaled bar dimensions
     this.barWidth = Math.round(160 * S);
     this.barHeight = Math.round(16 * S);
-    this.mmWidth = Math.round(MINIMAP_WIDTH * S);
-    this.mmHeight = Math.round(MINIMAP_HEIGHT * S);
+    this.barGap = Math.round(3 * S);
+    this.mmWidth = Math.round(MINIMAP_WIDTH * S * 1.25);
+    this.mmHeight = Math.round(MINIMAP_HEIGHT * S * 1.25);
+
+    // Slot dimensions
+    const slotSize = Math.round(36 * S);
+    const slotGap = Math.round(4 * S);
+    const sectionGap = Math.round(12 * S);
+    const innerPad = Math.round(8 * S);
+    const iconBtnSize = Math.round(16 * S);
+    const iconGap = Math.round(4 * S);
+
+    // Section dimensions
+    const barsW = this.barWidth;
+    const barsH = 3 * this.barHeight + 2 * this.barGap;
+
+    const eqW = 4 * slotSize + 3 * slotGap;
+    const eqSectionH = slotSize + iconGap + iconBtnSize;
+
+    const invW = 4 * slotSize + 3 * slotGap;
+    const invH = 2 * slotSize + slotGap;
+
+    const maxH = Math.max(barsH, eqSectionH, invH);
+
+    // Unified panel
+    this.panelW = innerPad + barsW + sectionGap + eqW + sectionGap + invW + innerPad;
+    this.panelH = innerPad + maxH + innerPad;
+    const screenW = scene.scale.width;
+    const screenH = scene.scale.height;
+    this.panelX = Math.round(screenW / 2 - this.panelW / 2);
+    this.panelY = Math.round(screenH - this.panelH - Math.round(12 * S));
+
+    // Section origins
+    this.barsX = this.panelX + innerPad;
+    this.barsY = this.panelY + innerPad + Math.round((maxH - barsH) / 2);
+
+    const eqX = this.barsX + barsW + sectionGap;
+    const eqY = this.panelY + innerPad;
+
+    const invX = eqX + eqW + sectionGap;
+    const invY = this.panelY + innerPad;
 
     const barFontSize = `${Math.round(11 * S)}px`;
-    const levelFontSize = `${Math.round(14 * S)}px`;
     const zoneFontSize = `${Math.round(18 * S)}px`;
     const countFontSize = `${Math.round(14 * S)}px`;
     const hintFontSize = `${Math.round(11 * S)}px`;
 
-    // Health bar (top-left)
+    // --- Unified panel background ---
+    this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
+    this.panelBg.fillStyle(0x222222, 0.85);
+    this.panelBg.fillRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+    this.panelBg.lineStyle(1, 0x555555, 0.8);
+    this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+
+    // --- Health bar ---
     this.hpBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.hpBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
     this.hpText = scene.add
-      .text(20, 12, "100 / 100", {
+      .text(0, 0, "", {
         fontSize: barFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
@@ -92,12 +159,11 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // Mana bar (below health bar)
-    const manaY = 16 + this.barHeight + 4;
+    // --- Mana bar ---
     this.manaBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.manaBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
     this.manaText = scene.add
-      .text(20, manaY - 4, "100 / 100", {
+      .text(0, 0, "", {
         fontSize: barFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
@@ -105,20 +171,21 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // Level & XP display (below mana bar)
-    const levelY = manaY + this.barHeight + 8;
-    this.levelText = scene.add
-      .text(20, levelY, "Lv 1 | XP: 0 (0%)", {
-        fontSize: levelFontSize,
-        color: "#aaffaa",
+    // --- Level/XP bar ---
+    this.lvlBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
+    this.lvlBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.lvlText = scene.add
+      .text(0, 0, "", {
+        fontSize: barFontSize,
+        color: "#ffffff",
         fontFamily: "monospace",
       })
       .setScrollFactor(0)
-      .setDepth(100);
+      .setDepth(102);
 
-    // Zone/Biome display (top-center)
+    // --- Zone/Biome display (top-center) ---
     this.zoneText = scene.add
-      .text(scene.scale.width / 2, 15, "Nexus (Safe Zone)", {
+      .text(screenW / 2, 15, "Nexus (Safe Zone)", {
         fontSize: zoneFontSize,
         color: "#44aa66",
         fontFamily: "monospace",
@@ -127,21 +194,23 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(100);
 
-    // Player count (top-right)
+    // --- Player count (below minimap) ---
+    const mmPad = Math.round(16 * S);
+    const mmBottomY = mmPad + this.mmHeight + Math.round(4 * S);
     this.playerCountText = scene.add
-      .text(scene.scale.width - 20, 15, `Players: 0/${MAX_PLAYERS}`, {
+      .text(screenW - mmPad - this.mmWidth / 2, mmBottomY, `Players: 0/${MAX_PLAYERS}`, {
         fontSize: countFontSize,
         color: "#aaaaaa",
         fontFamily: "monospace",
       })
-      .setOrigin(1, 0)
+      .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(100);
 
-    // Q hint (below zone text, shown in hostile + dungeons)
+    // --- Q hint (below zone text) ---
     const hintY = 15 + Math.round(23 * S);
     this.qHintText = scene.add
-      .text(scene.scale.width / 2, hintY, "Q: Return to Nexus  |  SPACE: Ability  |  E: Use Portal", {
+      .text(screenW / 2, hintY, "Q: Return to Nexus  |  SPACE: Ability  |  E: Use Portal", {
         fontSize: hintFontSize,
         color: "#888888",
         fontFamily: "monospace",
@@ -151,24 +220,44 @@ export class HUD {
       .setDepth(100)
       .setVisible(false);
 
-    // Minimap (bottom-right)
+    // --- Placeholder icon buttons (below equipment slots) ---
+    this.iconBtnGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    const iconRowW = 3 * iconBtnSize + 2 * iconGap;
+    const iconRowX = eqX + Math.round((eqW - iconRowW) / 2);
+    const iconRowY = eqY + slotSize + iconGap;
+    for (let i = 0; i < 3; i++) {
+      const ix = iconRowX + i * (iconBtnSize + iconGap);
+      this.iconBtnGraphics.fillStyle(0x333344, 0.7);
+      this.iconBtnGraphics.fillRect(ix, iconRowY, iconBtnSize, iconBtnSize);
+      this.iconBtnGraphics.lineStyle(1, 0x555566, 0.8);
+      this.iconBtnGraphics.strokeRect(ix, iconRowY, iconBtnSize, iconBtnSize);
+    }
+
+    // --- Minimap (top-right) ---
     this.minimapBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapBiomeGraphics = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapDots = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
-    // Inventory UI (always visible, bottom-left)
-    this.inventoryUI = new InventoryUI(scene);
+    // --- Inventory UI ---
+    this.inventoryUI = new InventoryUI(scene, {
+      eqX,
+      eqY,
+      invX,
+      invY,
+    });
 
-    // Loot Bag UI (hidden by default, shown when near a bag)
-    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), this.inventoryUI.getPanelWidth());
+    // --- Loot Bag UI (above unified panel, aligned with inventory section) ---
+    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
 
-    this.drawHealthBar(100, 100);
+    // Draw initial bars
+    this.drawHealthBar(100, 100, 0);
     this.drawManaBar(100, 100);
+    this.drawLvlBar(0, 1);
   }
 
-  private drawHealthBar(hp: number, maxHp: number): void {
-    const x = 16;
-    const y = 16;
+  private drawHealthBar(hp: number, maxHp: number, hpRegen: number): void {
+    const x = this.barsX;
+    const y = this.barsY;
 
     this.hpBarBg.clear();
     this.hpBarBg.fillStyle(0x333333, 0.8);
@@ -188,14 +277,15 @@ export class HUD {
       this.barHeight - 2
     );
 
-    this.hpText.setText(`${Math.ceil(hp)} / ${maxHp}`);
+    const regenStr = hpRegen > 0 ? ` (+${hpRegen})` : "";
+    this.hpText.setText(`HP: ${Math.ceil(hp)} / ${maxHp}${regenStr}`);
     this.hpText.setPosition(x + this.barWidth / 2, y + 2);
     this.hpText.setOrigin(0.5, 0);
   }
 
   private drawManaBar(mana: number, maxMana: number): void {
-    const x = 16;
-    const y = 16 + this.barHeight + 4;
+    const x = this.barsX;
+    const y = this.barsY + this.barHeight + this.barGap;
 
     this.manaBarBg.clear();
     this.manaBarBg.fillStyle(0x333333, 0.8);
@@ -213,9 +303,39 @@ export class HUD {
       this.barHeight - 2
     );
 
-    this.manaText.setText(`${Math.ceil(mana)} / ${maxMana}`);
+    this.manaText.setText(`MP: ${Math.ceil(mana)} / ${maxMana}`);
     this.manaText.setPosition(x + this.barWidth / 2, y + 2);
     this.manaText.setOrigin(0.5, 0);
+  }
+
+  private drawLvlBar(xp: number, level: number): void {
+    const x = this.barsX;
+    const y = this.barsY + 2 * (this.barHeight + this.barGap);
+
+    this.lvlBarBg.clear();
+    this.lvlBarBg.fillStyle(0x333333, 0.8);
+    this.lvlBarBg.fillRect(x, y, this.barWidth, this.barHeight);
+    this.lvlBarBg.lineStyle(1, 0x666666, 1);
+    this.lvlBarBg.strokeRect(x, y, this.barWidth, this.barHeight);
+
+    const currentLevelXp = xpForLevel(level);
+    const nextLevelXp = xpForLevel(Math.min(level + 1, 100));
+    const xpNeeded = nextLevelXp - currentLevelXp;
+    const xpProgress = xp - currentLevelXp;
+    const ratio = xpNeeded > 0 ? Math.max(0, Math.min(1, xpProgress / xpNeeded)) : 1;
+
+    this.lvlBarFill.clear();
+    this.lvlBarFill.fillStyle(0x33aa55, 1);
+    this.lvlBarFill.fillRect(
+      x + 1,
+      y + 1,
+      (this.barWidth - 2) * ratio,
+      this.barHeight - 2
+    );
+
+    this.lvlText.setText(`LVL ${level} (${xpProgress}/${xpNeeded})`);
+    this.lvlText.setPosition(x + this.barWidth / 2, y + 2);
+    this.lvlText.setOrigin(0.5, 0);
   }
 
   update(
@@ -232,15 +352,13 @@ export class HUD {
     enemies: Map<string, EnemySprite>,
     zone: string
   ): void {
-    this.drawHealthBar(hp, maxHp);
-    this.drawManaBar(mana, maxMana);
+    // Compute hpRegen from equipment
+    const equipment = this.inventoryUI.getEquipment();
+    const stats = computePlayerStats(level, equipment);
 
-    // Level & XP progress display
-    const currentLevelXp = xpForLevel(level);
-    const nextLevelXp = xpForLevel(Math.min(level + 1, 100));
-    const xpNeeded = nextLevelXp - currentLevelXp;
-    const xpProgress = xpNeeded > 0 ? Math.floor(((xp - currentLevelXp) / xpNeeded) * 100) : 100;
-    this.levelText.setText(`Lv ${level} | XP: ${xp} (${xpProgress}%)`);
+    this.drawHealthBar(hp, maxHp, Math.round(stats.hpRegen));
+    this.drawManaBar(mana, maxMana);
+    this.drawLvlBar(xp, level);
 
     if (zone === "nexus") {
       this.zoneText.setText("Nexus (Safe Zone)");
@@ -255,7 +373,6 @@ export class HUD {
       this.zoneText.setColor(color);
       this.qHintText.setVisible(true);
     } else {
-      // Show current difficulty zone name + biome
       const mapData = getRealmMap();
       if (mapData) {
         const diffZone = getDifficultyAt(localX, localY);
@@ -270,7 +387,8 @@ export class HUD {
     this.zoneText.setX(this.scene.scale.width / 2);
     this.qHintText.setX(this.scene.scale.width / 2);
     this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
-    this.playerCountText.setX(this.scene.scale.width - 20);
+    const mmPad = Math.round(16 * this.S);
+    this.playerCountText.setX(this.scene.scale.width - mmPad - this.mmWidth / 2);
 
     // Draw minimap
     this.drawMinimap(localX, localY, players, enemies, zone);
@@ -288,8 +406,10 @@ export class HUD {
     const mapH = zoneDims.height;
     const scaleX = this.mmWidth / mapW;
     const scaleY = this.mmHeight / mapH;
-    const mmX = this.scene.scale.width - this.mmWidth - 16;
-    const mmY = this.scene.scale.height - this.mmHeight - 16;
+
+    // Top-right position
+    const mmX = this.scene.scale.width - this.mmWidth - Math.round(16 * this.S);
+    const mmY = Math.round(16 * this.S);
 
     // Background
     this.minimapBg.clear();
@@ -304,13 +424,12 @@ export class HUD {
         this.minimapBiomeCached = true;
       }
     }
-    // Hide biome overlay outside hostile zone
     this.minimapBiomeGraphics.setVisible(zone === "hostile");
 
     // Dots
     this.minimapDots.clear();
 
-    // Enemy dots (red) — only show enemies within sync radius of local player
+    // Enemy dots (red)
     this.minimapDots.fillStyle(0xcc3333, 0.8);
     const syncRadiusSq = ENEMY_SYNC_RADIUS * ENEMY_SYNC_RADIUS;
     enemies.forEach((enemy) => {
@@ -322,7 +441,7 @@ export class HUD {
       this.minimapDots.fillRect(dx - 1, dy - 1, 3, 3);
     });
 
-    // Player dots (blue/green)
+    // Player dots
     players.forEach((player) => {
       const isLocal =
         Math.abs(player.x - localX) < 5 && Math.abs(player.y - localY) < 5;
@@ -346,13 +465,12 @@ export class HUD {
     const mapData = getRealmMap();
     if (!mapData) return false;
 
-    const step = 3; // Sample every 3 minimap pixels
+    const step = 3;
     const tilesPerPxX = mapData.width / this.mmWidth;
     const tilesPerPxY = mapData.height / this.mmHeight;
 
     for (let mx = 0; mx < this.mmWidth; mx += step) {
       for (let my = 0; my < this.mmHeight; my += step) {
-        // Tile range covered by this minimap sample
         const tileX0 = Math.floor(mx * tilesPerPxX);
         const tileY0 = Math.floor(my * tilesPerPxY);
         const tileX1 = Math.min(mapData.width - 1, Math.floor((mx + step) * tilesPerPxX));
@@ -361,7 +479,6 @@ export class HUD {
         const centerIdx = tileY0 * mapData.width + tileX0;
         const biome = mapData.biomes[centerIdx];
 
-        // Scan tile region for thin features (roads 2px wide, rivers 1-4px)
         let hasRoad = false;
         let hasRiver = false;
         for (let ty = tileY0; ty <= tileY1; ty++) {
@@ -392,6 +509,21 @@ export class HUD {
     return true;
   }
 
+  /** Returns true if coordinates are over the unified HUD panel or loot bag */
+  isOverPanel(screenX: number, screenY: number): boolean {
+    // Check unified panel
+    if (
+      screenX >= this.panelX &&
+      screenX <= this.panelX + this.panelW &&
+      screenY >= this.panelY &&
+      screenY <= this.panelY + this.panelH
+    ) {
+      return true;
+    }
+    // Check loot bag
+    return this.lootBagUI.isOverPanel(screenX, screenY);
+  }
+
   // Death screen elements
   private deathOverlay: Phaser.GameObjects.Graphics | null = null;
   private deathText: Phaser.GameObjects.Text | null = null;
@@ -402,7 +534,6 @@ export class HUD {
     const { width, height } = this.scene.scale;
     const S = this.S;
 
-    // Semi-transparent dark overlay
     this.deathOverlay = this.scene.add
       .graphics()
       .setScrollFactor(0)
@@ -410,7 +541,6 @@ export class HUD {
     this.deathOverlay.fillStyle(0x000000, 0.5);
     this.deathOverlay.fillRect(0, 0, width, height);
 
-    // "YOU DIED!" text
     this.deathText = this.scene.add
       .text(width / 2, height / 2 - Math.round(40 * S), "YOU DIED!", {
         fontSize: `${Math.round(48 * S)}px`,
@@ -421,7 +551,6 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(201);
 
-    // Respawn button
     this.deathButton = this.scene.add
       .text(width / 2, height / 2 + Math.round(30 * S), "[ Respawn ]", {
         fontSize: `${Math.round(22 * S)}px`,
@@ -479,7 +608,6 @@ export class HUD {
   }
 
   showLevelUp(x: number, y: number, level: number): void {
-    // "LEVEL UP!" text
     const text = this.scene.add
       .text(x, y - 30, `LEVEL ${level}!`, {
         fontSize: "18px",
@@ -500,7 +628,6 @@ export class HUD {
       onComplete: () => text.destroy(),
     });
 
-    // Expanding ring effect
     const ring = this.scene.add.graphics().setDepth(149);
     let radius = 10;
     let alpha = 1;
