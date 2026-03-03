@@ -69,6 +69,7 @@ import {
   generateDungeonStats,
   makeItemId,
   generateNexusMap,
+  getPackDef,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import * as fs from "fs";
@@ -737,6 +738,31 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
+    // 2c. Pack leader minion respawn (overworld packs)
+    this.state.enemies.forEach((enemy) => {
+      if (!enemy.isPackLeader || enemy.zone !== "hostile" || enemy.aiState !== EnemyAIState.Aggro) return;
+      const packDef = getPackDef(enemy.enemyType);
+      if (!packDef) return;
+      if (now - enemy.lastMinionSpawnTime < packDef.respawnCooldown) return;
+
+      // Count alive minions for this leader
+      let aliveMinions = 0;
+      this.state.enemies.forEach((other) => {
+        if (other.packLeaderId === enemy.id) aliveMinions++;
+      });
+
+      if (aliveMinions < packDef.minionCount) {
+        enemy.lastMinionSpawnTime = now;
+        this.spawnSystem.spawnPackMinion(
+          enemy.x,
+          enemy.y,
+          enemy.id,
+          packDef.minionType,
+          this.state
+        );
+      }
+    });
+
     // 3. Run combat (pass dungeon maps for projectile-wall collision)
     const events = this.combatSystem.update(deltaTime, this.state, dungeonMaps);
 
@@ -755,7 +781,7 @@ export class GameRoom extends Room<GameState> {
 
         if (zone === "hostile" && event.biome !== undefined) {
           // Overworld kill: respawn + loot + dungeon portal chance
-          this.spawnSystem.onEnemyKilled(event.biome);
+          this.spawnSystem.onEnemyKilled(event.biome, event.enemyX!, event.enemyY!, event.enemyId);
 
           if (event.enemyX !== undefined && event.enemyY !== undefined) {
             const bagRarity = rollBagDrop(event.biome);

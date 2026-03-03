@@ -6,6 +6,7 @@ import {
   EnemyType,
   EnemyAIState,
   ShootingPatternType,
+  MovementPatternType,
   ENEMY_DEFS,
   distanceBetween,
   angleBetween,
@@ -21,6 +22,7 @@ import {
 import type { EnemyDefinition, DungeonMapData } from "@rotmg-lite/shared";
 
 const AI_UPDATE_RANGE = 1500; // Only update enemies within this range of a player
+const ORBIT_RADIUS = 120; // 3 tiles — used by Orbiter movement pattern
 
 export class EnemyAI {
   update(
@@ -101,8 +103,7 @@ export class EnemyAI {
     // Check for aggro
     const target = this.findPlayerInRange(enemy, def.aggroRange, state, mapData);
     if (target) {
-      enemy.aiState = EnemyAIState.Aggro;
-      enemy.targetPlayerId = target.id;
+      this.initAggro(enemy, target.id);
       return;
     }
 
@@ -154,6 +155,28 @@ export class EnemyAI {
       return;
     }
 
+    // Drop aggro if target is outside deaggro range (10% beyond aggro range)
+    const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    if (distToTarget > def.aggroRange * 1.1) {
+      enemy.aiState = EnemyAIState.Returning;
+      enemy.targetPlayerId = "";
+      return;
+    }
+
+    // Periodic target re-evaluation for multiplayer
+    enemy.retargetTimer -= _deltaTimeMs;
+    if (enemy.retargetTimer <= 0) {
+      enemy.retargetTimer = 2000 + Math.random() * 1000;
+      const currentDist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+      const nearest = this.findPlayerInRange(enemy, def.aggroRange, state, mapData);
+      if (nearest && nearest.id !== enemy.targetPlayerId) {
+        const nearestDist = distanceBetween(enemy.x, enemy.y, nearest.x, nearest.y);
+        if (nearestDist < currentDist * 0.5) {
+          enemy.targetPlayerId = nearest.id;
+        }
+      }
+    }
+
     // Check leash range
     const distFromSpawn = distanceBetween(
       enemy.x,
@@ -170,7 +193,23 @@ export class EnemyAI {
     // Get effective def (boss phase overrides)
     const effectiveDef = this.getBossOverrideDef(enemy, def);
 
-    // Move: Molten Wyrm orbits in a small circle; others chase target
+    // Movement dispatch
+    this.updateAggroMovement(enemy, effectiveDef, target, dt, mapData);
+
+    // Shooting
+    this.updateAggroShooting(enemy, effectiveDef, target, state, shootingSystem);
+  }
+
+  // --- Movement pattern dispatch ---
+
+  private updateAggroMovement(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    // Boss-specific movement overrides
     if (enemy.enemyType === EnemyType.MoltenWyrm && enemy.isBoss) {
       const orbitRadius = 40;
       const orbitSpeed = 0.8;
@@ -181,22 +220,236 @@ export class EnemyAI {
       enemy.x = enemy.spawnX + Math.cos(enemy.bossOrbitAngle) * orbitRadius;
       enemy.y = enemy.spawnY + Math.sin(enemy.bossOrbitAngle) * orbitRadius;
       this.clampToZone(enemy, def, mapData);
-    } else {
-      const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
-      if (distToTarget > effectiveDef.aggroRange * 0.5) {
-        const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
-        enemy.x += Math.cos(angle) * effectiveDef.speed * dt;
-        enemy.y += Math.sin(angle) * effectiveDef.speed * dt;
-        this.clampToZone(enemy, def, mapData);
-      }
+      return;
     }
 
-    // Shoot
-    const now = Date.now();
-    if (now - enemy.lastShootTime >= effectiveDef.shootCooldown) {
-      enemy.lastShootTime = now;
-      shootingSystem.executePattern(enemy, target, effectiveDef, state);
+    const pattern = def.movementPattern ?? MovementPatternType.WanderingSprayer;
+
+    switch (pattern) {
+      case MovementPatternType.RingPulser:
+        this.moveRingPulser(enemy, def, mapData);
+        break;
+      case MovementPatternType.Orbiter:
+        this.moveOrbiter(enemy, def, dt, mapData);
+        break;
+      case MovementPatternType.ChargerRetreater:
+        this.moveChargerRetreater(enemy, def, target, dt, mapData);
+        break;
+      case MovementPatternType.SpiralSpinner:
+        this.moveSpiralSpinner(enemy, def, dt, mapData);
+        break;
+      case MovementPatternType.Shotgunner:
+        this.moveShotgunner(enemy, def, target, dt, mapData);
+        break;
+      case MovementPatternType.BurstMage:
+        this.moveBurstMage(enemy, def, target, dt, mapData);
+        break;
+      default:
+        this.moveWanderingSprayer(enemy, def, target, dt, mapData);
+        break;
     }
+  }
+
+  private updateAggroShooting(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    state: GameState,
+    shootingSystem: ShootingPatternSystem
+  ): void {
+    // ChargerRetreater only shoots at end of charge (phase transition handles lastShootTime reset)
+    if (
+      def.movementPattern === MovementPatternType.ChargerRetreater &&
+      enemy.movementPhase === 2 &&
+      enemy.movementPhaseTimer > 1900
+    ) {
+      // Just transitioned to retreat — fire the fan
+      shootingSystem.executePattern(enemy, target, def, state);
+      return;
+    }
+    if (
+      def.movementPattern === MovementPatternType.ChargerRetreater &&
+      enemy.movementPhase !== 0
+    ) {
+      // Don't shoot during charge or retreat phases
+      return;
+    }
+
+    const now = Date.now();
+    if (now - enemy.lastShootTime >= def.shootCooldown) {
+      enemy.lastShootTime = now;
+      shootingSystem.executePattern(enemy, target, def, state);
+    }
+  }
+
+  // --- Movement pattern implementations ---
+
+  /** WanderingSprayer: chase target until within 50% aggro range, then stop. Default behavior. */
+  private moveWanderingSprayer(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    if (distToTarget > def.aggroRange * 0.5) {
+      const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+      enemy.x += Math.cos(angle) * def.speed * dt;
+      enemy.y += Math.sin(angle) * def.speed * dt;
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** RingPulser: completely stationary. Shooting pattern handles the ring bursts. */
+  private moveRingPulser(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    mapData?: DungeonMapData
+  ): void {
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** Orbiter: circles a point at ~3-tile radius, fires from shifting angles. */
+  private moveOrbiter(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const angularSpeed = def.speed / ORBIT_RADIUS; // radians/sec
+    enemy.orbitAngle += angularSpeed * dt;
+    if (enemy.orbitAngle > Math.PI * 2) enemy.orbitAngle -= Math.PI * 2;
+    enemy.x = enemy.orbitCenterX + Math.cos(enemy.orbitAngle) * ORBIT_RADIUS;
+    enemy.y = enemy.orbitCenterY + Math.sin(enemy.orbitAngle) * ORBIT_RADIUS;
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** ChargerRetreater: 3-phase state machine — approach, charge, retreat. */
+  private moveChargerRetreater(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    enemy.movementPhaseTimer -= dt * 1000;
+    const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+
+    switch (enemy.movementPhase) {
+      case 0: // Approach
+        if (dist > 200) {
+          enemy.x += Math.cos(angle) * def.speed * 0.5 * dt;
+          enemy.y += Math.sin(angle) * def.speed * 0.5 * dt;
+        }
+        if (dist <= 200 || enemy.movementPhaseTimer <= 0) {
+          enemy.movementPhase = 1;
+          enemy.movementPhaseTimer = 1500;
+        }
+        break;
+      case 1: // Charge
+        enemy.x += Math.cos(angle) * def.speed * 2.0 * dt;
+        enemy.y += Math.sin(angle) * def.speed * 2.0 * dt;
+        if (enemy.movementPhaseTimer <= 0) {
+          enemy.movementPhase = 2;
+          enemy.movementPhaseTimer = 2000;
+          enemy.lastShootTime = 0; // Force immediate shot on transition
+        }
+        break;
+      case 2: // Retreat
+        enemy.x -= Math.cos(angle) * def.speed * 0.8 * dt;
+        enemy.y -= Math.sin(angle) * def.speed * 0.8 * dt;
+        if (enemy.movementPhaseTimer <= 0) {
+          enemy.movementPhase = 0;
+          enemy.movementPhaseTimer = 2000;
+        }
+        break;
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** SpiralSpinner: near-stationary turret, tiny drift around spawn. */
+  private moveSpiralSpinner(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const distFromSpawn = distanceBetween(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
+    if (distFromSpawn > 40) {
+      const angle = angleBetween(enemy.x, enemy.y, enemy.spawnX, enemy.spawnY);
+      enemy.x += Math.cos(angle) * def.speed * 0.1 * dt;
+      enemy.y += Math.sin(angle) * def.speed * 0.1 * dt;
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** Shotgunner: maintains 200-240px from target, strafes laterally. */
+  private moveShotgunner(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+    const idealMin = 200;
+    const idealMax = 240;
+
+    let moveAngle: number;
+    if (dist < idealMin) {
+      // Too close: retreat with perpendicular component
+      moveAngle = angle + Math.PI + (enemy.orbitAngle > Math.PI ? 0.4 : -0.4);
+    } else if (dist > idealMax) {
+      // Too far: approach
+      moveAngle = angle;
+    } else {
+      // In range: strafe perpendicular
+      moveAngle = angle + (enemy.orbitAngle > Math.PI ? Math.PI / 2 : -Math.PI / 2);
+    }
+
+    enemy.x += Math.cos(moveAngle) * def.speed * dt;
+    enemy.y += Math.sin(moveAngle) * def.speed * dt;
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  /** BurstMage: circles target at medium range, periodically reversing direction. */
+  private moveBurstMage(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+    const idealMin = 160;
+    const idealMax = 220;
+
+    // Reverse strafe direction periodically
+    enemy.teleportCooldown -= dt * 1000;
+    if (enemy.teleportCooldown <= 0) {
+      enemy.teleportCooldown = 2000 + Math.random() * 2000;
+      enemy.orbitAngle = enemy.orbitAngle > Math.PI ? 0 : Math.PI * 2; // flip strafe direction
+    }
+
+    let moveAngle: number;
+    if (dist < idealMin) {
+      // Too close: back away with strafe
+      moveAngle = angle + Math.PI + (enemy.orbitAngle > Math.PI ? 0.5 : -0.5);
+    } else if (dist > idealMax) {
+      // Too far: approach
+      moveAngle = angle;
+    } else {
+      // In range: strafe around target
+      moveAngle = angle + (enemy.orbitAngle > Math.PI ? Math.PI / 2 : -Math.PI / 2);
+    }
+
+    enemy.x += Math.cos(moveAngle) * def.speed * dt;
+    enemy.y += Math.sin(moveAngle) * def.speed * dt;
+    this.clampToZone(enemy, def, mapData);
   }
 
   private updateReturning(
@@ -223,8 +476,7 @@ export class EnemyAI {
 
     const target = this.findPlayerInRange(enemy, def.aggroRange * 0.7, state, mapData);
     if (target) {
-      enemy.aiState = EnemyAIState.Aggro;
-      enemy.targetPlayerId = target.id;
+      this.initAggro(enemy, target.id);
       return;
     }
 
@@ -232,6 +484,18 @@ export class EnemyAI {
     enemy.x += Math.cos(angle) * def.speed * dt;
     enemy.y += Math.sin(angle) * def.speed * dt;
     this.clampToZone(enemy, def, mapData);
+  }
+
+  private initAggro(enemy: Enemy, targetId: string): void {
+    enemy.aiState = EnemyAIState.Aggro;
+    enemy.targetPlayerId = targetId;
+    enemy.movementPhase = 0;
+    enemy.movementPhaseTimer = 2000;
+    enemy.orbitAngle = Math.random() * Math.PI * 2;
+    enemy.orbitCenterX = enemy.x - Math.cos(enemy.orbitAngle) * ORBIT_RADIUS;
+    enemy.orbitCenterY = enemy.y - Math.sin(enemy.orbitAngle) * ORBIT_RADIUS;
+    enemy.teleportCooldown = 3000 + Math.random() * 1000;
+    enemy.retargetTimer = 2000 + Math.random() * 1000;
   }
 
   private findPlayerInRange(
@@ -333,7 +597,7 @@ export class EnemyAI {
             ? ShootingPatternType.Spread3
             : ShootingPatternType.BurstRing8,
           shootCooldown: 1200,
-          projectileSpeed: 160,
+          projectileSpeed: 120,
           projectileRange: 280,
           speed: 55,
         };
@@ -364,7 +628,7 @@ export class EnemyAI {
           shootingPattern: pattern,
           shootCooldown: 500,
           projectileDamage: 30,
-          projectileSpeed: 140,
+          projectileSpeed: 120,
           projectileRange: 350,
           speed: 100,
         };

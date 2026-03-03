@@ -41,6 +41,36 @@ export const EnemyType = {
   FallenSeraph: 42,
   VoidWalker: 43,
   AncientTitan: 44,
+  // --- Overworld: New Enemies ---
+  // Shore (Tier 1)
+  Jellyfish: 45,
+  CoconutCrab: 46,
+  // Lowlands (Tier 2)
+  SwampToad: 47,
+  ThornBush: 48,
+  DesertScorpion: 49,
+  // Midlands (Tier 3)
+  StoneGolem: 50,
+  VenomSpitter: 51,
+  SandWraith: 52,
+  // Highlands (Tier 4)
+  IceWraith: 53,
+  ThunderHawk: 54,
+  MountainTroll: 55,
+  // Godlands (Tier 5)
+  AbyssalEye: 56,
+  ChaosSpawn: 57,
+  DoomPriest: 58,
+  // --- Overworld: Pack Enemies ---
+  // Lowlands Pack (Tier 2)
+  BriarBeast: 59, // Pack leader
+  BriarImp: 60, // Pack minion
+  // Midlands Pack (Tier 3)
+  BroodMother: 61, // Pack leader
+  Broodling: 62, // Pack minion
+  // Highlands Pack (Tier 4)
+  FrostMatriarch: 63, // Pack leader
+  FrostSprite: 64, // Pack minion
 } as const;
 export type EnemyType = (typeof EnemyType)[keyof typeof EnemyType];
 
@@ -119,6 +149,19 @@ export const ShootingPatternType = {
 } as const;
 export type ShootingPatternType =
   (typeof ShootingPatternType)[keyof typeof ShootingPatternType];
+
+// Enemy movement AI patterns (realm overworld)
+export const MovementPatternType = {
+  WanderingSprayer: 0, // Slow drift, face player on aggro, chase
+  RingPulser: 1, // Stationary, emits 360-degree rings
+  Orbiter: 2, // Circles a point at ~3-tile radius
+  ChargerRetreater: 3, // Rush 1.5s, fire fan, retreat
+  SpiralSpinner: 4, // Near-stationary turret, continuous spiral
+  Shotgunner: 5, // Maintains 5-6 tile range, kites
+  BurstMage: 6, // Teleports every 3-4s, fires burst after blink
+} as const;
+export type MovementPatternType =
+  (typeof MovementPatternType)[keyof typeof MovementPatternType];
 
 export const EntityType = {
   Player: 0,

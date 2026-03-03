@@ -29,6 +29,7 @@ export interface CombatEvent {
   enemyType?: number;
   enemyZone?: string;
   isBoss?: boolean;
+  enemyId?: string;
 }
 
 export class CombatSystem {
@@ -172,6 +173,7 @@ export class CombatSystem {
                 enemyType: enemy.enemyType,
                 enemyZone: enemy.zone,
                 isBoss: enemy.isBoss,
+                enemyId: enemy.id,
               });
 
               state.enemies.delete(enemy.id);
