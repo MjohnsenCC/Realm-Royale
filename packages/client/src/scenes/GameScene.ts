@@ -18,6 +18,8 @@ import {
   PORTAL_RADIUS,
   TILE_SIZE,
   PLAYER_RADIUS,
+  ROAD_SPEED_MULTIPLIER,
+  RIVER_SPEED_MULTIPLIER,
   TICK_INTERVAL,
   ServerMessage,
   ClientMessage,
@@ -44,6 +46,8 @@ import {
   loadRealmMapFromJSON,
   setRealmMap,
   getRealmMap,
+  isRoadAt,
+  isRiverAt,
   DungeonTile,
   ITEM_DEFS,
   circlesOverlap,
@@ -827,12 +831,22 @@ export class GameScene extends Phaser.Scene {
 
           const reconSpeed = (player.cachedSpeed as number) ?? 200;
           for (const input of this.pendingInputs) {
+            // Terrain speed modifiers in hostile zone
+            let inputReconSpeed = reconSpeed;
+            if (this.localZone === "hostile") {
+              if (isRoadAt(reconX, reconY)) {
+                inputReconSpeed *= ROAD_SPEED_MULTIPLIER;
+              } else if (isRiverAt(reconX, reconY)) {
+                inputReconSpeed *= RIVER_SPEED_MULTIPLIER;
+              }
+            }
+
             const result = applyMovement(
               reconX,
               reconY,
               input.movementX,
               input.movementY,
-              reconSpeed,
+              inputReconSpeed,
               input.dt,
               PLAYER_RADIUS,
               reconW,
@@ -1251,12 +1265,22 @@ export class GameScene extends Phaser.Scene {
       this.accumulatedDt += delta;
 
       if (mx !== 0 || my !== 0) {
+        // Terrain speed modifiers in hostile zone
+        let predSpeed = localSpeed;
+        if (this.localZone === "hostile") {
+          if (isRoadAt(localSprite.x, localSprite.y)) {
+            predSpeed *= ROAD_SPEED_MULTIPLIER;
+          } else if (isRiverAt(localSprite.x, localSprite.y)) {
+            predSpeed *= RIVER_SPEED_MULTIPLIER;
+          }
+        }
+
         const result = applyMovement(
           localSprite.x,
           localSprite.y,
           mx,
           my,
-          localSpeed,
+          predSpeed,
           delta,
           PLAYER_RADIUS,
           zoneW,

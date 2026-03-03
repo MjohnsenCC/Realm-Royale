@@ -26,6 +26,8 @@ import {
   BagRarity,
   TICK_INTERVAL,
   PLAYER_RADIUS,
+  ROAD_SPEED_MULTIPLIER,
+  RIVER_SPEED_MULTIPLIER,
   HOSTILE_CENTER_X,
   HOSTILE_CENTER_Y,
   PORTAL_X,
@@ -60,6 +62,8 @@ import {
   loadRealmMapFromJSON,
   setRealmMap,
   getRealmMap,
+  isRoadAt,
+  isRiverAt,
   isWaterTile,
   generateDungeonStats,
   makeItemId,
@@ -556,12 +560,22 @@ export class GameRoom extends Room<GameState> {
             : undefined;
 
         for (const input of player.pendingInputs) {
+          // Terrain speed modifiers in hostile zone
+          let inputSpeed = effectiveSpeed;
+          if (player.zone === "hostile") {
+            if (isRoadAt(player.x, player.y)) {
+              inputSpeed *= ROAD_SPEED_MULTIPLIER;
+            } else if (isRiverAt(player.x, player.y)) {
+              inputSpeed *= RIVER_SPEED_MULTIPLIER;
+            }
+          }
+
           const result = applyMovement(
             player.x,
             player.y,
             input.movementX,
             input.movementY,
-            effectiveSpeed,
+            inputSpeed,
             input.dt,
             PLAYER_RADIUS,
             zoneW,
