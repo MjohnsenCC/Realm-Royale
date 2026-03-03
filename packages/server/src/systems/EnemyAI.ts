@@ -12,6 +12,8 @@ import {
   clamp,
   getZoneDimensions,
   resolveWallCollision,
+  resolveHostileCollision,
+  getRealmMap,
   isTileWalkable,
   hasLineOfSight,
   isDungeonZone,
@@ -282,9 +284,16 @@ export class EnemyAI {
     enemy.x = clamp(enemy.x, def.radius, dims.width - def.radius);
     enemy.y = clamp(enemy.y, def.radius, dims.height - def.radius);
 
-    // Apply wall collision in dungeons
+    // Apply wall collision in dungeons / nexus
     if (mapData) {
       const resolved = resolveWallCollision(enemy.x, enemy.y, def.radius, mapData);
+      enemy.x = resolved.x;
+      enemy.y = resolved.y;
+    }
+
+    // Apply water collision in hostile zone
+    if (enemy.zone === "hostile" && getRealmMap()) {
+      const resolved = resolveHostileCollision(enemy.x, enemy.y, def.radius);
       enemy.x = resolved.x;
       enemy.y = resolved.y;
     }

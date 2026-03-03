@@ -11,7 +11,8 @@
     "dev": "concurrently -n server,client -c blue,green \"npm run dev -w packages/server\" \"npm run dev -w packages/client\"",
     "build": "npm run build -w packages/shared && npm run build -w packages/client && npm run build -w packages/server",
     "build:shared": "npm run build -w packages/shared",
-    "clean": "rm -rf packages/*/dist"
+    "clean": "rm -rf packages/*/dist",
+    "generate:map": "npx tsx packages/shared/src/mapGen/generate-cli.ts"
   },
   "devDependencies": {
     "concurrently": "^9.1.0",

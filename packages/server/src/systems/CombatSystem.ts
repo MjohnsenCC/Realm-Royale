@@ -7,7 +7,9 @@ import {
   XP_SHARE_RADIUS,
   ENEMY_DEFS,
   TILE_SIZE,
-  getBiomeAtPosition,
+  getDifficultyAt,
+  isWaterTile,
+  getRealmMap,
   distanceBetween,
   circlesOverlap,
   getPlayerLevel,
@@ -87,6 +89,12 @@ export class CombatSystem {
         }
       }
 
+      // Check if projectile hit water in hostile zone
+      if (proj.zone === "hostile" && getRealmMap() && isWaterTile(proj.x, proj.y)) {
+        projectilesToRemove.push(id);
+        return;
+      }
+
       if (proj.ownerType === EntityType.Player) {
         // Player projectile → check enemy collisions using spatial grid
         const nearby = this.enemyGrid.query(proj.x, proj.y, 50);
@@ -155,7 +163,7 @@ export class CombatSystem {
               });
 
               // Report enemy kill with zone and boss info
-              const biome = getBiomeAtPosition(enemy.spawnX, enemy.spawnY);
+              const biome = getDifficultyAt(enemy.spawnX, enemy.spawnY);
               this.events.push({
                 type: "enemyKilled",
                 biome,

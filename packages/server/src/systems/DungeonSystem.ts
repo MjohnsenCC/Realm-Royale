@@ -8,7 +8,7 @@ import {
   EnemyType,
   EnemyAIState,
   PortalType,
-  BiomeType,
+  DifficultyZone,
   DUNGEON_BOSS_TYPE,
   DUNGEON_TO_ZONE,
   ZONE_TO_DUNGEON,
@@ -77,10 +77,10 @@ export class DungeonSystem {
     let chance = 0;
     let dungeonType = -1;
 
-    if (biome === BiomeType.Hellscape) {
+    if (biome === DifficultyZone.Highlands) {
       chance = INFERNAL_PORTAL_CHANCE;
       dungeonType = DungeonType.InfernalPit;
-    } else if (biome === BiomeType.Godlands) {
+    } else if (biome === DifficultyZone.Godlands) {
       chance = VOID_PORTAL_CHANCE;
       dungeonType = DungeonType.VoidSanctum;
     }

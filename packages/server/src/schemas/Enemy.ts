@@ -7,7 +7,7 @@ export class Enemy extends Schema {
   @type("number") y: number = 0;
   @type("number") hp: number = 0;
   @type("number") maxHp: number = 0;
-  @type("uint8") enemyType: number = EnemyType.Crab;
+  @type("uint8") enemyType: number = EnemyType.HermitCrab;
   @type("uint8") aiState: number = EnemyAIState.Idle;
 
   // Server-only (not synced to clients)

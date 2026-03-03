@@ -9,8 +9,10 @@ import { HUD } from "../ui/HUD";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { getUIScale } from "../ui/UIScale";
 import {
-  ARENA_WIDTH,
-  ARENA_HEIGHT,
+  HOSTILE_WIDTH,
+  HOSTILE_HEIGHT,
+  HOSTILE_TILES,
+  HOSTILE_TILE_SIZE,
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
@@ -26,19 +28,22 @@ import {
   ItemCategory,
   WeaponSubtype,
   applyMovement,
-  getBiomeAtPosition,
   getZoneDimensions,
   isDungeonZone,
   computePlayerStats,
   getItemSubtype,
-  BIOME_VISUALS,
   DUNGEON_VISUALS,
+  REALM_BIOME_VISUALS,
   ZONE_TO_DUNGEON,
   DUNGEON_PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   generateDungeonMap,
   generateNexusMap,
   resolveWallCollision,
+  resolveHostileCollision,
+  loadRealmMapFromJSON,
+  setRealmMap,
+  getRealmMap,
   DungeonTile,
   ITEM_DEFS,
   circlesOverlap,
@@ -136,6 +141,10 @@ export class GameScene extends Phaser.Scene {
   private dungeonSeed: number = 0;
   private currentDungeonMap: DungeonMapData | null = null;
   private nexusMap: DungeonMapData = generateNexusMap();
+
+  // Hostile zone tilemap (created from realm map data on zone entry)
+  private hostileTilemap: Phaser.Tilemaps.Tilemap | null = null;
+  private hostileLayer: Phaser.Tilemaps.TilemapLayer | null = null;
 
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
@@ -264,8 +273,8 @@ export class GameScene extends Phaser.Scene {
         localSprite.setVisible(false);
       }
 
-      // Delay the visual transition until loading screen ends
-      this.time.delayedCall(2000, () => {
+      // Load realm map data for hostile zone (if not already loaded)
+      const doTransition = () => {
         this.transitionToZone(data.zone);
 
         const sprite = this.playerSprites.get(this.network.getSessionId());
@@ -274,7 +283,28 @@ export class GameScene extends Phaser.Scene {
         }
         this.hideLoadingScreen();
         this.network.sendZoneReady();
-      });
+      };
+
+      if (data.zone === "hostile" && !getRealmMap()) {
+        // Fetch realm map JSON from server assets
+        fetch("/assets/realm-map.json")
+          .then((resp) => resp.text())
+          .then((json) => {
+            const mapData = loadRealmMapFromJSON(json);
+            setRealmMap(mapData);
+            console.log(
+              `[GameScene] Loaded realm map: ${mapData.width}x${mapData.height}, seed=${mapData.seed}`
+            );
+            doTransition();
+          })
+          .catch((err) => {
+            console.error("[GameScene] Failed to load realm map:", err);
+            doTransition(); // proceed anyway with fallback rendering
+          });
+      } else {
+        // Delay the visual transition until loading screen ends
+        this.time.delayedCall(2000, doTransition);
+      }
     });
 
     // "Press E" floating prompt (hidden until near a portal)
@@ -399,6 +429,7 @@ export class GameScene extends Phaser.Scene {
     this.portalGraphics.clear();
     this.clearNexusLabels();
     this.clearDungeonPortalSprites();
+    this.destroyHostileTilemap();
     this.drawGround();
 
     if (zone === "nexus") {
@@ -408,7 +439,9 @@ export class GameScene extends Phaser.Scene {
       // Dark background so wall areas appear as dark void
       this.cameras.main.setBackgroundColor("#080808");
     } else {
-      this.cameras.main.setBackgroundColor("#1a1a2e");
+      // Hostile zone: ocean-colored background, tilemap handles land
+      this.cameras.main.setBackgroundColor("#0a1a3e");
+      this.createHostileTilemap();
     }
 
     this.rebuildDungeonPortals();
@@ -598,41 +631,99 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHostileGround(): void {
-    this.groundGraphics.clear();
+    // Hostile ground now uses a pre-built tilemap (created in createHostileTilemap)
+    // This method is called per-frame but is now a no-op since the tilemap renders itself
+  }
 
-    const cam = this.cameras.main;
-    const margin = 200;
-    const startX =
-      Math.max(0, Math.floor((cam.scrollX - margin) / TILE_SIZE)) * TILE_SIZE;
-    const startY =
-      Math.max(0, Math.floor((cam.scrollY - margin) / TILE_SIZE)) * TILE_SIZE;
-    const endX = Math.min(ARENA_WIDTH, cam.scrollX + cam.width + margin);
-    const endY = Math.min(ARENA_HEIGHT, cam.scrollY + cam.height + margin);
+  /**
+   * Create a Phaser Tilemap from the loaded realm map data.
+   * Generates a small tileset texture at runtime (one colored square per biome).
+   */
+  private createHostileTilemap(): void {
+    this.destroyHostileTilemap();
 
-    // Draw biome-colored tiles within viewport
-    for (let tx = startX; tx < endX; tx += TILE_SIZE) {
-      for (let ty = startY; ty < endY; ty += TILE_SIZE) {
-        const biome = getBiomeAtPosition(
-          tx + TILE_SIZE / 2,
-          ty + TILE_SIZE / 2
-        );
-        const visual = BIOME_VISUALS[biome];
-        if (!visual) continue;
+    const mapData = getRealmMap();
+    if (!mapData) {
+      // Fallback: draw simple colored ground if no map data
+      this.groundGraphics.fillStyle(0x1a1a2e, 1);
+      this.groundGraphics.fillRect(0, 0, HOSTILE_WIDTH, HOSTILE_HEIGHT);
+      return;
+    }
 
-        this.groundGraphics.fillStyle(visual.groundFill, 1);
-        this.groundGraphics.fillRect(tx, ty, TILE_SIZE, TILE_SIZE);
-        this.groundGraphics.lineStyle(
-          1,
-          visual.tileLineColor,
-          visual.tileLineAlpha
-        );
-        this.groundGraphics.strokeRect(tx, ty, TILE_SIZE, TILE_SIZE);
+    const ts = HOSTILE_TILE_SIZE; // 40px per tile (matches TILE_SIZE)
+    const numBiomes = 16;
+
+    // Generate tileset texture: 16 colored squares in a horizontal strip
+    const tilesetKey = "realm-biome-tileset";
+    if (!this.textures.exists(tilesetKey)) {
+      const canvas = document.createElement("canvas");
+      canvas.width = ts * numBiomes;
+      canvas.height = ts;
+      const ctx = canvas.getContext("2d")!;
+      for (let i = 0; i < numBiomes; i++) {
+        const visual = REALM_BIOME_VISUALS[i];
+        if (visual) {
+          const hex = visual.groundFill.toString(16).padStart(6, "0");
+          ctx.fillStyle = `#${hex}`;
+        } else {
+          ctx.fillStyle = "#ff00ff"; // debug magenta
+        }
+        ctx.fillRect(i * ts, 0, ts, ts);
+
+        // Grid line border (matches nexus/dungeon tile style)
+        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
+        ctx.lineWidth = 1;
+        ctx.strokeRect(i * ts + 0.5, 0.5, ts - 1, ts - 1);
+      }
+      this.textures.addCanvas(tilesetKey, canvas);
+    }
+
+    // Convert biome array to 2D tile data array
+    const tileData: number[][] = [];
+    for (let y = 0; y < mapData.height; y++) {
+      const row: number[] = [];
+      for (let x = 0; x < mapData.width; x++) {
+        row.push(mapData.biomes[y * mapData.width + x]);
+      }
+      tileData.push(row);
+    }
+
+    // Create Phaser tilemap
+    const map = this.make.tilemap({
+      data: tileData,
+      tileWidth: ts,
+      tileHeight: ts,
+    });
+
+    const tileset = map.addTilesetImage(
+      "biomes",
+      tilesetKey,
+      ts,
+      ts,
+      0,
+      0
+    );
+
+    if (tileset) {
+      const layer = map.createLayer(0, tileset, 0, 0);
+      if (layer) {
+        layer.setDepth(-1); // behind all game objects
+        this.hostileLayer = layer;
       }
     }
 
-    // Arena border
-    this.groundGraphics.lineStyle(3, 0xe94560, 0.6);
-    this.groundGraphics.strokeRect(0, 0, ARENA_WIDTH, ARENA_HEIGHT);
+    this.hostileTilemap = map;
+  }
+
+  private destroyHostileTilemap(): void {
+    if (this.hostileLayer) {
+      this.hostileLayer.destroy();
+      this.hostileLayer = null;
+    }
+    if (this.hostileTilemap) {
+      this.hostileTilemap.destroy();
+      this.hostileTilemap = null;
+    }
   }
 
   private drawPortal(): void {
@@ -729,11 +820,17 @@ export class GameScene extends Phaser.Scene {
             );
             reconX = result.x;
             reconY = result.y;
-            // Wall collision in dungeons
+            // Wall collision in dungeons / nexus
             if (this.currentDungeonMap) {
               const wallResult = resolveWallCollision(reconX, reconY, PLAYER_RADIUS, this.currentDungeonMap);
               reconX = wallResult.x;
               reconY = wallResult.y;
+            }
+            // Water collision in hostile zone
+            if (this.localZone === "hostile" && getRealmMap()) {
+              const waterResult = resolveHostileCollision(reconX, reconY, PLAYER_RADIUS);
+              reconX = waterResult.x;
+              reconY = waterResult.y;
             }
           }
 
@@ -1147,11 +1244,17 @@ export class GameScene extends Phaser.Scene {
         );
         let predX = result.x;
         let predY = result.y;
-        // Wall collision in dungeons
+        // Wall collision in dungeons / nexus
         if (this.currentDungeonMap) {
           const wallResult = resolveWallCollision(predX, predY, PLAYER_RADIUS, this.currentDungeonMap);
           predX = wallResult.x;
           predY = wallResult.y;
+        }
+        // Water collision in hostile zone
+        if (this.localZone === "hostile" && getRealmMap()) {
+          const waterResult = resolveHostileCollision(predX, predY, PLAYER_RADIUS);
+          predX = waterResult.x;
+          predY = waterResult.y;
         }
         localSprite.setLocalPosition(predX, predY);
       }

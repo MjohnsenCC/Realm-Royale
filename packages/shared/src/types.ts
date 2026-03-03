@@ -8,51 +8,90 @@ export interface PlayerInput {
   dt: number; // accumulated delta time (ms) the client predicted with
 }
 
-// 15 overworld enemy types + 9 dungeon enemy types
 export const EnemyType = {
-  // Shoreline (Tier 1)
-  Crab: 0,
-  Jellyfish: 1,
-  Sandworm: 2,
-  // Meadow (Tier 2)
-  Goblin: 3,
-  Wasp: 4,
-  Mushroom: 5,
-  // Forest (Tier 3)
-  Treant: 6,
-  DarkElf: 7,
-  Spider: 8,
-  // Hellscape (Tier 4)
-  Imp: 9,
-  FireElemental: 10,
-  LavaGolem: 11,
-  // Godlands (Tier 5)
-  FallenGod: 12,
-  VoidWraith: 13,
-  Leviathan: 14,
-  // Dungeon: The Infernal Pit
+  // --- Dungeon: The Infernal Pit ---
   InfernalHound: 15,
   MagmaSerpent: 16,
   CinderWraith: 17,
   MoltenWyrm: 18, // Boss
-  // Dungeon: The Void Sanctum
+  // --- Dungeon: The Void Sanctum ---
   VoidAcolyte: 19,
   ShadowWeaver: 20,
   AbyssalSentry: 21,
   TheArchitect: 22, // Boss
   VoidMinion: 23, // Spawned add
   VoidSwitch: 24, // Destructible switch in Void Sanctum
+  // --- Overworld: Shore (Tier 1) ---
+  HermitCrab: 30,
+  Frog: 31,
+  Sandpiper: 32,
+  // --- Overworld: Lowlands (Tier 2) ---
+  Wolf: 33,
+  Rattlesnake: 34,
+  BogLurker: 35,
+  // --- Overworld: Midlands (Tier 3) ---
+  ForestGuardian: 36,
+  DustDevil: 37,
+  JungleStalker: 38,
+  // --- Overworld: Highlands (Tier 4) ---
+  FrostWarden: 39,
+  CliffDrake: 40,
+  StormElemental: 41,
+  // --- Overworld: Godlands (Tier 5) ---
+  FallenSeraph: 42,
+  VoidWalker: 43,
+  AncientTitan: 44,
 } as const;
 export type EnemyType = (typeof EnemyType)[keyof typeof EnemyType];
 
-export const BiomeType = {
-  Shoreline: 0,
-  Meadow: 1,
-  Forest: 2,
-  Hellscape: 3,
-  Godlands: 4,
+// 16-biome island map system
+export const RealmBiome = {
+  Ocean: 0,
+  ShallowWater: 1,
+  Beach: 2,
+  Marsh: 3,
+  Desert: 4,
+  DryPlains: 5,
+  Grassland: 6,
+  Forest: 7,
+  Jungle: 8,
+  Shrubland: 9,
+  Taiga: 10,
+  DesertCliffs: 11,
+  Tundra: 12,
+  Scorched: 13,
+  Snow: 14,
+  Lake: 15,
 } as const;
-export type BiomeType = (typeof BiomeType)[keyof typeof BiomeType];
+export type RealmBiome = (typeof RealmBiome)[keyof typeof RealmBiome];
+
+// Elevation-based difficulty progression (coast -> mountain peak)
+export const DifficultyZone = {
+  Shore: 0, // elevation 0.00 - 0.15
+  Lowlands: 1, // elevation 0.15 - 0.35
+  Midlands: 2, // elevation 0.35 - 0.55
+  Highlands: 3, // elevation 0.55 - 0.75
+  Godlands: 4, // elevation 0.75 - 1.00
+} as const;
+export type DifficultyZone = (typeof DifficultyZone)[keyof typeof DifficultyZone];
+
+// Map decoration types
+export const DecorationType = {
+  TreePalm: 0,
+  TreeOak: 1,
+  TreePine: 2,
+  TreeDead: 3,
+  RockSmall: 4,
+  RockLarge: 5,
+  Bush: 6,
+  Cactus: 7,
+  Flower: 8,
+  Mushroom: 9,
+  Bones: 10,
+  Ruins: 11,
+} as const;
+export type DecorationType =
+  (typeof DecorationType)[keyof typeof DecorationType];
 
 export const EnemyAIState = {
   Idle: 0,

@@ -1,115 +1,11 @@
 import {
   EnemyType,
-  BiomeType,
   DungeonType,
   PlayerZone,
   ShootingPatternType,
+  RealmBiome,
+  DifficultyZone,
 } from "./types";
-import { ARENA_WIDTH, ARENA_HEIGHT } from "./constants";
-import { distanceBetween } from "./utils";
-import { simplex2 } from "./noise";
-
-// --- Biome Anchor Points (create Shoreline zones around the map) ---
-
-export const BIOME_ANCHORS: readonly { x: number; y: number }[] = [
-  { x: 8000, y: 8000 }, // Center — primary player spawn
-  { x: 3200, y: 3800 }, // North-west
-  { x: 12800, y: 4200 }, // North-east
-  { x: 5500, y: 13000 }, // South
-];
-
-// Distance at which the furthest biome is fully reached
-const MAX_BIOME_DIST = 6000;
-
-// Guaranteed Shoreline radius around each anchor (no noise override)
-const SAFE_RADIUS = 600;
-
-export function getBiomeAtPosition(x: number, y: number): BiomeType {
-  // Find distance to the nearest anchor
-  let minDist = Infinity;
-  for (const anchor of BIOME_ANCHORS) {
-    const d = distanceBetween(x, y, anchor.x, anchor.y);
-    if (d < minDist) minDist = d;
-  }
-
-  // Guaranteed safe zone around anchors
-  if (minDist < SAFE_RADIUS) return BiomeType.Shoreline;
-
-  // Normalize distance to [0, 1]
-  const normalizedDist = Math.min(1, minDist / MAX_BIOME_DIST);
-
-  // Multi-octave noise for organic, blob-like regions
-  const n1 = simplex2(x * 0.0006, y * 0.0006); // Large blobs (~10,000px)
-  const n2 = simplex2(x * 0.002, y * 0.002) * 0.4; // Medium boundary detail
-  const noiseVal = (n1 + n2 + 1.4) / 2.8; // Normalize to [0, 1]
-
-  // Blend distance gradient with noise — distance dominates to preserve progression
-  const difficulty = normalizedDist * 0.6 + noiseVal * 0.4;
-
-  // Map difficulty to biome (even 20% bands)
-  if (difficulty < 0.2) return BiomeType.Shoreline;
-  if (difficulty < 0.4) return BiomeType.Meadow;
-  if (difficulty < 0.6) return BiomeType.Forest;
-  if (difficulty < 0.8) return BiomeType.Hellscape;
-  return BiomeType.Godlands;
-}
-
-// --- Biome Visual Config (client-side ground rendering) ---
-
-export interface BiomeVisual {
-  groundFill: number;
-  tileLineColor: number;
-  tileLineAlpha: number;
-  name: string;
-}
-
-export const BIOME_VISUALS: Record<number, BiomeVisual> = {
-  [BiomeType.Shoreline]: {
-    groundFill: 0x2a2a1e,
-    tileLineColor: 0x3a3a2e,
-    tileLineAlpha: 0.3,
-    name: "Shoreline",
-  },
-  [BiomeType.Meadow]: {
-    groundFill: 0x1a2e1a,
-    tileLineColor: 0x2a4a2a,
-    tileLineAlpha: 0.3,
-    name: "Meadow",
-  },
-  [BiomeType.Forest]: {
-    groundFill: 0x0e1e0e,
-    tileLineColor: 0x1e3a1e,
-    tileLineAlpha: 0.4,
-    name: "Forest",
-  },
-  [BiomeType.Hellscape]: {
-    groundFill: 0x2e1010,
-    tileLineColor: 0x4e1a1a,
-    tileLineAlpha: 0.35,
-    name: "Hellscape",
-  },
-  [BiomeType.Godlands]: {
-    groundFill: 0x1a0a2e,
-    tileLineColor: 0x2a1a4e,
-    tileLineAlpha: 0.4,
-    name: "Godlands",
-  },
-};
-
-// --- Biome Spawn Config ---
-
-export interface BiomeSpawnConfig {
-  maxEnemies: number;
-  respawnDelay: number; // ms
-}
-
-export const BIOME_SPAWN_CONFIG: Record<number, BiomeSpawnConfig> = {
-  [BiomeType.Shoreline]: { maxEnemies: 160, respawnDelay: 8000 },
-  [BiomeType.Meadow]: { maxEnemies: 200, respawnDelay: 7000 },
-  [BiomeType.Forest]: { maxEnemies: 180, respawnDelay: 6000 },
-  [BiomeType.Hellscape]: { maxEnemies: 140, respawnDelay: 5000 },
-  [BiomeType.Godlands]: { maxEnemies: 100, respawnDelay: 5000 },
-};
 
 // --- Enemy Definition ---
 
@@ -139,297 +35,367 @@ export interface EnemyDefinition {
   shape: EnemyShape;
   color: number;
   projectileCollisionRadius?: number;
+  difficultyZone?: number; // DifficultyZone value (realm overworld only)
+  biomeAffinity?: number[]; // RealmBiome values this enemy prefers
 }
 
-// --- All 15 Enemy Definitions ---
+// --- All Enemy Definitions (populated by realm + dungeon defs below) ---
 
-export const ENEMY_DEFS: Record<number, EnemyDefinition> = {
-  // ===== SHORELINE (Tier 1) =====
-  [EnemyType.Crab]: {
-    type: EnemyType.Crab,
-    biome: BiomeType.Shoreline,
-    name: "Crab",
-    hp: 30,
-    speed: 40,
+export const ENEMY_DEFS: Record<number, EnemyDefinition> = {};
+
+// ===== NEW REALM OVERWORLD ENEMIES (15 enemies, 3 per difficulty tier) =====
+
+export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
+  // ===== SHORE - Tier 1 (DifficultyZone.Shore) =====
+  [EnemyType.HermitCrab]: {
+    type: EnemyType.HermitCrab,
+    biome: 0, // not used for realm enemies
+    name: "Hermit Crab",
+    hp: 35,
+    speed: 35,
     radius: 14,
-    aggroRange: 207,
-    leashRange: 403,
-    shootCooldown: 2000,
+    aggroRange: 180,
+    leashRange: 350,
+    shootCooldown: 2200,
     projectileDamage: 8,
-    projectileSpeed: 200,
-    projectileRange: 350,
+    projectileSpeed: 180,
+    projectileRange: 300,
     shootingPattern: ShootingPatternType.SingleAimed,
     xpValue: 5,
     shape: "circle",
-    color: 0xcc6644,
+    color: 0xcc8866,
+    difficultyZone: DifficultyZone.Shore,
+    biomeAffinity: [RealmBiome.Beach, RealmBiome.DryPlains],
   },
-  [EnemyType.Jellyfish]: {
-    type: EnemyType.Jellyfish,
-    biome: BiomeType.Shoreline,
-    name: "Jellyfish",
+  [EnemyType.Frog]: {
+    type: EnemyType.Frog,
+    biome: 0,
+    name: "Frog",
     hp: 25,
-    speed: 50,
-    radius: 12,
-    aggroRange: 230,
-    leashRange: 345,
+    speed: 55,
+    radius: 11,
+    aggroRange: 200,
+    leashRange: 320,
     shootCooldown: 2500,
     projectileDamage: 6,
-    projectileSpeed: 150,
-    projectileRange: 300,
+    projectileSpeed: 160,
+    projectileRange: 280,
     shootingPattern: ShootingPatternType.Spread3,
     xpValue: 5,
     shape: "diamond",
-    color: 0x66aacc,
+    color: 0x44aa44,
+    difficultyZone: DifficultyZone.Shore,
+    biomeAffinity: [RealmBiome.Marsh, RealmBiome.Grassland],
   },
-  [EnemyType.Sandworm]: {
-    type: EnemyType.Sandworm,
-    biome: BiomeType.Shoreline,
-    name: "Sandworm",
-    hp: 50,
-    speed: 30,
-    radius: 16,
-    aggroRange: 173,
-    leashRange: 460,
+  [EnemyType.Sandpiper]: {
+    type: EnemyType.Sandpiper,
+    biome: 0,
+    name: "Sandpiper",
+    hp: 20,
+    speed: 70,
+    radius: 10,
+    aggroRange: 220,
+    leashRange: 380,
     shootCooldown: 1800,
-    projectileDamage: 10,
-    projectileSpeed: 250,
-    projectileRange: 350,
-    shootingPattern: ShootingPatternType.BurstRing4,
-    xpValue: 8,
+    projectileDamage: 5,
+    projectileSpeed: 220,
+    projectileRange: 320,
+    shootingPattern: ShootingPatternType.SingleAimed,
+    xpValue: 4,
     shape: "triangle",
-    color: 0xccaa44,
+    color: 0xccaa88,
+    difficultyZone: DifficultyZone.Shore,
+    biomeAffinity: [RealmBiome.Beach, RealmBiome.Marsh, RealmBiome.DryPlains],
   },
 
-  // ===== MEADOW (Tier 2) =====
-  [EnemyType.Goblin]: {
-    type: EnemyType.Goblin,
-    biome: BiomeType.Meadow,
-    name: "Goblin",
-    hp: 50,
-    speed: 70,
+  // ===== LOWLANDS - Tier 2 (DifficultyZone.Lowlands) =====
+  [EnemyType.Wolf]: {
+    type: EnemyType.Wolf,
+    biome: 0,
+    name: "Wolf",
+    hp: 60,
+    speed: 80,
     radius: 14,
-    aggroRange: 253,
-    leashRange: 460,
-    shootCooldown: 1500,
+    aggroRange: 280,
+    leashRange: 480,
+    shootCooldown: 1400,
     projectileDamage: 12,
     projectileSpeed: 280,
-    projectileRange: 400,
-    shootingPattern: ShootingPatternType.SingleAimed,
-    xpValue: 10,
-    shape: "circle",
-    color: 0x44aa44,
-  },
-  [EnemyType.Wasp]: {
-    type: EnemyType.Wasp,
-    biome: BiomeType.Meadow,
-    name: "Wasp",
-    hp: 35,
-    speed: 100,
-    radius: 10,
-    aggroRange: 288,
-    leashRange: 518,
-    shootCooldown: 1200,
-    projectileDamage: 10,
-    projectileSpeed: 320,
     projectileRange: 380,
+    shootingPattern: ShootingPatternType.SingleAimed,
+    xpValue: 12,
+    shape: "triangle",
+    color: 0x888888,
+    difficultyZone: DifficultyZone.Lowlands,
+    biomeAffinity: [RealmBiome.Grassland, RealmBiome.Forest],
+  },
+  [EnemyType.Rattlesnake]: {
+    type: EnemyType.Rattlesnake,
+    biome: 0,
+    name: "Rattlesnake",
+    hp: 45,
+    speed: 60,
+    radius: 12,
+    aggroRange: 250,
+    leashRange: 420,
+    shootCooldown: 1200,
+    projectileDamage: 14,
+    projectileSpeed: 300,
+    projectileRange: 350,
     shootingPattern: ShootingPatternType.Spread3,
     xpValue: 10,
     shape: "diamond",
-    color: 0xcccc22,
+    color: 0xaa8844,
+    difficultyZone: DifficultyZone.Lowlands,
+    biomeAffinity: [RealmBiome.Desert, RealmBiome.DryPlains, RealmBiome.Shrubland],
   },
-  [EnemyType.Mushroom]: {
-    type: EnemyType.Mushroom,
-    biome: BiomeType.Meadow,
-    name: "Mushroom",
-    hp: 80,
-    speed: 20,
+  [EnemyType.BogLurker]: {
+    type: EnemyType.BogLurker,
+    biome: 0,
+    name: "Bog Lurker",
+    hp: 90,
+    speed: 30,
     radius: 16,
-    aggroRange: 207,
-    leashRange: 345,
+    aggroRange: 220,
+    leashRange: 380,
     shootCooldown: 2000,
-    projectileDamage: 8,
+    projectileDamage: 10,
     projectileSpeed: 200,
     projectileRange: 350,
-    shootingPattern: ShootingPatternType.BurstRing8,
+    shootingPattern: ShootingPatternType.BurstRing4,
     xpValue: 15,
     shape: "hexagon",
-    color: 0x884488,
+    color: 0x446644,
+    difficultyZone: DifficultyZone.Lowlands,
+    biomeAffinity: [RealmBiome.Marsh, RealmBiome.Jungle],
   },
 
-  // ===== FOREST (Tier 3) =====
-  [EnemyType.Treant]: {
-    type: EnemyType.Treant,
-    biome: BiomeType.Forest,
-    name: "Treant",
-    hp: 150,
-    speed: 25,
+  // ===== MIDLANDS - Tier 3 (DifficultyZone.Midlands) =====
+  [EnemyType.ForestGuardian]: {
+    type: EnemyType.ForestGuardian,
+    biome: 0,
+    name: "Forest Guardian",
+    hp: 160,
+    speed: 30,
     radius: 20,
-    aggroRange: 230,
-    leashRange: 403,
-    shootCooldown: 1800,
-    projectileDamage: 15,
-    projectileSpeed: 200,
-    projectileRange: 400,
+    aggroRange: 250,
+    leashRange: 420,
+    shootCooldown: 1600,
+    projectileDamage: 16,
+    projectileSpeed: 220,
+    projectileRange: 420,
     shootingPattern: ShootingPatternType.Spread5,
-    xpValue: 25,
+    xpValue: 28,
     shape: "square",
-    color: 0x336633,
+    color: 0x2a6a2a,
+    difficultyZone: DifficultyZone.Midlands,
+    biomeAffinity: [RealmBiome.Forest, RealmBiome.Taiga],
   },
-  [EnemyType.DarkElf]: {
-    type: EnemyType.DarkElf,
-    biome: BiomeType.Forest,
-    name: "Dark Elf",
-    hp: 80,
-    speed: 80,
-    radius: 12,
-    aggroRange: 345,
-    leashRange: 575,
-    shootCooldown: 800,
-    projectileDamage: 12,
-    projectileSpeed: 350,
-    projectileRange: 450,
-    shootingPattern: ShootingPatternType.DoubleSingle,
-    xpValue: 20,
-    shape: "diamond",
-    color: 0x6644aa,
-  },
-  [EnemyType.Spider]: {
-    type: EnemyType.Spider,
-    biome: BiomeType.Forest,
-    name: "Spider",
-    hp: 60,
-    speed: 60,
+  [EnemyType.DustDevil]: {
+    type: EnemyType.DustDevil,
+    biome: 0,
+    name: "Dust Devil",
+    hp: 90,
+    speed: 90,
     radius: 14,
-    aggroRange: 288,
-    leashRange: 460,
-    shootCooldown: 1500,
-    projectileDamage: 10,
-    projectileSpeed: 250,
-    projectileRange: 380,
+    aggroRange: 300,
+    leashRange: 500,
+    shootCooldown: 1000,
+    projectileDamage: 14,
+    projectileSpeed: 320,
+    projectileRange: 400,
     shootingPattern: ShootingPatternType.Spiral3,
-    xpValue: 20,
-    shape: "hexagon",
-    color: 0x444444,
+    xpValue: 22,
+    shape: "diamond",
+    color: 0xccaa66,
+    difficultyZone: DifficultyZone.Midlands,
+    biomeAffinity: [RealmBiome.Desert, RealmBiome.Shrubland, RealmBiome.DesertCliffs],
+  },
+  [EnemyType.JungleStalker]: {
+    type: EnemyType.JungleStalker,
+    biome: 0,
+    name: "Jungle Stalker",
+    hp: 100,
+    speed: 75,
+    radius: 14,
+    aggroRange: 320,
+    leashRange: 520,
+    shootCooldown: 900,
+    projectileDamage: 13,
+    projectileSpeed: 340,
+    projectileRange: 420,
+    shootingPattern: ShootingPatternType.DoubleSingle,
+    xpValue: 25,
+    shape: "triangle",
+    color: 0x226622,
+    difficultyZone: DifficultyZone.Midlands,
+    biomeAffinity: [RealmBiome.Jungle, RealmBiome.Forest],
   },
 
-  // ===== HELLSCAPE (Tier 4) =====
-  [EnemyType.Imp]: {
-    type: EnemyType.Imp,
-    biome: BiomeType.Hellscape,
-    name: "Imp",
-    hp: 70,
-    speed: 100,
-    radius: 12,
-    aggroRange: 322,
-    leashRange: 575,
-    shootCooldown: 600,
-    projectileDamage: 15,
-    projectileSpeed: 380,
-    projectileRange: 420,
-    shootingPattern: ShootingPatternType.Spread3,
-    xpValue: 30,
-    shape: "triangle",
-    color: 0xcc4422,
-  },
-  [EnemyType.FireElemental]: {
-    type: EnemyType.FireElemental,
-    biome: BiomeType.Hellscape,
-    name: "Fire Elemental",
-    hp: 120,
-    speed: 50,
+  // ===== HIGHLANDS - Tier 4 (DifficultyZone.Highlands) =====
+  [EnemyType.FrostWarden]: {
+    type: EnemyType.FrostWarden,
+    biome: 0,
+    name: "Frost Warden",
+    hp: 130,
+    speed: 55,
     radius: 18,
-    aggroRange: 288,
-    leashRange: 460,
+    aggroRange: 300,
+    leashRange: 500,
     shootCooldown: 1200,
     projectileDamage: 18,
     projectileSpeed: 300,
-    projectileRange: 400,
-    shootingPattern: ShootingPatternType.BurstRing12,
+    projectileRange: 440,
+    shootingPattern: ShootingPatternType.BurstRing8,
     xpValue: 40,
     shape: "star",
-    color: 0xff6600,
+    color: 0x88bbdd,
+    difficultyZone: DifficultyZone.Highlands,
+    biomeAffinity: [RealmBiome.Snow, RealmBiome.Tundra],
   },
-  [EnemyType.LavaGolem]: {
-    type: EnemyType.LavaGolem,
-    biome: BiomeType.Hellscape,
-    name: "Lava Golem",
-    hp: 200,
-    speed: 30,
-    radius: 22,
-    aggroRange: 253,
-    leashRange: 437,
-    shootCooldown: 1500,
-    projectileDamage: 22,
-    projectileSpeed: 250,
+  [EnemyType.CliffDrake]: {
+    type: EnemyType.CliffDrake,
+    biome: 0,
+    name: "Cliff Drake",
+    hp: 80,
+    speed: 100,
+    radius: 14,
+    aggroRange: 340,
+    leashRange: 580,
+    shootCooldown: 700,
+    projectileDamage: 16,
+    projectileSpeed: 380,
     projectileRange: 420,
-    shootingPattern: ShootingPatternType.Spiral5,
+    shootingPattern: ShootingPatternType.Spread3,
+    xpValue: 35,
+    shape: "triangle",
+    color: 0x886644,
+    difficultyZone: DifficultyZone.Highlands,
+    biomeAffinity: [RealmBiome.DesertCliffs, RealmBiome.Scorched, RealmBiome.Taiga],
+  },
+  [EnemyType.StormElemental]: {
+    type: EnemyType.StormElemental,
+    biome: 0,
+    name: "Storm Elemental",
+    hp: 200,
+    speed: 40,
+    radius: 20,
+    aggroRange: 280,
+    leashRange: 460,
+    shootCooldown: 1400,
+    projectileDamage: 22,
+    projectileSpeed: 260,
+    projectileRange: 450,
+    shootingPattern: ShootingPatternType.BurstRing12,
     xpValue: 50,
-    shape: "square",
-    color: 0xcc2200,
+    shape: "hexagon",
+    color: 0x6688cc,
+    difficultyZone: DifficultyZone.Highlands,
+    biomeAffinity: [RealmBiome.Tundra, RealmBiome.Snow, RealmBiome.DesertCliffs],
   },
 
-  // ===== GODLANDS (Tier 5) =====
-  [EnemyType.FallenGod]: {
-    type: EnemyType.FallenGod,
-    biome: BiomeType.Godlands,
-    name: "Fallen God",
-    hp: 200,
-    speed: 60,
+  // ===== GODLANDS - Tier 5 (DifficultyZone.Godlands) =====
+  [EnemyType.FallenSeraph]: {
+    type: EnemyType.FallenSeraph,
+    biome: 0,
+    name: "Fallen Seraph",
+    hp: 220,
+    speed: 65,
     radius: 20,
-    aggroRange: 403,
-    leashRange: 633,
-    shootCooldown: 700,
-    projectileDamage: 25,
-    projectileSpeed: 350,
+    aggroRange: 400,
+    leashRange: 640,
+    shootCooldown: 650,
+    projectileDamage: 26,
+    projectileSpeed: 360,
     projectileRange: 500,
     shootingPattern: ShootingPatternType.BurstRing16,
-    xpValue: 80,
+    xpValue: 85,
     shape: "star",
-    color: 0xffcc00,
+    color: 0xffcc44,
+    difficultyZone: DifficultyZone.Godlands,
+    biomeAffinity: [RealmBiome.Snow, RealmBiome.Scorched],
   },
-  [EnemyType.VoidWraith]: {
-    type: EnemyType.VoidWraith,
-    biome: BiomeType.Godlands,
-    name: "Void Wraith",
-    hp: 120,
-    speed: 90,
+  [EnemyType.VoidWalker]: {
+    type: EnemyType.VoidWalker,
+    biome: 0,
+    name: "Void Walker",
+    hp: 140,
+    speed: 95,
     radius: 14,
-    aggroRange: 345,
-    leashRange: 575,
-    shootCooldown: 500,
-    projectileDamage: 20,
+    aggroRange: 360,
+    leashRange: 580,
+    shootCooldown: 450,
+    projectileDamage: 22,
     projectileSpeed: 400,
-    projectileRange: 450,
+    projectileRange: 460,
     shootingPattern: ShootingPatternType.Spread5,
-    xpValue: 70,
+    xpValue: 75,
     shape: "diamond",
-    color: 0x8800cc,
+    color: 0x9922cc,
+    difficultyZone: DifficultyZone.Godlands,
+    biomeAffinity: [RealmBiome.Tundra, RealmBiome.Scorched, RealmBiome.DesertCliffs],
   },
-  [EnemyType.Leviathan]: {
-    type: EnemyType.Leviathan,
-    biome: BiomeType.Godlands,
-    name: "Leviathan",
-    hp: 300,
-    speed: 35,
+  [EnemyType.AncientTitan]: {
+    type: EnemyType.AncientTitan,
+    biome: 0,
+    name: "Ancient Titan",
+    hp: 320,
+    speed: 30,
     radius: 24,
-    aggroRange: 322,
-    leashRange: 518,
-    shootCooldown: 1000,
-    projectileDamage: 30,
+    aggroRange: 320,
+    leashRange: 520,
+    shootCooldown: 900,
+    projectileDamage: 32,
     projectileSpeed: 300,
-    projectileRange: 480,
+    projectileRange: 500,
     shootingPattern: ShootingPatternType.Spiral8,
-    xpValue: 100,
-    shape: "hexagon",
-    color: 0x220066,
+    xpValue: 110,
+    shape: "square",
+    color: 0x442266,
+    difficultyZone: DifficultyZone.Godlands,
+    biomeAffinity: [RealmBiome.Snow, RealmBiome.Tundra, RealmBiome.Scorched],
   },
 };
 
-// Helper: get all enemy types belonging to a biome
-export function getEnemyTypesForBiome(biome: number): number[] {
-  return Object.values(ENEMY_DEFS)
-    .filter((def) => def.biome === biome)
+// Merge realm enemy defs into main ENEMY_DEFS
+Object.assign(ENEMY_DEFS, REALM_ENEMY_DEFS);
+
+// --- Realm Spawn Config (keyed by DifficultyZone) ---
+
+export interface RealmSpawnConfig {
+  maxEnemies: number;
+  respawnDelay: number; // ms
+}
+
+export const REALM_SPAWN_CONFIG: Record<number, RealmSpawnConfig> = {
+  [DifficultyZone.Shore]: { maxEnemies: 160, respawnDelay: 8000 },
+  [DifficultyZone.Lowlands]: { maxEnemies: 200, respawnDelay: 7000 },
+  [DifficultyZone.Midlands]: { maxEnemies: 180, respawnDelay: 6000 },
+  [DifficultyZone.Highlands]: { maxEnemies: 140, respawnDelay: 5000 },
+  [DifficultyZone.Godlands]: { maxEnemies: 100, respawnDelay: 5000 },
+};
+
+// Helper: get all realm enemy types for a difficulty zone
+export function getEnemyTypesForDifficultyZone(zone: number): number[] {
+  return Object.values(REALM_ENEMY_DEFS)
+    .filter((def) => def.difficultyZone === zone)
     .map((def) => def.type);
+}
+
+// Helper: get realm enemy types matching both zone and biome affinity
+export function getEnemyTypesForBiomeAndZone(
+  biome: number,
+  zone: number
+): number[] {
+  const matches = Object.values(REALM_ENEMY_DEFS).filter(
+    (def) =>
+      def.difficultyZone === zone &&
+      def.biomeAffinity &&
+      def.biomeAffinity.includes(biome)
+  );
+  // If no biome-specific match, fall back to all enemies in that zone
+  if (matches.length === 0) return getEnemyTypesForDifficultyZone(zone);
+  return matches.map((def) => def.type);
 }
 
 // --- Dungeon Biome Types (separate ID space from overworld) ---

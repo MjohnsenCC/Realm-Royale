@@ -26,8 +26,8 @@ import {
   BagRarity,
   TICK_INTERVAL,
   PLAYER_RADIUS,
-  ARENA_CENTER_X,
-  ARENA_CENTER_Y,
+  HOSTILE_CENTER_X,
+  HOSTILE_CENTER_Y,
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
@@ -56,11 +56,18 @@ import {
   DUNGEON_TO_ZONE,
   ZONE_TO_DUNGEON,
   resolveWallCollision,
+  resolveHostileCollision,
+  loadRealmMapFromJSON,
+  setRealmMap,
+  getRealmMap,
+  isWaterTile,
   generateDungeonStats,
   makeItemId,
   generateNexusMap,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
+import * as fs from "fs";
+import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
@@ -112,6 +119,9 @@ export class GameRoom extends Room<GameState> {
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
+
+    // Load realm map data for hostile zone
+    this.loadRealmMap();
 
     // Listen for player input messages — queue for processing in gameLoop
     this.onMessage(ClientMessage.Input, (client, input: PlayerInput) => {
@@ -166,8 +176,9 @@ export class GameRoom extends Room<GameState> {
           player.invulnerable = true;
           player.invulnerableSince = Date.now();
           player.zone = "hostile";
-          player.x = ARENA_CENTER_X + (Math.random() - 0.5) * 200;
-          player.y = ARENA_CENTER_Y + (Math.random() - 0.5) * 200;
+          const spawnPos = this.getHostileSpawnPosition();
+          player.x = spawnPos.x;
+          player.y = spawnPos.y;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: "hostile" });
           return;
@@ -457,6 +468,53 @@ export class GameRoom extends Room<GameState> {
     client.send(ServerMessage.ZoneChanged, { zone: "nexus" });
   }
 
+  private loadRealmMap(): void {
+    try {
+      // Try multiple possible paths for the realm map data
+      const candidates = [
+        path.resolve(__dirname, "../../../shared/data/realm-map.json"),
+        path.resolve(__dirname, "../../shared/data/realm-map.json"),
+        path.resolve(process.cwd(), "packages/shared/data/realm-map.json"),
+      ];
+      let loaded = false;
+      for (const filePath of candidates) {
+        if (fs.existsSync(filePath)) {
+          const json = fs.readFileSync(filePath, "utf-8");
+          const mapData = loadRealmMapFromJSON(json);
+          setRealmMap(mapData);
+          console.log(
+            `[GameRoom] Loaded realm map: ${mapData.width}x${mapData.height} tiles, seed=${mapData.seed}`
+          );
+          loaded = true;
+          break;
+        }
+      }
+      if (!loaded) {
+        console.warn(
+          "[GameRoom] No realm-map.json found. Run 'npm run generate:map' to generate one."
+        );
+      }
+    } catch (err) {
+      console.error("[GameRoom] Failed to load realm map:", err);
+    }
+  }
+
+  private getHostileSpawnPosition(): { x: number; y: number } {
+    const map = getRealmMap();
+    if (map && map.spawnPoints.length > 0) {
+      const sp = map.spawnPoints[Math.floor(Math.random() * map.spawnPoints.length)];
+      return {
+        x: sp.x + (Math.random() - 0.5) * 200,
+        y: sp.y + (Math.random() - 0.5) * 200,
+      };
+    }
+    // Fallback to legacy center
+    return {
+      x: HOSTILE_CENTER_X + (Math.random() - 0.5) * 200,
+      y: HOSTILE_CENTER_Y + (Math.random() - 0.5) * 200,
+    };
+  }
+
   private removePlayerProjectiles(playerId: string): void {
     const toRemove: string[] = [];
     this.state.projectiles.forEach((proj, id) => {
@@ -512,11 +570,18 @@ export class GameRoom extends Room<GameState> {
           player.x = result.x;
           player.y = result.y;
 
-          // Wall collision in dungeons
+          // Wall collision in dungeons / nexus
           if (dungeonMap) {
             const wallResult = resolveWallCollision(player.x, player.y, PLAYER_RADIUS, dungeonMap);
             player.x = wallResult.x;
             player.y = wallResult.y;
+          }
+
+          // Water collision in hostile zone
+          if (player.zone === "hostile" && getRealmMap()) {
+            const waterResult = resolveHostileCollision(player.x, player.y, PLAYER_RADIUS);
+            player.x = waterResult.x;
+            player.y = waterResult.y;
           }
 
           player.aimAngle = input.aimAngle;
@@ -742,8 +807,8 @@ export class GameRoom extends Room<GameState> {
               const portalY = dungeonMap ? dungeonMap.bossRoom.centerY : event.enemyY;
 
               // Find return position and zone from any player in this dungeon
-              let returnX = ARENA_CENTER_X;
-              let returnY = ARENA_CENTER_Y;
+              let returnX = HOSTILE_CENTER_X;
+              let returnY = HOSTILE_CENTER_Y;
               let returnZone = "hostile";
               this.state.players.forEach((p) => {
                 if (p.zone === zone) {

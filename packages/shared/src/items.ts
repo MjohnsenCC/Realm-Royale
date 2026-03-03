@@ -4,8 +4,8 @@ import {
   WeaponSubtype,
   AbilitySubtype,
   BagRarity,
-  BiomeType,
   DungeonType,
+  DifficultyZone,
 } from "./types";
 
 // --- Item ID Encoding: category * 100 + subtype * 10 + tier ---
@@ -344,17 +344,17 @@ export function getCategoryName(category: number): string {
   return CATEGORY_NAMES[category] ?? "Unknown";
 }
 
-// --- Drop chance per biome (unchanged) ---
+// --- Drop chance per difficulty zone ---
 
 export const BAG_DROP_CHANCES: Record<
   number,
   { green: number; red: number; black: number }
 > = {
-  [BiomeType.Shoreline]: { green: 0.15, red: 0.0, black: 0.0 },
-  [BiomeType.Meadow]: { green: 0.2, red: 0.03, black: 0.0 },
-  [BiomeType.Forest]: { green: 0.15, red: 0.08, black: 0.01 },
-  [BiomeType.Hellscape]: { green: 0.1, red: 0.12, black: 0.03 },
-  [BiomeType.Godlands]: { green: 0.05, red: 0.1, black: 0.06 },
+  [DifficultyZone.Shore]: { green: 0.15, red: 0.0, black: 0.0 },
+  [DifficultyZone.Lowlands]: { green: 0.2, red: 0.03, black: 0.0 },
+  [DifficultyZone.Midlands]: { green: 0.15, red: 0.08, black: 0.01 },
+  [DifficultyZone.Highlands]: { green: 0.1, red: 0.12, black: 0.03 },
+  [DifficultyZone.Godlands]: { green: 0.05, red: 0.1, black: 0.06 },
 };
 
 // --- Loot generation ---
@@ -378,16 +378,16 @@ export function rollBagDrop(biome: number): number {
   return -1;
 }
 
-/** Biome -> tier ranges per bag rarity */
-const BIOME_TIER_RANGES: Record<
+/** Difficulty zone -> tier ranges per bag rarity */
+const ZONE_TIER_RANGES: Record<
   number,
   { green: [number, number]; red: [number, number]; black: [number, number] }
 > = {
-  [BiomeType.Shoreline]: { green: [1, 1], red: [1, 2], black: [2, 2] },
-  [BiomeType.Meadow]: { green: [1, 2], red: [2, 3], black: [3, 3] },
-  [BiomeType.Forest]: { green: [2, 3], red: [3, 4], black: [4, 4] },
-  [BiomeType.Hellscape]: { green: [3, 4], red: [4, 5], black: [5, 5] },
-  [BiomeType.Godlands]: { green: [4, 5], red: [5, 6], black: [6, 6] },
+  [DifficultyZone.Shore]: { green: [1, 1], red: [1, 2], black: [2, 2] },
+  [DifficultyZone.Lowlands]: { green: [1, 2], red: [2, 3], black: [3, 3] },
+  [DifficultyZone.Midlands]: { green: [2, 3], red: [3, 4], black: [4, 4] },
+  [DifficultyZone.Highlands]: { green: [3, 4], red: [4, 5], black: [5, 5] },
+  [DifficultyZone.Godlands]: { green: [4, 5], red: [5, 6], black: [6, 6] },
 };
 
 /**
@@ -415,7 +415,7 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
     return [pickRandom(GENERAL_UT_ITEM_IDS)];
   }
 
-  const tierRanges = BIOME_TIER_RANGES[biome];
+  const tierRanges = ZONE_TIER_RANGES[biome];
   if (!tierRanges) return [];
 
   let tierRange: [number, number];

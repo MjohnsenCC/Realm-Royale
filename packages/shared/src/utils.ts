@@ -16,8 +16,8 @@ import {
   BASE_MANA_REGEN,
   MANA_PER_LEVEL,
   MANA_REGEN_PER_LEVEL,
-  ARENA_WIDTH,
-  ARENA_HEIGHT,
+  HOSTILE_WIDTH,
+  HOSTILE_HEIGHT,
   NEXUS_WIDTH,
   NEXUS_HEIGHT,
   DUNGEON_WIDTH,
@@ -219,7 +219,8 @@ export function getZoneDimensions(zone: string): {
       };
     }
   }
-  return { width: ARENA_WIDTH, height: ARENA_HEIGHT };
+  // Hostile zone uses new island map dimensions
+  return { width: HOSTILE_WIDTH, height: HOSTILE_HEIGHT };
 }
 
 /**

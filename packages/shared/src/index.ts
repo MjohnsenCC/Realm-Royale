@@ -7,3 +7,4 @@ export * from "./items";
 export * from "./dungeonMap";
 export * from "./dungeonModifiers";
 export * from "./nexusMap";
+export * from "./realmMap";

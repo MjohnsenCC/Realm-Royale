@@ -5,19 +5,19 @@ import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
 import { getUIScale } from "./UIScale";
 import {
-  ARENA_WIDTH,
-  ARENA_HEIGHT,
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
   MAX_PLAYERS,
   ENEMY_SYNC_RADIUS,
-  getBiomeAtPosition,
   getZoneDimensions,
   isDungeonZone,
-  BIOME_VISUALS,
   DUNGEON_VISUALS,
+  REALM_BIOME_VISUALS,
+  DIFFICULTY_ZONE_NAMES,
   ZONE_TO_DUNGEON,
   xpForLevel,
+  getRealmMap,
+  getDifficultyAt,
 } from "@rotmg-lite/shared";
 
 export class HUD {
@@ -255,11 +255,15 @@ export class HUD {
       this.zoneText.setColor(color);
       this.qHintText.setVisible(true);
     } else {
-      // Show current biome name
-      const biome = getBiomeAtPosition(localX, localY);
-      const visual = BIOME_VISUALS[biome];
-      const biomeName = visual ? visual.name : "Unknown";
-      this.zoneText.setText(biomeName);
+      // Show current difficulty zone name + biome
+      const mapData = getRealmMap();
+      if (mapData) {
+        const diffZone = getDifficultyAt(localX, localY);
+        const zoneName = DIFFICULTY_ZONE_NAMES[diffZone] ?? "Unknown";
+        this.zoneText.setText(zoneName);
+      } else {
+        this.zoneText.setText("Hostile");
+      }
       this.zoneText.setColor("#e94560");
       this.qHintText.setVisible(true);
     }
@@ -296,8 +300,9 @@ export class HUD {
 
     // Draw noise-based biome colors on minimap (hostile zone only, cached)
     if (zone === "hostile" && !this.minimapBiomeCached) {
-      this.renderMinimapBiomes(mmX, mmY);
-      this.minimapBiomeCached = true;
+      if (this.renderMinimapBiomes(mmX, mmY)) {
+        this.minimapBiomeCached = true;
+      }
     }
     // Hide biome overlay outside hostile zone
     this.minimapBiomeGraphics.setVisible(zone === "hostile");
@@ -337,20 +342,24 @@ export class HUD {
     this.minimapDots.strokeRect(vpX, vpY, vpW, vpH);
   }
 
-  private renderMinimapBiomes(mmX: number, mmY: number): void {
+  private renderMinimapBiomes(mmX: number, mmY: number): boolean {
+    const mapData = getRealmMap();
+    if (!mapData) return false;
+
     const step = 3; // Sample every 3 minimap pixels
     for (let mx = 0; mx < this.mmWidth; mx += step) {
       for (let my = 0; my < this.mmHeight; my += step) {
-        const worldX = (mx / this.mmWidth) * ARENA_WIDTH;
-        const worldY = (my / this.mmHeight) * ARENA_HEIGHT;
-        const biome = getBiomeAtPosition(worldX, worldY);
-        const visual = BIOME_VISUALS[biome];
+        const tileX = Math.floor((mx / this.mmWidth) * mapData.width);
+        const tileY = Math.floor((my / this.mmHeight) * mapData.height);
+        const biome = mapData.biomes[tileY * mapData.width + tileX];
+        const visual = REALM_BIOME_VISUALS[biome];
         if (visual) {
           this.minimapBiomeGraphics.fillStyle(visual.groundFill, 0.8);
           this.minimapBiomeGraphics.fillRect(mmX + mx, mmY + my, step, step);
         }
       }
     }
+    return true;
   }
 
   // Death screen elements

@@ -1,9 +1,12 @@
-// Arena (hostile zone — large RotMG-style overworld)
-export const ARENA_WIDTH = 16000;
-export const ARENA_HEIGHT = 16000;
-export const ARENA_CENTER_X = 8000;
-export const ARENA_CENTER_Y = 8000;
-export const TILE_SIZE = 40;
+export const TILE_SIZE = 40; // used by nexus + dungeons
+
+// Hostile zone island map
+export const HOSTILE_TILES = 800; // tile grid dimensions
+export const HOSTILE_TILE_SIZE = 40; // pixels per tile (matches TILE_SIZE)
+export const HOSTILE_WIDTH = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 32000
+export const HOSTILE_HEIGHT = HOSTILE_TILES * HOSTILE_TILE_SIZE; // 32000
+export const HOSTILE_CENTER_X = HOSTILE_WIDTH / 2; // 16000
+export const HOSTILE_CENTER_Y = HOSTILE_HEIGHT / 2; // 16000
 
 // Player
 export const PLAYER_SPEED = 200; // pixels per second
