@@ -36,6 +36,7 @@ export interface RealmMapData {
   decorations: DecorationEntry[];
   setpieces: SetpieceEntry[];
   spawnPoints: SpawnAnchor[];
+  decorationCollision: Uint8Array; // width*height, 1=collidable decoration (built at load time)
 }
 
 // --- Serialized (JSON-safe) format ---
@@ -139,6 +140,7 @@ export function serializeRealmMap(map: RealmMapData): string {
 export function loadRealmMapFromJSON(jsonStr: string): RealmMapData {
   const json: RealmMapJSON = JSON.parse(jsonStr);
   const totalTiles = json.width * json.height;
+  const decorations = json.decorations;
   return {
     version: json.version,
     seed: json.seed,
@@ -151,10 +153,38 @@ export function loadRealmMapFromJSON(jsonStr: string): RealmMapData {
     difficulty: rleDecode(base64ToUint8(json.difficultyRLE), totalTiles),
     rivers: rleDecode(base64ToUint8(json.riversRLE), totalTiles),
     roads: rleDecode(base64ToUint8(json.roadsRLE), totalTiles),
-    decorations: json.decorations,
+    decorations,
     setpieces: json.setpieces,
     spawnPoints: json.spawnPoints,
+    decorationCollision: buildDecorationCollision(decorations, json.width, json.height),
   };
+}
+
+// --- Decoration collision grid ---
+
+// Collidable decoration types: trees, large rocks, cacti, ruins
+const COLLIDABLE_DECORATIONS: ReadonlySet<number> = new Set([
+  DecorationType.TreePalm,   // 0
+  DecorationType.TreeOak,    // 1
+  DecorationType.TreePine,   // 2
+  DecorationType.TreeDead,   // 3
+  DecorationType.RockLarge,  // 5
+  DecorationType.Cactus,     // 7
+  DecorationType.Ruins,      // 11
+]);
+
+export function buildDecorationCollision(
+  decorations: DecorationEntry[],
+  width: number,
+  height: number
+): Uint8Array {
+  const grid = new Uint8Array(width * height);
+  for (const deco of decorations) {
+    if (COLLIDABLE_DECORATIONS.has(deco.type)) {
+      grid[deco.tileY * width + deco.tileX] = 1;
+    }
+  }
+  return grid;
 }
 
 // --- Runtime global map state ---
@@ -162,6 +192,10 @@ export function loadRealmMapFromJSON(jsonStr: string): RealmMapData {
 let loadedMap: RealmMapData | null = null;
 
 export function setRealmMap(data: RealmMapData): void {
+  // Build collision grid if not already present (server generates maps without it)
+  if (!data.decorationCollision) {
+    data.decorationCollision = buildDecorationCollision(data.decorations, data.width, data.height);
+  }
   loadedMap = data;
 }
 
@@ -234,6 +268,80 @@ export function isRoadAt(px: number, py: number): boolean {
   const ty = pixelToTile(py);
   if (!isInBounds(tx, ty)) return false;
   return loadedMap.roads[tileIndex(tx, ty, loadedMap.width)] > 0;
+}
+
+export function isDecorationCollisionAt(px: number, py: number): boolean {
+  if (!loadedMap || !loadedMap.decorationCollision) return false;
+  const tx = pixelToTile(px);
+  const ty = pixelToTile(py);
+  if (!isInBounds(tx, ty)) return false;
+  return loadedMap.decorationCollision[tileIndex(tx, ty, loadedMap.width)] > 0;
+}
+
+// --- Decoration collision (circle-vs-tile-AABB, same pattern as water collision) ---
+
+export function resolveDecorationCollision(
+  px: number,
+  py: number,
+  radius: number
+): { x: number; y: number } {
+  if (!loadedMap || !loadedMap.decorationCollision) return { x: px, y: py };
+
+  let resolvedX = px;
+  let resolvedY = py;
+  const ts = HOSTILE_TILE_SIZE;
+
+  // Two passes for corner resolution
+  for (let pass = 0; pass < 2; pass++) {
+    const minTX = Math.max(0, Math.floor((resolvedX - radius) / ts));
+    const maxTX = Math.min(HOSTILE_TILES - 1, Math.floor((resolvedX + radius) / ts));
+    const minTY = Math.max(0, Math.floor((resolvedY - radius) / ts));
+    const maxTY = Math.min(HOSTILE_TILES - 1, Math.floor((resolvedY + radius) / ts));
+
+    for (let ty = minTY; ty <= maxTY; ty++) {
+      for (let tx = minTX; tx <= maxTX; tx++) {
+        if (loadedMap.decorationCollision[tileIndex(tx, ty, loadedMap.width)] === 0) {
+          continue;
+        }
+
+        // Decoration tile AABB
+        const wallLeft = tx * ts;
+        const wallRight = (tx + 1) * ts;
+        const wallTop = ty * ts;
+        const wallBottom = (ty + 1) * ts;
+
+        // Find nearest point on tile AABB to circle center
+        const nearestX = Math.max(wallLeft, Math.min(resolvedX, wallRight));
+        const nearestY = Math.max(wallTop, Math.min(resolvedY, wallBottom));
+
+        const dx = resolvedX - nearestX;
+        const dy = resolvedY - nearestY;
+        const distSq = dx * dx + dy * dy;
+
+        if (distSq < radius * radius) {
+          if (distSq > 0) {
+            const dist = Math.sqrt(distSq);
+            const overlap = radius - dist;
+            resolvedX += (dx / dist) * overlap;
+            resolvedY += (dy / dist) * overlap;
+          } else {
+            // Center inside decoration tile - push to nearest edge
+            const pushLeft = resolvedX - wallLeft;
+            const pushRight = wallRight - resolvedX;
+            const pushTop = resolvedY - wallTop;
+            const pushBottom = wallBottom - resolvedY;
+            const minPush = Math.min(pushLeft, pushRight, pushTop, pushBottom);
+            if (minPush === pushLeft) resolvedX = wallLeft - radius;
+            else if (minPush === pushRight) resolvedX = wallRight + radius;
+            else if (minPush === pushTop) resolvedY = wallTop - radius;
+            else resolvedY = wallBottom + radius;
+          }
+        }
+      }
+    }
+  }
+
+  return { x: resolvedX, y: resolvedY };
 }
 
 // --- Water collision (same pattern as resolveWallCollision in dungeonMap.ts) ---

@@ -35,9 +35,9 @@ const DECORATION_TABLE: Partial<Record<number, DecorationRule[]>> = {
     { type: DecorationType.Flower, density: 0.02 },
   ],
   [RealmBiome.Forest]: [
-    { type: DecorationType.TreeOak, density: 0.12 },
-    { type: DecorationType.Bush, density: 0.05 },
-    { type: DecorationType.Mushroom, density: 0.02 },
+    { type: DecorationType.TreeOak, density: 0.084 },
+    { type: DecorationType.Bush, density: 0.035 },
+    { type: DecorationType.Mushroom, density: 0.014 },
   ],
   [RealmBiome.Jungle]: [
     { type: DecorationType.TreePalm, density: 0.15 },
@@ -72,6 +72,14 @@ const DECORATION_TABLE: Partial<Record<number, DecorationRule[]>> = {
   ],
 };
 
+// Tall tree types that occupy 2 vertical tiles (trunk + canopy above)
+const TALL_TYPES: ReadonlySet<number> = new Set([
+  DecorationType.TreePalm,
+  DecorationType.TreeOak,
+  DecorationType.TreePine,
+  DecorationType.TreeDead,
+]);
+
 export function placeDecorations(
   biomes: Uint8Array,
   rivers: Uint8Array,
@@ -81,6 +89,8 @@ export function placeDecorations(
 ): DecorationEntry[] {
   const rng = mulberry32(seed + 4);
   const decorations: DecorationEntry[] = [];
+  // Track occupied tiles so tall trees can reserve their canopy tile (tileY-1)
+  const occupied = new Set<number>();
 
   for (let y = 0; y < mapSize; y++) {
     for (let x = 0; x < mapSize; x++) {
@@ -88,6 +98,8 @@ export function placeDecorations(
 
       // Skip rivers and roads
       if (rivers[idx] > 0 || roads[idx] > 0) continue;
+      // Skip already-occupied tiles (reserved by a canopy above)
+      if (occupied.has(idx)) continue;
 
       const biome = biomes[idx];
       const rules = DECORATION_TABLE[biome];
@@ -95,6 +107,14 @@ export function placeDecorations(
 
       for (const { type, density } of rules) {
         if (rng() < density) {
+          if (TALL_TYPES.has(type)) {
+            // Tall trees need the tile above (y-1) free for their canopy
+            if (y === 0) break; // can't place canopy above top edge
+            const aboveIdx = (y - 1) * mapSize + x;
+            if (occupied.has(aboveIdx)) break; // canopy slot taken
+            occupied.add(aboveIdx);
+          }
+          occupied.add(idx);
           decorations.push({ tileX: x, tileY: y, type });
           break; // one decoration per tile
         }

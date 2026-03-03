@@ -6,6 +6,7 @@
 import { RealmBiome } from "../types";
 import { HOSTILE_TILES, HOSTILE_TILE_SIZE } from "../constants";
 import type { RealmMapData, SpawnAnchor } from "../realmMap";
+import { buildDecorationCollision } from "../realmMap";
 import type { MapConfig, Polygon } from "./types";
 import { DEFAULT_CONFIG } from "./types";
 import { generatePoints } from "./poissonDisk";
@@ -132,6 +133,7 @@ export function generateRealmMap(
     decorations,
     setpieces,
     spawnPoints,
+    decorationCollision: buildDecorationCollision(decorations, config.mapSize, config.mapSize),
   };
 }
 

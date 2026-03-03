@@ -43,6 +43,7 @@ import {
   generateNexusMap,
   resolveWallCollision,
   resolveHostileCollision,
+  resolveDecorationCollision,
   loadRealmMapFromJSON,
   setRealmMap,
   getRealmMap,
@@ -149,6 +150,10 @@ export class GameScene extends Phaser.Scene {
   // Hostile zone tilemap (created from realm map data on zone entry)
   private hostileTilemap: Phaser.Tilemaps.Tilemap | null = null;
   private hostileLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private hostileDecoBaseTilemap: Phaser.Tilemaps.Tilemap | null = null;
+  private hostileDecoBaseLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  private hostileDecoCanopyTilemap: Phaser.Tilemaps.Tilemap | null = null;
+  private hostileDecoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null = null;
 
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
@@ -737,9 +742,302 @@ export class GameScene extends Phaser.Scene {
     }
 
     this.hostileTilemap = map;
+
+    // --- Decoration tilemap layers (base + canopy) ---
+    // Tall tree types that get a 1x2 split: trunk tile + canopy tile above
+    const TALL_TYPES = new Set([0, 1, 2, 3]); // TreePalm, TreeOak, TreePine, TreeDead
+    const decoTileCount = 24; // 0-11 base, 12-23 canopy
+    const decoTilesetKey = "realm-decoration-tileset";
+    if (!this.textures.exists(decoTilesetKey)) {
+      const decoCanvas = document.createElement("canvas");
+      decoCanvas.width = ts * decoTileCount;
+      decoCanvas.height = ts;
+      const dctx = decoCanvas.getContext("2d")!;
+      dctx.clearRect(0, 0, decoCanvas.width, decoCanvas.height);
+      // Tiles 0-11: base versions (trunk for tall types, full shape for ground types)
+      for (let i = 0; i < 12; i++) {
+        this.drawDecorationTile(dctx, i, ts, false);
+      }
+      // Tiles 12-23: canopy versions (crown for tall types, empty for ground types)
+      for (let i = 0; i < 12; i++) {
+        this.drawDecorationTile(dctx, i + 12, ts, true);
+      }
+      this.textures.addCanvas(decoTilesetKey, decoCanvas);
+    }
+
+    // Build base + canopy data arrays (sparse: -1 = empty/transparent)
+    const baseData: number[][] = [];
+    const canopyData: number[][] = [];
+    for (let y = 0; y < mapData.height; y++) {
+      baseData.push(new Array(mapData.width).fill(-1));
+      canopyData.push(new Array(mapData.width).fill(-1));
+    }
+    for (const deco of mapData.decorations) {
+      baseData[deco.tileY][deco.tileX] = deco.type; // base tile index 0-11
+      if (TALL_TYPES.has(deco.type) && deco.tileY > 0) {
+        canopyData[deco.tileY - 1][deco.tileX] = deco.type + 12; // canopy tile index 12-23
+      }
+    }
+
+    // Base tilemap (trunks + ground decorations, below entities)
+    const baseMap = this.make.tilemap({
+      data: baseData,
+      tileWidth: ts,
+      tileHeight: ts,
+    });
+    const baseTileset = baseMap.addTilesetImage(
+      "decorations-base",
+      decoTilesetKey,
+      ts,
+      ts,
+      0,
+      0
+    );
+    if (baseTileset) {
+      const baseLayer = baseMap.createLayer(0, baseTileset, 0, 0);
+      if (baseLayer) {
+        baseLayer.setDepth(-0.5);
+        this.hostileDecoBaseLayer = baseLayer;
+      }
+    }
+    this.hostileDecoBaseTilemap = baseMap;
+
+    // Canopy tilemap (tree crowns, above entities)
+    const canopyMap = this.make.tilemap({
+      data: canopyData,
+      tileWidth: ts,
+      tileHeight: ts,
+    });
+    const canopyTileset = canopyMap.addTilesetImage(
+      "decorations-canopy",
+      decoTilesetKey,
+      ts,
+      ts,
+      0,
+      0
+    );
+    if (canopyTileset) {
+      const canopyLayer = canopyMap.createLayer(0, canopyTileset, 0, 0);
+      if (canopyLayer) {
+        canopyLayer.setDepth(10); // above entities (0) and loot bags (7), below HUD (100)
+        this.hostileDecoCanopyLayer = canopyLayer;
+      }
+    }
+    this.hostileDecoCanopyTilemap = canopyMap;
+  }
+
+  private drawDecorationTile(
+    ctx: CanvasRenderingContext2D,
+    type: number,
+    ts: number,
+    isCanopy: boolean
+  ): void {
+    const ox = type * ts;
+    // For canopy tiles (12-23), map back to base type (0-11)
+    const baseType = isCanopy ? type - 12 : type;
+    switch (baseType) {
+      case 0: { // TreePalm
+        if (isCanopy) {
+          // Crown only — rendered in the tile above the trunk
+          ctx.fillStyle = "#228B22";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 24, 10, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          // Trunk only — bottom of the tree
+          ctx.fillStyle = "#8B6914";
+          ctx.fillRect(ox + 17, 4, 6, 36);
+        }
+        break;
+      }
+      case 1: { // TreeOak
+        if (isCanopy) {
+          ctx.fillStyle = "#2E8B2E";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 24, 12, 0, Math.PI * 2);
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "#6B4226";
+          ctx.fillRect(ox + 17, 4, 6, 36);
+        }
+        break;
+      }
+      case 2: { // TreePine
+        if (isCanopy) {
+          ctx.fillStyle = "#1A5C1A";
+          ctx.beginPath();
+          ctx.moveTo(ox + 20, 6);
+          ctx.lineTo(ox + 8, 38);
+          ctx.lineTo(ox + 32, 38);
+          ctx.closePath();
+          ctx.fill();
+        } else {
+          ctx.fillStyle = "#5C4033";
+          ctx.fillRect(ox + 18, 4, 4, 36);
+        }
+        break;
+      }
+      case 3: { // TreeDead
+        if (isCanopy) {
+          // Bare branches in the canopy tile
+          ctx.strokeStyle = "#4A3728";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox + 20, 38);
+          ctx.lineTo(ox + 12, 20);
+          ctx.moveTo(ox + 20, 34);
+          ctx.lineTo(ox + 28, 18);
+          ctx.moveTo(ox + 12, 20);
+          ctx.lineTo(ox + 8, 12);
+          ctx.moveTo(ox + 28, 18);
+          ctx.lineTo(ox + 32, 10);
+          ctx.stroke();
+        } else {
+          // Trunk
+          ctx.fillStyle = "#4A3728";
+          ctx.fillRect(ox + 18, 0, 4, 40);
+        }
+        break;
+      }
+      case 4: { // RockSmall — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#7A7A7A";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 24, 6, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+      case 5: { // RockLarge — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#6A6A6A";
+          ctx.beginPath();
+          ctx.moveTo(ox + 14, 28);
+          ctx.lineTo(ox + 10, 18);
+          ctx.lineTo(ox + 16, 10);
+          ctx.lineTo(ox + 26, 10);
+          ctx.lineTo(ox + 30, 20);
+          ctx.lineTo(ox + 26, 28);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "#8A8A8A";
+          ctx.beginPath();
+          ctx.moveTo(ox + 16, 12);
+          ctx.lineTo(ox + 24, 12);
+          ctx.lineTo(ox + 20, 16);
+          ctx.closePath();
+          ctx.fill();
+        }
+        break;
+      }
+      case 6: { // Bush — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#3A7A2A";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 24, 8, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+      case 7: { // Cactus — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#2D7A2D";
+          ctx.fillRect(ox + 17, 10, 6, 26);
+          ctx.fillRect(ox + 11, 16, 6, 4);
+          ctx.fillRect(ox + 11, 12, 4, 8);
+          ctx.fillRect(ox + 23, 20, 6, 4);
+          ctx.fillRect(ox + 25, 16, 4, 8);
+        }
+        break;
+      }
+      case 8: { // Flower — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#4A8A3A";
+          ctx.fillRect(ox + 19, 22, 2, 10);
+          ctx.fillStyle = "#E06080";
+          for (const [cx, cy] of [[20, 18], [16, 22], [24, 22], [20, 26]]) {
+            ctx.beginPath();
+            ctx.arc(ox + cx, cy, 3, 0, Math.PI * 2);
+            ctx.fill();
+          }
+          ctx.fillStyle = "#FFDD44";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 22, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+      case 9: { // Mushroom — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#D4C4A0";
+          ctx.fillRect(ox + 18, 24, 4, 10);
+          ctx.fillStyle = "#CC4444";
+          ctx.beginPath();
+          ctx.arc(ox + 20, 24, 8, Math.PI, 0);
+          ctx.closePath();
+          ctx.fill();
+          ctx.fillStyle = "#FFFFFF";
+          ctx.beginPath();
+          ctx.arc(ox + 17, 21, 2, 0, Math.PI * 2);
+          ctx.fill();
+          ctx.beginPath();
+          ctx.arc(ox + 23, 21, 2, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+      case 10: { // Bones — ground level, no canopy
+        if (!isCanopy) {
+          ctx.strokeStyle = "#D4D0C0";
+          ctx.lineWidth = 2;
+          ctx.beginPath();
+          ctx.moveTo(ox + 12, 14);
+          ctx.lineTo(ox + 28, 28);
+          ctx.moveTo(ox + 28, 14);
+          ctx.lineTo(ox + 12, 28);
+          ctx.stroke();
+          ctx.fillStyle = "#D4D0C0";
+          for (const [cx, cy] of [[12, 14], [28, 28], [28, 14], [12, 28]]) {
+            ctx.beginPath();
+            ctx.arc(ox + cx, cy, 2, 0, Math.PI * 2);
+            ctx.fill();
+          }
+        }
+        break;
+      }
+      case 11: { // Ruins — ground level, no canopy
+        if (!isCanopy) {
+          ctx.fillStyle = "#6A6A5A";
+          ctx.fillRect(ox + 8, 20, 10, 16);
+          ctx.fillStyle = "#5A5A4A";
+          ctx.fillRect(ox + 22, 14, 10, 22);
+          ctx.fillStyle = "#7A7A6A";
+          ctx.beginPath();
+          ctx.arc(ox + 18, 30, 3, 0, Math.PI * 2);
+          ctx.fill();
+        }
+        break;
+      }
+    }
   }
 
   private destroyHostileTilemap(): void {
+    if (this.hostileDecoCanopyLayer) {
+      this.hostileDecoCanopyLayer.destroy();
+      this.hostileDecoCanopyLayer = null;
+    }
+    if (this.hostileDecoCanopyTilemap) {
+      this.hostileDecoCanopyTilemap.destroy();
+      this.hostileDecoCanopyTilemap = null;
+    }
+    if (this.hostileDecoBaseLayer) {
+      this.hostileDecoBaseLayer.destroy();
+      this.hostileDecoBaseLayer = null;
+    }
+    if (this.hostileDecoBaseTilemap) {
+      this.hostileDecoBaseTilemap.destroy();
+      this.hostileDecoBaseTilemap = null;
+    }
     if (this.hostileLayer) {
       this.hostileLayer.destroy();
       this.hostileLayer = null;
@@ -865,6 +1163,12 @@ export class GameScene extends Phaser.Scene {
               const waterResult = resolveHostileCollision(reconX, reconY, PLAYER_RADIUS);
               reconX = waterResult.x;
               reconY = waterResult.y;
+            }
+            // Decoration collision in hostile zone
+            if (this.localZone === "hostile" && getRealmMap()) {
+              const decoResult = resolveDecorationCollision(reconX, reconY, PLAYER_RADIUS);
+              reconX = decoResult.x;
+              reconY = decoResult.y;
             }
           }
 
@@ -1299,6 +1603,12 @@ export class GameScene extends Phaser.Scene {
           const waterResult = resolveHostileCollision(predX, predY, PLAYER_RADIUS);
           predX = waterResult.x;
           predY = waterResult.y;
+        }
+        // Decoration collision in hostile zone
+        if (this.localZone === "hostile" && getRealmMap()) {
+          const decoResult = resolveDecorationCollision(predX, predY, PLAYER_RADIUS);
+          predX = decoResult.x;
+          predY = decoResult.y;
         }
         localSprite.setLocalPosition(predX, predY);
       }

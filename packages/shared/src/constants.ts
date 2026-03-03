@@ -41,8 +41,8 @@ export const COOLDOWN_REDUCTION_PER_LEVEL = 1.5; // ms reduction per level
 export const MIN_SHOOT_COOLDOWN = 100; // hard floor
 export const SPEED_PER_LEVEL = 1;
 export const MAX_SPEED = 300; // hard ceiling
-export const ROAD_SPEED_MULTIPLIER = 1.2; // 20% faster on roads
-export const RIVER_SPEED_MULTIPLIER = 0.8; // 20% slower in rivers
+export const ROAD_SPEED_MULTIPLIER = 1.3; // 30% faster on roads
+export const RIVER_SPEED_MULTIPLIER = 0.5; // 50% slower in rivers
 export const HP_REGEN_PER_LEVEL = 0.1; // hp/s per level
 
 // Server

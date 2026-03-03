@@ -59,6 +59,7 @@ import {
   ZONE_TO_DUNGEON,
   resolveWallCollision,
   resolveHostileCollision,
+  resolveDecorationCollision,
   loadRealmMapFromJSON,
   setRealmMap,
   getRealmMap,
@@ -596,6 +597,13 @@ export class GameRoom extends Room<GameState> {
             const waterResult = resolveHostileCollision(player.x, player.y, PLAYER_RADIUS);
             player.x = waterResult.x;
             player.y = waterResult.y;
+          }
+
+          // Decoration collision in hostile zone (trees, large rocks, cacti, ruins)
+          if (player.zone === "hostile" && getRealmMap()) {
+            const decoResult = resolveDecorationCollision(player.x, player.y, PLAYER_RADIUS);
+            player.x = decoResult.x;
+            player.y = decoResult.y;
           }
 
           player.aimAngle = input.aimAngle;
