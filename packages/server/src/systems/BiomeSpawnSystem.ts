@@ -53,20 +53,20 @@ function getTargetDensity(zone: number, isNearSetpiece: boolean): number {
   let base: number;
   switch (zone) {
     case DifficultyZone.Shore:
-      base = 17;
-      break; // 15-20 range
+      base = 23;
+      break;
     case DifficultyZone.Lowlands:
-      base = 28;
-      break; // 25-35
+      base = 37;
+      break;
     case DifficultyZone.Midlands:
-      base = 30;
-      break; // 25-35
+      base = 40;
+      break;
     case DifficultyZone.Highlands:
-      base = 45;
-      break; // 40-55
+      base = 60;
+      break;
     case DifficultyZone.Godlands:
-      base = 48;
-      break; // 40-55
+      base = 63;
+      break;
     default:
       base = 0;
   }

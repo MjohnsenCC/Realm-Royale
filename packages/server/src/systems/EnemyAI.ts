@@ -121,10 +121,22 @@ export class EnemyAI {
     );
 
     if (distToIdleTarget < 10) {
-      enemy.idlePauseTimer = 1000 + Math.random() * 2000;
-      this.pickNewIdleTarget(enemy, mapData);
+      // Pause duration based on idle intensity
+      const intensity = def.idleIntensity ?? 0;
+      if (intensity === 2) {
+        enemy.idlePauseTimer = 300 + Math.random() * 500;
+      } else if (intensity === 1) {
+        enemy.idlePauseTimer = 500 + Math.random() * 1000;
+      } else {
+        enemy.idlePauseTimer = 1000 + Math.random() * 2000;
+      }
+      this.pickNewIdleTarget(enemy, def, mapData);
       return;
     }
+
+    // Speed multiplier based on idle intensity
+    const intensity = def.idleIntensity ?? 0;
+    const speedMult = intensity === 2 ? 0.7 : intensity === 1 ? 0.5 : 0.3;
 
     const angle = angleBetween(
       enemy.x,
@@ -132,8 +144,8 @@ export class EnemyAI {
       enemy.idleTargetX,
       enemy.idleTargetY
     );
-    enemy.x += Math.cos(angle) * def.speed * 0.3 * dt;
-    enemy.y += Math.sin(angle) * def.speed * 0.3 * dt;
+    enemy.x += Math.cos(angle) * def.speed * speedMult * dt;
+    enemy.y += Math.sin(angle) * def.speed * speedMult * dt;
     this.clampToZone(enemy, def, mapData);
   }
 
@@ -470,7 +482,7 @@ export class EnemyAI {
       enemy.aiState = EnemyAIState.Idle;
       enemy.x = enemy.spawnX;
       enemy.y = enemy.spawnY;
-      this.pickNewIdleTarget(enemy, mapData);
+      this.pickNewIdleTarget(enemy, def, mapData);
       return;
     }
 
@@ -523,11 +535,22 @@ export class EnemyAI {
     return nearest;
   }
 
-  private pickNewIdleTarget(enemy: Enemy, mapData?: DungeonMapData): void {
+  private pickNewIdleTarget(enemy: Enemy, def: EnemyDefinition, mapData?: DungeonMapData): void {
+    // Wander distance based on idle intensity
+    const intensity = def.idleIntensity ?? 0;
+    let minDist: number, rangeDist: number;
+    if (intensity === 2) {
+      minDist = 80; rangeDist = 80;   // 80-160px from spawn
+    } else if (intensity === 1) {
+      minDist = 50; rangeDist = 70;   // 50-120px from spawn
+    } else {
+      minDist = 30; rangeDist = 50;   // 30-80px from spawn (default)
+    }
+
     // Try several random positions, prefer walkable tiles in dungeons
     for (let attempt = 0; attempt < 10; attempt++) {
       const angle = Math.random() * Math.PI * 2;
-      const dist = 30 + Math.random() * 50;
+      const dist = minDist + Math.random() * rangeDist;
       const targetX = enemy.spawnX + Math.cos(angle) * dist;
       const targetY = enemy.spawnY + Math.sin(angle) * dist;
 

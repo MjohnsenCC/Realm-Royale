@@ -790,12 +790,13 @@ export class GameRoom extends Room<GameState> {
               this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, loot, "hostile");
             }
 
-            // Roll for dungeon portal spawn
+            // Roll for dungeon portal spawn (only specific Godlands enemies)
             this.dungeonSystem.trySpawnDungeonPortal(
               event.biome,
               event.enemyX,
               event.enemyY,
-              this.state
+              this.state,
+              event.enemyType
             );
           }
         } else if (isDungeonZone(zone)) {

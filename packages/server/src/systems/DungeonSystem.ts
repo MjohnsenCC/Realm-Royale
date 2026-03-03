@@ -8,13 +8,11 @@ import {
   EnemyType,
   EnemyAIState,
   PortalType,
-  DifficultyZone,
   DUNGEON_BOSS_TYPE,
   DUNGEON_TO_ZONE,
   ZONE_TO_DUNGEON,
   DUNGEON_PORTAL_LIFETIME,
-  INFERNAL_PORTAL_CHANCE,
-  VOID_PORTAL_CHANCE,
+  DUNGEON_DROP_CHANCE,
   ENEMY_DEFS,
   DUNGEON_ROOM_ENEMIES,
   INFERNAL_NORMAL_ROOM_VARIANTS,
@@ -69,23 +67,20 @@ export class DungeonSystem {
    * Returns true if a portal was spawned.
    */
   trySpawnDungeonPortal(
-    biome: number,
+    _biome: number,
     x: number,
     y: number,
-    state: GameState
+    state: GameState,
+    enemyType?: number
   ): boolean {
-    let chance = 0;
-    let dungeonType = -1;
+    // Only specific enemies with a dungeonDrop property can spawn portals
+    if (enemyType === undefined) return false;
+    const def = ENEMY_DEFS[enemyType];
+    if (!def || def.dungeonDrop === undefined) return false;
 
-    if (biome === DifficultyZone.Highlands) {
-      chance = INFERNAL_PORTAL_CHANCE;
-      dungeonType = DungeonType.InfernalPit;
-    } else if (biome === DifficultyZone.Godlands) {
-      chance = VOID_PORTAL_CHANCE;
-      dungeonType = DungeonType.VoidSanctum;
-    }
+    if (Math.random() >= DUNGEON_DROP_CHANCE) return false;
 
-    if (dungeonType < 0 || Math.random() >= chance) return false;
+    const dungeonType = def.dungeonDrop;
 
     const portal = new DungeonPortal();
     portal.id = generateId("dportal");

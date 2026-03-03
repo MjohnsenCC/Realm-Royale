@@ -163,6 +163,14 @@ export const MovementPatternType = {
 export type MovementPatternType =
   (typeof MovementPatternType)[keyof typeof MovementPatternType];
 
+// Idle movement intensity tiers (realm overworld)
+export const IdleIntensity = {
+  Low: 0, // 30% speed, 30-80px range, 1-3s pause (default)
+  Medium: 1, // 50% speed, 50-120px range, 0.5-1.5s pause
+  High: 2, // 70% speed, 80-160px range, 0.3-0.8s pause
+} as const;
+export type IdleIntensity = (typeof IdleIntensity)[keyof typeof IdleIntensity];
+
 export const EntityType = {
   Player: 0,
   Enemy: 1,
