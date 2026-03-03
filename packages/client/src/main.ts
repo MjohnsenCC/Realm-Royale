@@ -11,6 +11,7 @@ const config: Phaser.Types.Core.GameConfig = {
   parent: document.body,
   dom: { createContainer: true },
   scene: [BootScene, MenuScene, GameScene],
+  render: { roundPixels: true },
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,

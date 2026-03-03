@@ -9,6 +9,7 @@ import {
   MINIMAP_HEIGHT,
   MAX_PLAYERS,
   ENEMY_SYNC_RADIUS,
+  TILE_SIZE,
   getZoneDimensions,
   isDungeonZone,
   DUNGEON_VISUALS,
@@ -19,6 +20,8 @@ import {
   getRealmMap,
   getDifficultyAt,
   computePlayerStats,
+  generateNexusMap,
+  DungeonTile,
 } from "@rotmg-lite/shared";
 
 export class HUD {
@@ -74,7 +77,11 @@ export class HUD {
   private minimapBg: Phaser.GameObjects.Graphics;
   private minimapBiomeGraphics: Phaser.GameObjects.Graphics;
   private minimapBiomeCached: boolean = false;
+  private minimapBiomeCachedZone: string = "";
   private minimapDots: Phaser.GameObjects.Graphics;
+  private minimapZoom: number;
+  private minimapZoomInBtn!: Phaser.GameObjects.Text;
+  private minimapZoomOutBtn!: Phaser.GameObjects.Text;
 
   // Inventory & Loot Bag UI
   inventoryUI: InventoryUI;
@@ -238,6 +245,75 @@ export class HUD {
     this.minimapBiomeGraphics = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapDots = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
+    // Minimap zoom
+    const savedZoom = parseFloat(localStorage.getItem("minimapZoom") ?? "1");
+    this.minimapZoom = isFinite(savedZoom) && savedZoom >= 0.5 ? savedZoom : 1;
+
+    const mmPadInit = Math.round(16 * S);
+    const mmRight = screenW - mmPadInit;
+    const mmTop = mmPadInit;
+    const btnFontSize = `${Math.round(14 * S)}px`;
+
+    const btnPad = Math.round(3 * S);
+
+    this.minimapZoomInBtn = scene.add
+      .text(0, 0, "[+]", {
+        fontSize: btnFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setOrigin(1, 1)
+      .setScrollFactor(0)
+      .setDepth(102)
+      .setInteractive({ useHandCursor: true });
+
+    this.minimapZoomOutBtn = scene.add
+      .text(0, 0, "[-]", {
+        fontSize: btnFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setOrigin(1, 1)
+      .setScrollFactor(0)
+      .setDepth(102)
+      .setInteractive({ useHandCursor: true });
+
+    // Position inside bottom-right corner of minimap
+    const initMmX = screenW - this.mmWidth - mmPadInit;
+    const initMmY = mmPadInit;
+    this.minimapZoomOutBtn.setPosition(
+      initMmX + this.mmWidth - btnPad,
+      initMmY + this.mmHeight - btnPad
+    );
+    this.minimapZoomInBtn.setPosition(
+      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * S),
+      initMmY + this.mmHeight - btnPad
+    );
+
+    this.minimapZoomInBtn.on("pointerover", () =>
+      this.minimapZoomInBtn.setColor("#44ffaa")
+    );
+    this.minimapZoomInBtn.on("pointerout", () =>
+      this.minimapZoomInBtn.setColor("#aaaaaa")
+    );
+    this.minimapZoomInBtn.on("pointerdown", () => {
+      this.minimapZoom = Math.min(this.minimapZoom * 2, 16);
+      this.invalidateMinimapCache();
+      localStorage.setItem("minimapZoom", String(this.minimapZoom));
+    });
+
+    this.minimapZoomOutBtn.on("pointerover", () =>
+      this.minimapZoomOutBtn.setColor("#44ffaa")
+    );
+    this.minimapZoomOutBtn.on("pointerout", () =>
+      this.minimapZoomOutBtn.setColor("#aaaaaa")
+    );
+    this.minimapZoomOutBtn.on("pointerdown", () => {
+      this.minimapZoom = Math.max(this.minimapZoom / 2, 1);
+      this.invalidateMinimapCache();
+      localStorage.setItem("minimapZoom", String(this.minimapZoom));
+    });
+
     // --- Inventory UI ---
     this.inventoryUI = new InventoryUI(scene, {
       eqX,
@@ -394,6 +470,12 @@ export class HUD {
     this.drawMinimap(localX, localY, players, enemies, zone);
   }
 
+  private invalidateMinimapCache(): void {
+    this.minimapBiomeCached = false;
+    this.minimapBiomeCachedZone = "";
+    this.minimapBiomeGraphics.clear();
+  }
+
   private drawMinimap(
     localX: number,
     localY: number,
@@ -404,8 +486,16 @@ export class HUD {
     const zoneDims = getZoneDimensions(zone);
     const mapW = zoneDims.width;
     const mapH = zoneDims.height;
-    const scaleX = this.mmWidth / mapW;
-    const scaleY = this.mmHeight / mapH;
+
+    // Compute visible region based on zoom
+    const zoom = this.minimapZoom;
+    const visibleW = mapW / zoom;
+    const visibleH = mapH / zoom;
+    const viewX = Math.max(0, Math.min(localX - visibleW / 2, mapW - visibleW));
+    const viewY = Math.max(0, Math.min(localY - visibleH / 2, mapH - visibleH));
+
+    const scaleX = this.mmWidth / visibleW;
+    const scaleY = this.mmHeight / visibleH;
 
     // Top-right position
     const mmX = this.scene.scale.width - this.mmWidth - Math.round(16 * this.S);
@@ -418,13 +508,36 @@ export class HUD {
     this.minimapBg.lineStyle(1, 0x444466, 1);
     this.minimapBg.strokeRect(mmX, mmY, this.mmWidth, this.mmHeight);
 
-    // Draw noise-based biome colors on minimap (hostile zone only, cached)
-    if (zone === "hostile" && !this.minimapBiomeCached) {
-      if (this.renderMinimapBiomes(mmX, mmY)) {
-        this.minimapBiomeCached = true;
+    // Biome/terrain rendering (cached only at zoom 1 for the same zone)
+    const canUseCache =
+      zoom === 1 &&
+      this.minimapBiomeCached &&
+      this.minimapBiomeCachedZone === zone;
+
+    if (zone === "hostile") {
+      if (!canUseCache) {
+        this.minimapBiomeGraphics.clear();
+        if (this.renderMinimapBiomes(mmX, mmY, viewX, viewY, visibleW, visibleH)) {
+          if (zoom === 1) {
+            this.minimapBiomeCached = true;
+            this.minimapBiomeCachedZone = zone;
+          }
+        }
       }
+      this.minimapBiomeGraphics.setVisible(true);
+    } else if (zone === "nexus") {
+      if (!canUseCache) {
+        this.minimapBiomeGraphics.clear();
+        this.renderMinimapNexus(mmX, mmY, viewX, viewY, visibleW, visibleH);
+        if (zoom === 1) {
+          this.minimapBiomeCached = true;
+          this.minimapBiomeCachedZone = zone;
+        }
+      }
+      this.minimapBiomeGraphics.setVisible(true);
+    } else {
+      this.minimapBiomeGraphics.setVisible(false);
     }
-    this.minimapBiomeGraphics.setVisible(zone === "hostile");
 
     // Dots
     this.minimapDots.clear();
@@ -436,8 +549,9 @@ export class HUD {
       const ex = enemy.x - localX;
       const ey = enemy.y - localY;
       if (ex * ex + ey * ey > syncRadiusSq) return;
-      const dx = mmX + enemy.x * scaleX;
-      const dy = mmY + enemy.y * scaleY;
+      const dx = mmX + (enemy.x - viewX) * scaleX;
+      const dy = mmY + (enemy.y - viewY) * scaleY;
+      if (dx < mmX || dx > mmX + this.mmWidth || dy < mmY || dy > mmY + this.mmHeight) return;
       this.minimapDots.fillRect(dx - 1, dy - 1, 3, 3);
     });
 
@@ -446,44 +560,65 @@ export class HUD {
       const isLocal =
         Math.abs(player.x - localX) < 5 && Math.abs(player.y - localY) < 5;
       this.minimapDots.fillStyle(isLocal ? 0xffffff : 0x4488ff, 1);
-      const dx = mmX + player.x * scaleX;
-      const dy = mmY + player.y * scaleY;
+      const dx = mmX + (player.x - viewX) * scaleX;
+      const dy = mmY + (player.y - viewY) * scaleY;
+      if (dx < mmX - 3 || dx > mmX + this.mmWidth + 3 || dy < mmY - 3 || dy > mmY + this.mmHeight + 3) return;
       this.minimapDots.fillCircle(dx, dy, isLocal ? 3 : 2);
     });
 
-    // Camera viewport rectangle
-    const cam = this.scene.cameras.main;
-    const vpX = mmX + cam.scrollX * scaleX;
-    const vpY = mmY + cam.scrollY * scaleY;
-    const vpW = cam.width * scaleX;
-    const vpH = cam.height * scaleY;
-    this.minimapDots.lineStyle(1, 0xffffff, 0.4);
-    this.minimapDots.strokeRect(vpX, vpY, vpW, vpH);
+
+    // Reposition zoom buttons inside bottom-right corner of minimap
+    const btnPad = Math.round(3 * this.S);
+    this.minimapZoomOutBtn.setPosition(
+      mmX + this.mmWidth - btnPad,
+      mmY + this.mmHeight - btnPad
+    );
+    this.minimapZoomInBtn.setPosition(
+      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
+      mmY + this.mmHeight - btnPad
+    );
   }
 
-  private renderMinimapBiomes(mmX: number, mmY: number): boolean {
+  private renderMinimapBiomes(
+    mmX: number,
+    mmY: number,
+    viewX: number,
+    viewY: number,
+    viewW: number,
+    viewH: number
+  ): boolean {
     const mapData = getRealmMap();
     if (!mapData) return false;
 
     const step = 3;
-    const tilesPerPxX = mapData.width / this.mmWidth;
-    const tilesPerPxY = mapData.height / this.mmHeight;
+    const pxPerMmX = viewW / this.mmWidth; // world pixels per minimap pixel
+    const pxPerMmY = viewH / this.mmHeight;
+    const tileW = mapData.width;
+    const tileH = mapData.height;
+    const ts = TILE_SIZE;
 
     for (let mx = 0; mx < this.mmWidth; mx += step) {
       for (let my = 0; my < this.mmHeight; my += step) {
-        const tileX0 = Math.floor(mx * tilesPerPxX);
-        const tileY0 = Math.floor(my * tilesPerPxY);
-        const tileX1 = Math.min(mapData.width - 1, Math.floor((mx + step) * tilesPerPxX));
-        const tileY1 = Math.min(mapData.height - 1, Math.floor((my + step) * tilesPerPxY));
+        const worldX = viewX + mx * pxPerMmX;
+        const worldY = viewY + my * pxPerMmY;
+        const worldX1 = viewX + (mx + step) * pxPerMmX;
+        const worldY1 = viewY + (my + step) * pxPerMmY;
 
-        const centerIdx = tileY0 * mapData.width + tileX0;
+        const tileX0 = Math.floor(worldX / ts);
+        const tileY0 = Math.floor(worldY / ts);
+        const tileX1 = Math.min(tileW - 1, Math.floor(worldX1 / ts));
+        const tileY1 = Math.min(tileH - 1, Math.floor(worldY1 / ts));
+
+        if (tileX0 < 0 || tileY0 < 0 || tileX0 >= tileW || tileY0 >= tileH) continue;
+
+        const centerIdx = tileY0 * tileW + tileX0;
         const biome = mapData.biomes[centerIdx];
 
         let hasRoad = false;
         let hasRiver = false;
         for (let ty = tileY0; ty <= tileY1; ty++) {
           for (let tx = tileX0; tx <= tileX1; tx++) {
-            const idx = ty * mapData.width + tx;
+            const idx = ty * tileW + tx;
             if (mapData.roads[idx] > 0) { hasRoad = true; break; }
             if (mapData.rivers[idx] > 0) hasRiver = true;
           }
@@ -507,6 +642,42 @@ export class HUD {
       }
     }
     return true;
+  }
+
+  private renderMinimapNexus(
+    mmX: number,
+    mmY: number,
+    viewX: number,
+    viewY: number,
+    viewW: number,
+    viewH: number
+  ): void {
+    const mapData = generateNexusMap();
+    const { tiles, width, height } = mapData;
+    const ts = TILE_SIZE;
+    const scaleX = this.mmWidth / viewW;
+    const scaleY = this.mmHeight / viewH;
+
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
+
+        const worldX = tx * ts;
+        const worldY = ty * ts;
+
+        // Skip tiles outside visible region
+        if (worldX + ts < viewX || worldX > viewX + viewW) continue;
+        if (worldY + ts < viewY || worldY > viewY + viewH) continue;
+
+        const sx = mmX + (worldX - viewX) * scaleX;
+        const sy = mmY + (worldY - viewY) * scaleY;
+        const sw = ts * scaleX;
+        const sh = ts * scaleY;
+
+        this.minimapBiomeGraphics.fillStyle(0x2a4a2a, 0.9);
+        this.minimapBiomeGraphics.fillRect(sx, sy, Math.ceil(sw), Math.ceil(sh));
+      }
+    }
   }
 
   /** Returns true if coordinates are over the unified HUD panel or loot bag */

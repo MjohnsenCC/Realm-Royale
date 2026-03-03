@@ -147,13 +147,35 @@ export class GameScene extends Phaser.Scene {
   private currentDungeonMap: DungeonMapData | null = null;
   private nexusMap: DungeonMapData = generateNexusMap();
 
-  // Hostile zone tilemap (created from realm map data on zone entry)
-  private hostileTilemap: Phaser.Tilemaps.Tilemap | null = null;
-  private hostileLayer: Phaser.Tilemaps.TilemapLayer | null = null;
-  private hostileDecoBaseTilemap: Phaser.Tilemaps.Tilemap | null = null;
-  private hostileDecoBaseLayer: Phaser.Tilemaps.TilemapLayer | null = null;
-  private hostileDecoCanopyTilemap: Phaser.Tilemaps.Tilemap | null = null;
-  private hostileDecoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+  // Hostile zone chunk-based tilemap system
+  private static readonly CHUNK_SIZE = 64; // tiles per chunk axis
+  private static readonly CHUNK_LOAD_RADIUS = 2; // load (2R+1)^2 = 25 chunks max
+  private static readonly CHUNKS_PER_AXIS = Math.ceil(HOSTILE_TILES / 64); // 32
+
+  private hostileChunks: Map<
+    string,
+    {
+      cx: number;
+      cy: number;
+      biomeTilemap: Phaser.Tilemaps.Tilemap;
+      biomeLayer: Phaser.Tilemaps.TilemapLayer;
+      decoBaseTilemap: Phaser.Tilemaps.Tilemap;
+      decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+      decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
+      decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
+    }
+  > = new Map();
+
+  private hostileChunkDecoIndex: Map<
+    string,
+    {
+      base: Array<{ tileX: number; tileY: number; type: number }>;
+      canopy: Array<{ tileX: number; tileY: number; type: number }>;
+    }
+  > | null = null;
+
+  private lastChunkCX: number = -1;
+  private lastChunkCY: number = -1;
 
   // Client-side prediction & reconciliation
   private inputSequence: number = 0;
@@ -653,13 +675,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawHostileGround(): void {
-    // Hostile ground now uses a pre-built tilemap (created in createHostileTilemap)
-    // This method is called per-frame but is now a no-op since the tilemap renders itself
+    this.updateHostileChunks();
   }
 
   /**
-   * Create a Phaser Tilemap from the loaded realm map data.
-   * Generates a small tileset texture at runtime (one colored square per biome).
+   * Prepare chunk-based hostile tilemap rendering.
+   * Generates tileset textures and pre-indexes decorations by chunk.
+   * Actual tilemap creation happens per-frame in updateHostileChunks().
    */
   private createHostileTilemap(): void {
     this.destroyHostileTilemap();
@@ -673,9 +695,8 @@ export class GameScene extends Phaser.Scene {
     }
 
     const ts = HOSTILE_TILE_SIZE; // 40px per tile (matches TILE_SIZE)
-    const RIVER_TILE = 16;
-    const ROAD_TILE = 17;
     const numTiles = 18; // 16 biomes + river + road
+    const RIVER_TILE = 16;
 
     // Generate tileset texture: 18 colored squares in a horizontal strip
     const tilesetKey = "realm-biome-tileset-v2";
@@ -708,56 +729,7 @@ export class GameScene extends Phaser.Scene {
       this.textures.addCanvas(tilesetKey, canvas);
     }
 
-    // Convert biome array to 2D tile data array, overlaying rivers and roads
-    const tileData: number[][] = [];
-    for (let y = 0; y < mapData.height; y++) {
-      const row: number[] = [];
-      for (let x = 0; x < mapData.width; x++) {
-        const idx = y * mapData.width + x;
-        let tile = mapData.biomes[idx];
-
-        // Rivers on land biomes (skip water — already blue)
-        if (mapData.rivers[idx] > 0 && tile !== 0 && tile !== 1 && tile !== 15) {
-          tile = RIVER_TILE;
-        }
-        // Roads take priority over rivers
-        if (mapData.roads[idx] > 0) {
-          tile = ROAD_TILE;
-        }
-
-        row.push(tile);
-      }
-      tileData.push(row);
-    }
-
-    // Create Phaser tilemap
-    const map = this.make.tilemap({
-      data: tileData,
-      tileWidth: ts,
-      tileHeight: ts,
-    });
-
-    const tileset = map.addTilesetImage(
-      "biomes",
-      tilesetKey,
-      ts,
-      ts,
-      0,
-      0
-    );
-
-    if (tileset) {
-      const layer = map.createLayer(0, tileset, 0, 0);
-      if (layer) {
-        layer.setDepth(-1); // behind all game objects
-        this.hostileLayer = layer;
-      }
-    }
-
-    this.hostileTilemap = map;
-
-    // --- Decoration tilemap layers (base + canopy) ---
-    // Tall tree types that get a 1x2 split: trunk tile + canopy tile above
+    // --- Decoration tileset texture ---
     const TALL_TYPES = new Set([0, 1, 2, 3]); // TreePalm, TreeOak, TreePine, TreeDead
     const decoTileCount = 24; // 0-11 base, 12-23 canopy
     const decoTilesetKey = "realm-decoration-tileset";
@@ -767,76 +739,294 @@ export class GameScene extends Phaser.Scene {
       decoCanvas.height = ts;
       const dctx = decoCanvas.getContext("2d")!;
       dctx.clearRect(0, 0, decoCanvas.width, decoCanvas.height);
-      // Tiles 0-11: base versions (trunk for tall types, full shape for ground types)
       for (let i = 0; i < 12; i++) {
         this.drawDecorationTile(dctx, i, ts, false);
       }
-      // Tiles 12-23: canopy versions (crown for tall types, empty for ground types)
       for (let i = 0; i < 12; i++) {
         this.drawDecorationTile(dctx, i + 12, ts, true);
       }
       this.textures.addCanvas(decoTilesetKey, decoCanvas);
     }
 
-    // Build base + canopy data arrays (sparse: -1 = empty/transparent)
-    const baseData: number[][] = [];
-    const canopyData: number[][] = [];
-    for (let y = 0; y < mapData.height; y++) {
-      baseData.push(new Array(mapData.width).fill(-1));
-      canopyData.push(new Array(mapData.width).fill(-1));
-    }
+    // --- Pre-index decorations by chunk ---
+    const CS = GameScene.CHUNK_SIZE;
+    this.hostileChunkDecoIndex = new Map();
+
     for (const deco of mapData.decorations) {
-      baseData[deco.tileY][deco.tileX] = deco.type; // base tile index 0-11
+      const baseCX = Math.floor(deco.tileX / CS);
+      const baseCY = Math.floor(deco.tileY / CS);
+      const baseKey = `${baseCX},${baseCY}`;
+
+      let bucket = this.hostileChunkDecoIndex.get(baseKey);
+      if (!bucket) {
+        bucket = { base: [], canopy: [] };
+        this.hostileChunkDecoIndex.set(baseKey, bucket);
+      }
+      bucket.base.push(deco);
+
+      // Canopy for tall trees goes into the chunk containing (tileX, tileY - 1)
       if (TALL_TYPES.has(deco.type) && deco.tileY > 0) {
-        canopyData[deco.tileY - 1][deco.tileX] = deco.type + 12; // canopy tile index 12-23
+        const canopyTY = deco.tileY - 1;
+        const canopyCX = Math.floor(deco.tileX / CS);
+        const canopyCY = Math.floor(canopyTY / CS);
+        const canopyKey = `${canopyCX},${canopyCY}`;
+
+        let canopyBucket = this.hostileChunkDecoIndex.get(canopyKey);
+        if (!canopyBucket) {
+          canopyBucket = { base: [], canopy: [] };
+          this.hostileChunkDecoIndex.set(canopyKey, canopyBucket);
+        }
+        canopyBucket.canopy.push({
+          tileX: deco.tileX,
+          tileY: canopyTY,
+          type: deco.type + 12,
+        });
       }
     }
 
-    // Base tilemap (trunks + ground decorations, below entities)
-    const baseMap = this.make.tilemap({
+    // Reset chunk tracking — actual chunks load on the first update frame
+    this.lastChunkCX = -1;
+    this.lastChunkCY = -1;
+  }
+
+  /** Load/unload hostile tilemap chunks based on player position. */
+  private updateHostileChunks(): void {
+    const mapData = getRealmMap();
+    if (!mapData) return;
+
+    const sessionId = this.network.getSessionId();
+    const localSprite = this.playerSprites.get(sessionId);
+    if (!localSprite) return;
+
+    const CS = GameScene.CHUNK_SIZE;
+    const ts = HOSTILE_TILE_SIZE;
+    const R = GameScene.CHUNK_LOAD_RADIUS;
+    const CHUNKS = GameScene.CHUNKS_PER_AXIS;
+
+    // Player's current chunk
+    const cx = Math.floor(localSprite.displayX / (CS * ts));
+    const cy = Math.floor(localSprite.displayY / (CS * ts));
+
+    // Early exit if player hasn't changed chunks
+    if (cx === this.lastChunkCX && cy === this.lastChunkCY) return;
+    this.lastChunkCX = cx;
+    this.lastChunkCY = cy;
+
+    // Compute set of needed chunk keys
+    const needed = new Set<string>();
+    for (let dx = -R; dx <= R; dx++) {
+      for (let dy = -R; dy <= R; dy++) {
+        const ncx = cx + dx;
+        const ncy = cy + dy;
+        if (ncx >= 0 && ncx < CHUNKS && ncy >= 0 && ncy < CHUNKS) {
+          needed.add(`${ncx},${ncy}`);
+        }
+      }
+    }
+
+    // Unload chunks no longer needed
+    for (const [key, chunk] of this.hostileChunks) {
+      if (!needed.has(key)) {
+        this.destroyChunk(chunk);
+        this.hostileChunks.delete(key);
+      }
+    }
+
+    // Load new chunks
+    for (const key of needed) {
+      if (!this.hostileChunks.has(key)) {
+        const sep = key.indexOf(",");
+        const chunkCX = parseInt(key.substring(0, sep), 10);
+        const chunkCY = parseInt(key.substring(sep + 1), 10);
+        const chunk = this.createChunk(chunkCX, chunkCY, mapData);
+        if (chunk) {
+          this.hostileChunks.set(key, chunk);
+        }
+      }
+    }
+  }
+
+  /** Create the three small tilemaps for a single chunk. */
+  private createChunk(
+    cx: number,
+    cy: number,
+    mapData: NonNullable<ReturnType<typeof getRealmMap>>
+  ): {
+    cx: number;
+    cy: number;
+    biomeTilemap: Phaser.Tilemaps.Tilemap;
+    biomeLayer: Phaser.Tilemaps.TilemapLayer;
+    decoBaseTilemap: Phaser.Tilemaps.Tilemap;
+    decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+    decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
+    decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
+  } | null {
+    const CS = GameScene.CHUNK_SIZE;
+    const ts = HOSTILE_TILE_SIZE;
+    const RIVER_TILE = 16;
+    const ROAD_TILE = 17;
+
+    const startX = cx * CS;
+    const startY = cy * CS;
+    const chunkW = Math.min(CS, mapData.width - startX);
+    const chunkH = Math.min(CS, mapData.height - startY);
+    if (chunkW <= 0 || chunkH <= 0) return null;
+
+    const worldX = startX * ts;
+    const worldY = startY * ts;
+
+    // --- Biome tile data ---
+    const tileData: number[][] = [];
+    for (let y = 0; y < chunkH; y++) {
+      const row: number[] = [];
+      const mapY = startY + y;
+      for (let x = 0; x < chunkW; x++) {
+        const idx = mapY * mapData.width + (startX + x);
+        let tile = mapData.biomes[idx];
+        if (mapData.rivers[idx] > 0 && tile !== 0 && tile !== 1 && tile !== 15) {
+          tile = RIVER_TILE;
+        }
+        if (mapData.roads[idx] > 0) {
+          tile = ROAD_TILE;
+        }
+        row.push(tile);
+      }
+      tileData.push(row);
+    }
+
+    const biomeMap = this.make.tilemap({
+      data: tileData,
+      tileWidth: ts,
+      tileHeight: ts,
+    });
+    const biomeTileset = biomeMap.addTilesetImage(
+      "biomes",
+      "realm-biome-tileset-v2",
+      ts,
+      ts,
+      0,
+      0
+    );
+    if (!biomeTileset) {
+      biomeMap.destroy();
+      return null;
+    }
+    const biomeLayer = biomeMap.createLayer(0, biomeTileset, worldX, worldY);
+    if (!biomeLayer) {
+      biomeMap.destroy();
+      return null;
+    }
+    biomeLayer.setDepth(-1);
+
+    // --- Decoration data from pre-indexed buckets ---
+    const key = `${cx},${cy}`;
+    const decoEntries = this.hostileChunkDecoIndex?.get(key);
+
+    // Base decoration layer
+    const baseData: number[][] = [];
+    for (let y = 0; y < chunkH; y++) {
+      baseData.push(new Array(chunkW).fill(-1));
+    }
+    if (decoEntries) {
+      for (const d of decoEntries.base) {
+        const lx = d.tileX - startX;
+        const ly = d.tileY - startY;
+        if (lx >= 0 && lx < chunkW && ly >= 0 && ly < chunkH) {
+          baseData[ly][lx] = d.type;
+        }
+      }
+    }
+
+    const decoBaseMap = this.make.tilemap({
       data: baseData,
       tileWidth: ts,
       tileHeight: ts,
     });
-    const baseTileset = baseMap.addTilesetImage(
+    const decoBaseTileset = decoBaseMap.addTilesetImage(
       "decorations-base",
-      decoTilesetKey,
+      "realm-decoration-tileset",
       ts,
       ts,
       0,
       0
     );
-    if (baseTileset) {
-      const baseLayer = baseMap.createLayer(0, baseTileset, 0, 0);
-      if (baseLayer) {
-        baseLayer.setDepth(-0.5);
-        this.hostileDecoBaseLayer = baseLayer;
+    let decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+    if (decoBaseTileset) {
+      decoBaseLayer = decoBaseMap.createLayer(
+        0,
+        decoBaseTileset,
+        worldX,
+        worldY
+      );
+      if (decoBaseLayer) decoBaseLayer.setDepth(-0.5);
+    }
+
+    // Canopy decoration layer
+    const canopyData: number[][] = [];
+    for (let y = 0; y < chunkH; y++) {
+      canopyData.push(new Array(chunkW).fill(-1));
+    }
+    if (decoEntries) {
+      for (const d of decoEntries.canopy) {
+        const lx = d.tileX - startX;
+        const ly = d.tileY - startY;
+        if (lx >= 0 && lx < chunkW && ly >= 0 && ly < chunkH) {
+          canopyData[ly][lx] = d.type;
+        }
       }
     }
-    this.hostileDecoBaseTilemap = baseMap;
 
-    // Canopy tilemap (tree crowns, above entities)
-    const canopyMap = this.make.tilemap({
+    const decoCanopyMap = this.make.tilemap({
       data: canopyData,
       tileWidth: ts,
       tileHeight: ts,
     });
-    const canopyTileset = canopyMap.addTilesetImage(
+    const decoCanopyTileset = decoCanopyMap.addTilesetImage(
       "decorations-canopy",
-      decoTilesetKey,
+      "realm-decoration-tileset",
       ts,
       ts,
       0,
       0
     );
-    if (canopyTileset) {
-      const canopyLayer = canopyMap.createLayer(0, canopyTileset, 0, 0);
-      if (canopyLayer) {
-        canopyLayer.setDepth(10); // above entities (0) and loot bags (7), below HUD (100)
-        this.hostileDecoCanopyLayer = canopyLayer;
-      }
+    let decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+    if (decoCanopyTileset) {
+      decoCanopyLayer = decoCanopyMap.createLayer(
+        0,
+        decoCanopyTileset,
+        worldX,
+        worldY
+      );
+      if (decoCanopyLayer) decoCanopyLayer.setDepth(10);
     }
-    this.hostileDecoCanopyTilemap = canopyMap;
+
+    return {
+      cx,
+      cy,
+      biomeTilemap: biomeMap,
+      biomeLayer,
+      decoBaseTilemap: decoBaseMap,
+      decoBaseLayer,
+      decoCanopyTilemap: decoCanopyMap,
+      decoCanopyLayer,
+    };
+  }
+
+  /** Destroy all Phaser objects in a single chunk. */
+  private destroyChunk(chunk: {
+    biomeTilemap: Phaser.Tilemaps.Tilemap;
+    biomeLayer: Phaser.Tilemaps.TilemapLayer;
+    decoBaseTilemap: Phaser.Tilemaps.Tilemap;
+    decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+    decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
+    decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
+  }): void {
+    if (chunk.decoCanopyLayer) chunk.decoCanopyLayer.destroy();
+    chunk.decoCanopyTilemap.destroy();
+    if (chunk.decoBaseLayer) chunk.decoBaseLayer.destroy();
+    chunk.decoBaseTilemap.destroy();
+    chunk.biomeLayer.destroy();
+    chunk.biomeTilemap.destroy();
   }
 
   private drawDecorationTile(
@@ -1035,30 +1225,13 @@ export class GameScene extends Phaser.Scene {
   }
 
   private destroyHostileTilemap(): void {
-    if (this.hostileDecoCanopyLayer) {
-      this.hostileDecoCanopyLayer.destroy();
-      this.hostileDecoCanopyLayer = null;
+    for (const chunk of this.hostileChunks.values()) {
+      this.destroyChunk(chunk);
     }
-    if (this.hostileDecoCanopyTilemap) {
-      this.hostileDecoCanopyTilemap.destroy();
-      this.hostileDecoCanopyTilemap = null;
-    }
-    if (this.hostileDecoBaseLayer) {
-      this.hostileDecoBaseLayer.destroy();
-      this.hostileDecoBaseLayer = null;
-    }
-    if (this.hostileDecoBaseTilemap) {
-      this.hostileDecoBaseTilemap.destroy();
-      this.hostileDecoBaseTilemap = null;
-    }
-    if (this.hostileLayer) {
-      this.hostileLayer.destroy();
-      this.hostileLayer = null;
-    }
-    if (this.hostileTilemap) {
-      this.hostileTilemap.destroy();
-      this.hostileTilemap = null;
-    }
+    this.hostileChunks.clear();
+    this.hostileChunkDecoIndex = null;
+    this.lastChunkCX = -1;
+    this.lastChunkCY = -1;
   }
 
   private drawPortal(): void {
@@ -1741,12 +1914,14 @@ export class GameScene extends Phaser.Scene {
       sprite.setVisible(sprite.zone === this.localZone);
     });
 
-    // Update camera — always center on player's display position (smooth)
+    // Update camera — always center on player's display position (rounded to avoid tile seams)
     if (localSprite) {
-      this.cameras.main.scrollX =
-        localSprite.displayX - this.cameras.main.width / 2;
-      this.cameras.main.scrollY =
-        localSprite.displayY - this.cameras.main.height / 2;
+      this.cameras.main.scrollX = Math.round(
+        localSprite.displayX - this.cameras.main.width / 2
+      );
+      this.cameras.main.scrollY = Math.round(
+        localSprite.displayY - this.cameras.main.height / 2
+      );
     }
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
