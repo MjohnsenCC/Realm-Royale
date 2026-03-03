@@ -41,6 +41,8 @@ import {
   resolveWallCollision,
   DungeonTile,
   ITEM_DEFS,
+  circlesOverlap,
+  ENEMY_DEFS,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 
@@ -163,6 +165,10 @@ export class GameScene extends Phaser.Scene {
     createdAt: number;
     confirmed: boolean;
     serverProjectileId?: string;
+    collisionRadius: number;
+    damage: number;
+    piercing: boolean;
+    hitEnemies: Set<string>;
   }> = [];
   private lastLocalShootTime: number = 0;
   private lastLocalAbilityTime: number = 0;
@@ -807,9 +813,12 @@ export class GameScene extends Phaser.Scene {
     state.projectiles.onAdd((proj, id) => {
       let sprite: ProjectileSprite;
 
-      // Match server projectile to a predicted one by ownerType + angle + projType.
+      // Match server projectile to a predicted one by ownerType + angle.
       // This avoids needing to sync ownerId to all clients.
-      const ANGLE_THRESHOLD = 0.15; // ~8.6 degrees tolerance
+      // Threshold is generous (0.5 rad ≈ 29°) because the predicted projectile
+      // uses the current-frame aim angle while the server uses the aim angle
+      // from the last received input (up to 50ms stale at 20Hz tick rate).
+      const ANGLE_THRESHOLD = 0.5;
       let matchIdx = -1;
       if (
         (proj.ownerType as number) === EntityType.Player &&
@@ -817,6 +826,7 @@ export class GameScene extends Phaser.Scene {
       ) {
         for (let i = 0; i < this.predictedProjectiles.length; i++) {
           const p = this.predictedProjectiles[i];
+          if (p.serverProjectileId) continue; // already matched
           const angleDiff = Math.abs(p.angle - (proj.angle as number));
           if (angleDiff < ANGLE_THRESHOLD) {
             matchIdx = i;
@@ -1071,6 +1081,10 @@ export class GameScene extends Phaser.Scene {
                 maxRange: stats.weaponRange,
                 createdAt: now,
                 confirmed: false,
+                collisionRadius: stats.weaponProjSize,
+                damage: stats.damage,
+                piercing: false,
+                hitEnemies: new Set(),
               });
             }
           }
@@ -1104,6 +1118,10 @@ export class GameScene extends Phaser.Scene {
                 maxRange: as.range,
                 createdAt: now,
                 confirmed: false,
+                collisionRadius: as.projectileSize,
+                damage: as.damage,
+                piercing: as.piercing,
+                hitEnemies: new Set(),
               });
             }
           }
@@ -1196,11 +1214,33 @@ export class GameScene extends Phaser.Scene {
     this.enemySprites.forEach((sprite) => sprite.update(delta));
     this.projectileSprites.forEach((sprite) => sprite.update(delta));
 
-    // Update and clean up predicted projectiles (range exhaustion + safety timeout)
+    // Update and clean up predicted projectiles (range exhaustion + safety timeout + hit detection)
     const nowCleanup = performance.now();
     for (let i = this.predictedProjectiles.length - 1; i >= 0; i--) {
       const pp = this.predictedProjectiles[i];
       pp.sprite.update(delta);
+
+      // Client-side hit detection: check predicted projectile against visible enemies
+      let hitSomething = false;
+      this.enemySprites.forEach((enemy, enemyId) => {
+        if (hitSomething) return;
+        if (pp.hitEnemies.has(enemyId)) return;
+        const enemyRadius = enemy.getRadius();
+        if (circlesOverlap(pp.sprite.x, pp.sprite.y, pp.collisionRadius, enemy.x, enemy.y, enemyRadius)) {
+          enemy.showPredictedDamage(pp.damage);
+          pp.hitEnemies.add(enemyId);
+          if (!pp.piercing) {
+            hitSomething = true;
+          }
+        }
+      });
+
+      if (hitSomething) {
+        pp.sprite.destroy();
+        this.predictedProjectiles.splice(i, 1);
+        continue;
+      }
+
       const dx = pp.sprite.x - pp.startX;
       const dy = pp.sprite.y - pp.startY;
       const distSq = dx * dx + dy * dy;

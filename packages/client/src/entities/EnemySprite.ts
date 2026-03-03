@@ -22,6 +22,8 @@ export class EnemySprite {
   private radius: number;
   private damageTexts: DamageText[] = [];
   private lastHp: number;
+  private pendingPredictedDamage: number = 0;
+  private pendingPredictedDamageAge: number = 0;
 
   public x: number = 0;
   public y: number = 0;
@@ -136,6 +138,25 @@ export class EnemySprite {
     }
   }
 
+  getRadius(): number {
+    return this.radius;
+  }
+
+  showPredictedDamage(damage: number): void {
+    const startY = -this.radius - 10;
+    const text = this.scene.add.text(this.x, this.y + startY, `-${damage}`, {
+      fontFamily: "monospace",
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: "#ff0000",
+    });
+    text.setOrigin(0.5, 1);
+    text.setDepth(1000);
+    this.damageTexts.push({ text, elapsed: 0, startY });
+    this.pendingPredictedDamage += damage;
+    this.pendingPredictedDamageAge = 0;
+  }
+
   private drawHpBar(hp: number, maxHp: number): void {
     const barWidth = 28;
     const barHeight = 3;
@@ -156,17 +177,40 @@ export class EnemySprite {
     this.snapshots.push(x, y);
 
     if (hp < this.lastHp) {
-      const damage = this.lastHp - hp;
-      const startY = -this.radius - 10;
-      const text = this.scene.add.text(this.x, this.y + startY, `-${damage}`, {
-        fontFamily: "monospace",
-        fontSize: "14px",
-        fontStyle: "bold",
-        color: "#ff0000",
-      });
-      text.setOrigin(0.5, 1);
-      text.setDepth(1000);
-      this.damageTexts.push({ text, elapsed: 0, startY });
+      const serverDamage = this.lastHp - hp;
+
+      if (this.pendingPredictedDamage > 0) {
+        // Consume predicted damage to avoid duplicate display
+        const consumed = Math.min(this.pendingPredictedDamage, serverDamage);
+        this.pendingPredictedDamage -= consumed;
+        const remainder = serverDamage - consumed;
+
+        if (remainder > 0) {
+          // Show only the unpredicted portion (e.g. damage from other players)
+          const startY = -this.radius - 10;
+          const text = this.scene.add.text(this.x, this.y + startY, `-${remainder}`, {
+            fontFamily: "monospace",
+            fontSize: "14px",
+            fontStyle: "bold",
+            color: "#ff0000",
+          });
+          text.setOrigin(0.5, 1);
+          text.setDepth(1000);
+          this.damageTexts.push({ text, elapsed: 0, startY });
+        }
+      } else {
+        // No prediction pending — show normally
+        const startY = -this.radius - 10;
+        const text = this.scene.add.text(this.x, this.y + startY, `-${serverDamage}`, {
+          fontFamily: "monospace",
+          fontSize: "14px",
+          fontStyle: "bold",
+          color: "#ff0000",
+        });
+        text.setOrigin(0.5, 1);
+        text.setDepth(1000);
+        this.damageTexts.push({ text, elapsed: 0, startY });
+      }
     }
     this.lastHp = hp;
 
@@ -196,6 +240,15 @@ export class EnemySprite {
       if (progress >= 1) {
         dt.text.destroy();
         this.damageTexts.splice(i, 1);
+      }
+    }
+
+    // Decay stale predicted damage that was never confirmed by the server
+    if (this.pendingPredictedDamage > 0) {
+      this.pendingPredictedDamageAge += delta;
+      if (this.pendingPredictedDamageAge > 1000) {
+        this.pendingPredictedDamage = 0;
+        this.pendingPredictedDamageAge = 0;
       }
     }
 
