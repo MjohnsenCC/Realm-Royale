@@ -124,6 +124,6 @@ export function drawItemIcon(
  * Uses tier colors for tiered items, gold for UT.
  */
 export function getSlotBorderColor(tier: number): number {
-  if (tier === 7) return 0xffdd00; // UT gold
+  if (tier === 13) return 0xffdd00; // UT gold
   return 0x666666; // All tiered items use grey border
 }

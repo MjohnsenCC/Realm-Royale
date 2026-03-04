@@ -258,7 +258,7 @@ export const ConsumableSubtype = {
 export type ConsumableSubtype =
   (typeof ConsumableSubtype)[keyof typeof ConsumableSubtype];
 
-// Item tier (1-6)
+// Item tier (1-12, 13=UT)
 export const ItemTier = {
   T1: 1,
   T2: 2,
@@ -266,7 +266,13 @@ export const ItemTier = {
   T4: 4,
   T5: 5,
   T6: 6,
-  UT: 7,
+  T7: 7,
+  T8: 8,
+  T9: 9,
+  T10: 10,
+  T11: 11,
+  T12: 12,
+  UT: 13,
 } as const;
 export type ItemTier = (typeof ItemTier)[keyof typeof ItemTier];
 

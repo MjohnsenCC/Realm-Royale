@@ -15,24 +15,23 @@ import {
   createEmptyItemInstance,
   pickRandom,
   rollInitialOpenStats,
-  ORB_DROP_CHANCES,
   ORBS_BY_RARITY,
   OrbRarity,
   ORB_DEFINITIONS,
 } from "./itemStats";
 
-// --- Item ID Encoding: category * 100 + subtype * 10 + tier ---
+// --- Item ID Encoding: category * 1000 + subtype * 100 + tier ---
 
 export function getItemCategory(itemId: number): number {
-  return Math.floor(itemId / 100);
+  return Math.floor(itemId / 1000);
 }
 
 export function getItemSubtype(itemId: number): number {
-  return Math.floor((itemId % 100) / 10);
+  return Math.floor((itemId % 1000) / 100);
 }
 
 export function getItemTier(itemId: number): number {
-  return itemId % 10;
+  return itemId % 100;
 }
 
 export function makeItemId(
@@ -40,7 +39,7 @@ export function makeItemId(
   subtype: number,
   tier: number
 ): number {
-  return category * 100 + subtype * 10 + tier;
+  return category * 1000 + subtype * 100 + tier;
 }
 
 // --- Stat interfaces (kept for UT item definitions) ---
@@ -112,7 +111,13 @@ export const TIER_COLORS: Record<number, number> = {
   4: 0xcc44cc, // Purple
   5: 0xffaa22, // Orange
   6: 0xffdd00, // Gold
-  7: 0x00ffff, // Cyan (UT)
+  7: 0xff4444, // Red
+  8: 0xff66aa, // Pink
+  9: 0x44ffcc, // Aquamarine
+  10: 0xffffff, // White
+  11: 0xff8844, // Flame
+  12: 0xff2266, // Crimson
+  13: 0x00ffff, // Cyan (UT)
 };
 
 export function getTierColor(tier: number): number {
@@ -163,6 +168,42 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "Tears the fabric of reality itself.",
     weaponStats: { damage: 160, range: 200, shootCooldown: 200, projectileSpeed: 500, projectileSize: 20 },
   },
+  [makeItemId(0, 0, 7)]: {
+    id: 7, name: "Infernal Edge", category: 0, subtype: 0, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "A blade forged in infernal flames.",
+    weaponStats: { damage: 171, range: 210, shootCooldown: 190, projectileSpeed: 520, projectileSize: 21 },
+  },
+  [makeItemId(0, 0, 8)]: {
+    id: 8, name: "Abyssal Cleaver", category: 0, subtype: 0, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Cuts through dimensions themselves.",
+    weaponStats: { damage: 209, range: 220, shootCooldown: 180, projectileSpeed: 540, projectileSize: 22 },
+  },
+  [makeItemId(0, 0, 9)]: {
+    id: 9, name: "Phantom Reaper", category: 0, subtype: 0, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Harvests souls with each swing.",
+    weaponStats: { damage: 247, range: 230, shootCooldown: 170, projectileSpeed: 560, projectileSize: 23 },
+  },
+  [makeItemId(0, 0, 10)]: {
+    id: 10, name: "Celestial Saber", category: 0, subtype: 0, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Forged from a dying star.",
+    weaponStats: { damage: 285, range: 240, shootCooldown: 160, projectileSpeed: 580, projectileSize: 24 },
+  },
+  [makeItemId(0, 0, 11)]: {
+    id: 11, name: "Doomfire Blade", category: 0, subtype: 0, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Burns with the fire of creation.",
+    weaponStats: { damage: 333, range: 250, shootCooldown: 150, projectileSpeed: 600, projectileSize: 25 },
+  },
+  [makeItemId(0, 0, 12)]: {
+    id: 12, name: "Eternity's End", category: 0, subtype: 0, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "The last blade ever forged.",
+    weaponStats: { damage: 380, range: 260, shootCooldown: 140, projectileSpeed: 620, projectileSize: 26 },
+  },
 
   // ===== BOWS (category=0, subtype=1) =====
   [makeItemId(0, 1, 1)]: {
@@ -200,6 +241,42 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "Blessed by the gods themselves.",
     weaponStats: { damage: 90, range: 550, shootCooldown: 250, projectileSpeed: 600, projectileSize: 7 },
+  },
+  [makeItemId(0, 1, 7)]: {
+    id: 17, name: "Hellfire Bow", category: 0, subtype: 1, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Arrows ignite in demonic flame.",
+    weaponStats: { damage: 99, range: 570, shootCooldown: 240, projectileSpeed: 620, projectileSize: 7 },
+  },
+  [makeItemId(0, 1, 8)]: {
+    id: 18, name: "Spectral Longbow", category: 0, subtype: 1, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Fires arrows from beyond the veil.",
+    weaponStats: { damage: 121, range: 590, shootCooldown: 230, projectileSpeed: 640, projectileSize: 7 },
+  },
+  [makeItemId(0, 1, 9)]: {
+    id: 19, name: "Void Recurve", category: 0, subtype: 1, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Bends space to strike true.",
+    weaponStats: { damage: 143, range: 610, shootCooldown: 220, projectileSpeed: 660, projectileSize: 8 },
+  },
+  [makeItemId(0, 1, 10)]: {
+    id: 110, name: "Astral Bow", category: 0, subtype: 1, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Woven from starlight and moonbeams.",
+    weaponStats: { damage: 165, range: 630, shootCooldown: 210, projectileSpeed: 680, projectileSize: 8 },
+  },
+  [makeItemId(0, 1, 11)]: {
+    id: 111, name: "Phoenix Bow", category: 0, subtype: 1, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Each arrow is reborn in flame.",
+    weaponStats: { damage: 193, range: 650, shootCooldown: 200, projectileSpeed: 700, projectileSize: 8 },
+  },
+  [makeItemId(0, 1, 12)]: {
+    id: 112, name: "Oblivion Bow", category: 0, subtype: 1, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "Erases what it strikes from existence.",
+    weaponStats: { damage: 220, range: 670, shootCooldown: 190, projectileSpeed: 720, projectileSize: 9 },
   },
 
   // ===== QUIVERS (category=1, subtype=0) =====
@@ -239,6 +316,42 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "Holy wrath made manifest.",
     abilityStats: { damage: 230, range: 660, projectileSpeed: 760, projectileSize: 18, manaCost: 40, cooldown: 750, piercing: true },
   },
+  [makeItemId(1, 0, 7)]: {
+    id: 107, name: "Infernal Quiver", category: 1, subtype: 0, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Bolts forged in hellfire.",
+    abilityStats: { damage: 252, range: 690, projectileSpeed: 790, projectileSize: 19, manaCost: 42, cooldown: 720, piercing: true },
+  },
+  [makeItemId(1, 0, 8)]: {
+    id: 108, name: "Abyssal Quiver", category: 1, subtype: 0, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Draws power from the deep abyss.",
+    abilityStats: { damage: 308, range: 720, projectileSpeed: 820, projectileSize: 20, manaCost: 44, cooldown: 690, piercing: true },
+  },
+  [makeItemId(1, 0, 9)]: {
+    id: 109, name: "Wraith Quiver", category: 1, subtype: 0, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Spectral bolts phase through the living.",
+    abilityStats: { damage: 364, range: 750, projectileSpeed: 850, projectileSize: 21, manaCost: 46, cooldown: 660, piercing: true },
+  },
+  [makeItemId(1, 0, 10)]: {
+    id: 1010, name: "Celestial Quiver", category: 1, subtype: 0, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Fires shards of pure starlight.",
+    abilityStats: { damage: 420, range: 780, projectileSpeed: 880, projectileSize: 22, manaCost: 48, cooldown: 630, piercing: true },
+  },
+  [makeItemId(1, 0, 11)]: {
+    id: 1011, name: "Doomfire Quiver", category: 1, subtype: 0, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Each bolt carries the doom of worlds.",
+    abilityStats: { damage: 490, range: 810, projectileSpeed: 910, projectileSize: 23, manaCost: 50, cooldown: 600, piercing: true },
+  },
+  [makeItemId(1, 0, 12)]: {
+    id: 1012, name: "Eternity Quiver", category: 1, subtype: 0, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "Bolts that echo through time itself.",
+    abilityStats: { damage: 560, range: 840, projectileSpeed: 940, projectileSize: 24, manaCost: 52, cooldown: 570, piercing: true },
+  },
 
   // ===== ARMOR (category=2, subtype=0) =====
   [makeItemId(2, 0, 1)]: {
@@ -276,6 +389,42 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "Blessed plate of the gods.",
     armorStats: { maxHpBonus: 140 },
+  },
+  [makeItemId(2, 0, 7)]: {
+    id: 2007, name: "Infernal Plate", category: 2, subtype: 0, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Forged in hellfire, resists all flame.",
+    armorStats: { maxHpBonus: 170 },
+  },
+  [makeItemId(2, 0, 8)]: {
+    id: 2008, name: "Abyssal Mail", category: 2, subtype: 0, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Woven from the darkness of the deep.",
+    armorStats: { maxHpBonus: 210 },
+  },
+  [makeItemId(2, 0, 9)]: {
+    id: 2009, name: "Spectral Armor", category: 2, subtype: 0, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Phases between realms to deflect blows.",
+    armorStats: { maxHpBonus: 250 },
+  },
+  [makeItemId(2, 0, 10)]: {
+    id: 2010, name: "Celestial Plate", category: 2, subtype: 0, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Armor of the stars themselves.",
+    armorStats: { maxHpBonus: 290 },
+  },
+  [makeItemId(2, 0, 11)]: {
+    id: 2011, name: "Doomfire Aegis", category: 2, subtype: 0, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Shields the wearer in apocalyptic flame.",
+    armorStats: { maxHpBonus: 340 },
+  },
+  [makeItemId(2, 0, 12)]: {
+    id: 2012, name: "Eternity Ward", category: 2, subtype: 0, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "The ultimate protection, beyond time.",
+    armorStats: { maxHpBonus: 400 },
   },
 
   // ===== RINGS (category=3, subtype=0) =====
@@ -315,11 +464,47 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "A fragment of a fallen star.",
     ringStats: { speedBonus: 22, damageBonus: 16, hpRegenBonus: 4.0, maxHpBonus: 40, maxManaBonus: 40 },
   },
+  [makeItemId(3, 0, 7)]: {
+    id: 3007, name: "Infernal Band", category: 3, subtype: 0, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "A ring that burns with hellfire.",
+    ringStats: { speedBonus: 26, damageBonus: 20, hpRegenBonus: 5.0, maxHpBonus: 50, maxManaBonus: 50 },
+  },
+  [makeItemId(3, 0, 8)]: {
+    id: 3008, name: "Abyssal Loop", category: 3, subtype: 0, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Draws power from the endless abyss.",
+    ringStats: { speedBonus: 32, damageBonus: 24, hpRegenBonus: 6.0, maxHpBonus: 60, maxManaBonus: 60 },
+  },
+  [makeItemId(3, 0, 9)]: {
+    id: 3009, name: "Wraith Ring", category: 3, subtype: 0, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Whispers of the dead empower the wearer.",
+    ringStats: { speedBonus: 38, damageBonus: 28, hpRegenBonus: 7.0, maxHpBonus: 70, maxManaBonus: 70 },
+  },
+  [makeItemId(3, 0, 10)]: {
+    id: 3010, name: "Celestial Band", category: 3, subtype: 0, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Forged from condensed starlight.",
+    ringStats: { speedBonus: 44, damageBonus: 33, hpRegenBonus: 8.0, maxHpBonus: 80, maxManaBonus: 80 },
+  },
+  [makeItemId(3, 0, 11)]: {
+    id: 3011, name: "Doomfire Signet", category: 3, subtype: 0, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Sealed with the mark of apocalypse.",
+    ringStats: { speedBonus: 50, damageBonus: 38, hpRegenBonus: 9.5, maxHpBonus: 95, maxManaBonus: 95 },
+  },
+  [makeItemId(3, 0, 12)]: {
+    id: 3012, name: "Eternity Ring", category: 3, subtype: 0, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "Power beyond the end of time.",
+    ringStats: { speedBonus: 58, damageBonus: 44, hpRegenBonus: 11.0, maxHpBonus: 110, maxManaBonus: 110 },
+  },
 
-  // ===== UT ITEMS (tier=7, unique) =====
-  [makeItemId(0, 0, 7)]: {
-    id: 7, name: "Doom Blade", category: 0, subtype: 0, tier: 7,
-    color: 0x00cccc, tierColor: TIER_COLORS[7],
+  // ===== UT ITEMS (tier=13, unique) =====
+  [makeItemId(0, 0, 13)]: {
+    id: 13, name: "Doom Blade", category: 0, subtype: 0, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
     description: "An accursed blade that fractures reality into three slashes.",
     weaponStats: {
       damage: 55, range: 170, shootCooldown: 350,
@@ -327,9 +512,9 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
       projectileCount: 3, spreadAngle: Math.PI / 6,
     },
   },
-  [makeItemId(1, 0, 7)]: {
-    id: 107, name: "Phantom Quiver", category: 1, subtype: 0, tier: 7,
-    color: 0x00cccc, tierColor: TIER_COLORS[7],
+  [makeItemId(1, 0, 13)]: {
+    id: 1013, name: "Phantom Quiver", category: 1, subtype: 0, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
     description: "Spectral arrows grant otherworldly swiftness.",
     abilityStats: {
       damage: 120, range: 500, projectileSpeed: 700, projectileSize: 14,
@@ -337,15 +522,15 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
       speedBoostAmount: 80, speedBoostDuration: 3000,
     },
   },
-  [makeItemId(2, 0, 7)]: {
-    id: 207, name: "Ethereal Shroud", category: 2, subtype: 0, tier: 7,
-    color: 0x00cccc, tierColor: TIER_COLORS[7],
+  [makeItemId(2, 0, 13)]: {
+    id: 2013, name: "Ethereal Shroud", category: 2, subtype: 0, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
     description: "Woven from ether, it feeds your magic at the cost of protection.",
     armorStats: { maxHpBonus: 50, manaRegenBonus: 8 },
   },
-  [makeItemId(3, 0, 7)]: {
-    id: 307, name: "Ring of the Void", category: 3, subtype: 0, tier: 7,
-    color: 0x00cccc, tierColor: TIER_COLORS[7],
+  [makeItemId(3, 0, 13)]: {
+    id: 3013, name: "Ring of the Void", category: 3, subtype: 0, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
     description: "The void amplifies power but offers no shelter.",
     ringStats: { speedBonus: 30, damageBonus: 25, hpRegenBonus: 0, maxHpBonus: 0, maxManaBonus: 0, projSpeedBonus: 100 },
   },
@@ -551,11 +736,11 @@ export const BAG_DROP_CHANCES: Record<
   number,
   { green: number; red: number; black: number }
 > = {
-  [DifficultyZone.Shore]: { green: 0.15, red: 0.0, black: 0.0 },
-  [DifficultyZone.Lowlands]: { green: 0.2, red: 0.03, black: 0.0 },
-  [DifficultyZone.Midlands]: { green: 0.15, red: 0.08, black: 0.01 },
-  [DifficultyZone.Highlands]: { green: 0.1, red: 0.12, black: 0.03 },
-  [DifficultyZone.Godlands]: { green: 0.05, red: 0.1, black: 0.06 },
+  [DifficultyZone.Shore]: { green: 0, red: 0, black: 0 },
+  [DifficultyZone.Lowlands]: { green: 0.125, red: 0, black: 0 },
+  [DifficultyZone.Midlands]: { green: 0.125, red: 0, black: 0 },
+  [DifficultyZone.Highlands]: { green: 0.125, red: 0, black: 0 },
+  [DifficultyZone.Godlands]: { green: 0, red: 0.075, black: 0 },
 };
 
 // --- Loot generation ---
@@ -575,86 +760,69 @@ export function rollBagDrop(biome: number): number {
   return -1;
 }
 
-/** Difficulty zone -> tier ranges per bag rarity */
+/** Difficulty zone -> tier ranges per bag rarity.
+ * Green bags: T1-T7 items. Red bags: T8-T12 items. Black bags: UTs only (dungeons). */
 const ZONE_TIER_RANGES: Record<
   number,
-  { green: [number, number]; red: [number, number]; black: [number, number] }
+  { green: [number, number]; red: [number, number] }
 > = {
-  [DifficultyZone.Shore]: { green: [1, 1], red: [1, 2], black: [2, 2] },
-  [DifficultyZone.Lowlands]: { green: [1, 2], red: [2, 3], black: [3, 3] },
-  [DifficultyZone.Midlands]: { green: [2, 3], red: [3, 4], black: [4, 4] },
-  [DifficultyZone.Highlands]: { green: [3, 4], red: [4, 5], black: [5, 5] },
-  [DifficultyZone.Godlands]: { green: [4, 5], red: [5, 6], black: [6, 6] },
+  [DifficultyZone.Shore]: { green: [1, 1], red: [1, 1] },
+  [DifficultyZone.Lowlands]: { green: [2, 3], red: [2, 3] },
+  [DifficultyZone.Midlands]: { green: [4, 5], red: [4, 5] },
+  [DifficultyZone.Highlands]: { green: [6, 7], red: [6, 7] },
+  [DifficultyZone.Godlands]: { green: [8, 9], red: [8, 9] },
 };
 
-/** All UT item IDs (tier 7). */
+/** All UT item IDs (tier 13). UTs only drop from Void dungeon. */
 const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
   .map(Number)
   .filter((id) => getItemTier(id) === ItemTier.UT);
 
-/** Dungeon-exclusive UT items (only drop from specific bosses). */
-const UT_WEAPON_ID = makeItemId(0, 0, 7); // Doom Blade
-const UT_ARMOR_ID = makeItemId(2, 0, 7); // Ethereal Shroud
-const DUNGEON_EXCLUSIVE_UT_IDS = new Set([UT_WEAPON_ID, UT_ARMOR_ID]);
+/** Roll a random crafting orb instance using the rarity weight system. */
+function rollRandomOrb(): ItemInstanceData {
+  // Weight toward common orbs: Common 50%, Uncommon 30%, Rare 15%, VeryRare 5%
+  const roll = Math.random();
+  let rarity: number;
+  if (roll < 0.50) rarity = OrbRarity.Common;
+  else if (roll < 0.80) rarity = OrbRarity.Uncommon;
+  else if (roll < 0.95) rarity = OrbRarity.Rare;
+  else rarity = OrbRarity.VeryRare;
 
-/** UT items available from overworld black bags (excludes dungeon-exclusive UTs). */
-const GENERAL_UT_ITEM_IDS = UT_ITEM_IDS.filter(
-  (id) => !DUNGEON_EXCLUSIVE_UT_IDS.has(id)
-);
+  const orbTypes = ORBS_BY_RARITY[rarity];
+  return generateOrbInstance(pickRandom(orbTypes));
+}
 
-/**
- * Roll orb drops for an enemy kill in a given biome.
- * Returns an array of orb ItemInstanceData (may be empty).
- */
-export function rollOrbDrops(biome: number): ItemInstanceData[] {
-  // Crafting orbs only drop in Godlands
-  if (biome !== DifficultyZone.Godlands) return [];
-
-  const chances = ORB_DROP_CHANCES[biome];
-  if (!chances) return [];
-
-  const orbs: ItemInstanceData[] = [];
-  for (const [rarityStr, chance] of Object.entries(chances)) {
-    const rarity = Number(rarityStr);
-    if (Math.random() < chance) {
-      const orbTypes = ORBS_BY_RARITY[rarity];
-      if (orbTypes && orbTypes.length > 0) {
-        orbs.push(generateOrbInstance(pickRandom(orbTypes)));
-      }
-    }
-  }
-  return orbs;
+/** Roll item count for a bag. Mostly 1, sometimes more if lucky. */
+function rollBagItemCount(): number {
+  const roll = Math.random();
+  if (roll < 0.75) return 1;
+  if (roll < 0.95) return 2;
+  return 3;
 }
 
 /**
  * Generate item instances for a loot bag of the given rarity in the given biome.
- * Returns an array of ItemInstanceData.
+ * Green bags contain T1-T7 items. Red bags contain T8-T12 items.
+ * Black bags are not used in overworld (UTs only from Void dungeon).
  */
 export function rollBagLoot(bagRarity: number, biome: number): ItemInstanceData[] {
-  // Black bags drop 1 random non-dungeon-exclusive UT item
-  if (bagRarity === BagRarity.Black) {
-    return [generateUTItemInstance(pickRandom(GENERAL_UT_ITEM_IDS))];
-  }
-
   const tierRanges = ZONE_TIER_RANGES[biome];
   if (!tierRanges) return [];
 
   let tierRange: [number, number];
-  let itemCount: number;
 
   switch (bagRarity) {
     case BagRarity.Green:
       tierRange = tierRanges.green;
-      itemCount = 1 + Math.floor(Math.random() * 3); // 1-3
       break;
     case BagRarity.Red:
       tierRange = tierRanges.red;
-      itemCount = 1 + Math.floor(Math.random() * 2); // 1-2
       break;
     default:
       return [];
   }
 
+  const itemCount = rollBagItemCount();
   const categories = [
     ItemCategory.Weapon,
     ItemCategory.Ability,
@@ -671,8 +839,7 @@ export function rollBagLoot(bagRarity: number, biome: number): ItemInstanceData[
 
     let subtype = 0;
     if (category === ItemCategory.Weapon) {
-      subtype =
-        Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+      subtype = WeaponSubtype.Bow; // Only bows drop for now
     }
 
     items.push(generateItemInstance(category, subtype, tier));
@@ -686,61 +853,86 @@ export function rollBagLoot(bagRarity: number, biome: number): ItemInstanceData[
     else items.push(generateConsumableInstance(makeItemId(4, 2, 1)));
   }
 
-  // Orb drops
-  const orbDrops = rollOrbDrops(biome);
-  items.push(...orbDrops);
+  // Godlands bags have 50% chance of containing a crafting orb
+  if (biome === DifficultyZone.Godlands && Math.random() < 0.5) {
+    items.push(rollRandomOrb());
+  }
 
   return items;
 }
 
 /**
- * Roll loot for a boss kill. Bosses always drop a Red or Black bag.
+ * Roll loot for a boss kill.
  */
 export function rollBossLoot(dungeonType: number): {
   bagRarity: number;
   items: ItemInstanceData[];
 } {
-  return rollBossLootWithRarity(dungeonType, 0.3);
+  return rollBossLootWithRarity(dungeonType, 0.05);
 }
 
 /**
  * Roll boss loot with a custom black bag chance (for dungeon rarity boosts).
- * Infernal boss always drops UT weapon, Void boss always drops UT armor.
+ * Infernal boss: always 1 crafting orb, 25% chance of T10 items (red bag).
+ * Void boss: always 1 crafting orb, 5% black bag (UT), 15% red bag (T11-T12).
+ * UTs only drop from Void dungeon.
  */
 export function rollBossLootWithRarity(
   dungeonType: number,
   blackBagChance: number
 ): { bagRarity: number; items: ItemInstanceData[] } {
-  const isBlack = Math.random() < blackBagChance;
-  const bagRarity = isBlack ? BagRarity.Black : BagRarity.Red;
-
-  if (bagRarity === BagRarity.Black) {
-    if (dungeonType === DungeonType.InfernalPit) {
-      return { bagRarity, items: [generateUTItemInstance(UT_WEAPON_ID)] };
-    }
-    if (dungeonType === DungeonType.VoidSanctum) {
-      return { bagRarity, items: [generateUTItemInstance(UT_ARMOR_ID)] };
-    }
-    return { bagRarity, items: [generateUTItemInstance(pickRandom(GENERAL_UT_ITEM_IDS))] };
-  }
-
-  const itemCount = 1 + Math.floor(Math.random() * 2); // 1-2
   const categories = [
     ItemCategory.Weapon,
     ItemCategory.Ability,
     ItemCategory.Armor,
     ItemCategory.Ring,
   ];
-  const items: ItemInstanceData[] = [];
-  for (let i = 0; i < itemCount; i++) {
-    const category = pickRandom(categories);
-    const tier = Math.random() < 0.5 ? 5 : 6;
-    let subtype = 0;
-    if (category === ItemCategory.Weapon) {
-      subtype =
-        Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+
+  // Infernal Pit: always 1 crafting orb, 25% chance of T10 items
+  if (dungeonType === DungeonType.InfernalPit) {
+    const items: ItemInstanceData[] = [rollRandomOrb()];
+    if (Math.random() < 0.25) {
+      const itemCount = rollBagItemCount();
+      for (let i = 0; i < itemCount; i++) {
+        const category = pickRandom(categories);
+        let subtype = 0;
+        if (category === ItemCategory.Weapon) {
+          subtype = WeaponSubtype.Bow;
+        }
+        items.push(generateItemInstance(category, subtype, 10));
+      }
+      return { bagRarity: BagRarity.Red, items };
     }
-    items.push(generateItemInstance(category, subtype, tier));
+    return { bagRarity: BagRarity.Green, items };
   }
-  return { bagRarity, items };
+
+  // Void Sanctum: always 1 crafting orb, 5% black bag (UT), 15% red bag (T11-T12)
+  if (dungeonType === DungeonType.VoidSanctum) {
+    const items: ItemInstanceData[] = [rollRandomOrb()];
+    const roll = Math.random();
+    if (roll < blackBagChance) {
+      // Black bag: UT item
+      items.push(generateUTItemInstance(pickRandom(UT_ITEM_IDS)));
+      return { bagRarity: BagRarity.Black, items };
+    }
+    if (roll < blackBagChance + 0.15) {
+      // Red bag: T11-T12 items
+      const itemCount = rollBagItemCount();
+      for (let i = 0; i < itemCount; i++) {
+        const category = pickRandom(categories);
+        const tier = Math.random() < 0.5 ? 11 : 12;
+        let subtype = 0;
+        if (category === ItemCategory.Weapon) {
+          subtype = WeaponSubtype.Bow;
+        }
+        items.push(generateItemInstance(category, subtype, tier));
+      }
+      return { bagRarity: BagRarity.Red, items };
+    }
+    // Just the crafting orb
+    return { bagRarity: BagRarity.Green, items };
+  }
+
+  // Fallback: crafting orb only
+  return { bagRarity: BagRarity.Green, items: [rollRandomOrb()] };
 }

@@ -9,7 +9,7 @@ import {
 // --- Item Instance Data Interface ---
 
 export interface ItemInstanceData {
-  baseItemId: number; // category*100 + subtype*10 + referenceTier (or UT id)
+  baseItemId: number; // category*1000 + subtype*100 + tier (or UT id)
   instanceTier: number; // 1-6 for tiered items, 0 for UT
   isUT: boolean;
   lockedStat1Type: number;
@@ -24,7 +24,7 @@ export interface ItemInstanceData {
 
 export const MAX_OPEN_STATS = 5;
 export const MAX_STAT_TIER = 5;
-export const MAX_ITEM_TIER = 6;
+export const MAX_ITEM_TIER = 12;
 export const ORB_MAX_STACK = 99;
 
 // --- Locked Stats by Item Category ---
@@ -106,6 +106,12 @@ export const ITEM_TIER_MULTIPLIER: Record<number, number> = {
   4: 1.0,
   5: 1.2,
   6: 1.5,
+  7: 1.8,
+  8: 2.2,
+  9: 2.6,
+  10: 3.0,
+  11: 3.5,
+  12: 4.0,
 };
 
 // --- Weapon Templates (base stats at tier multiplier 1.0 = T4) ---
@@ -285,7 +291,13 @@ const STAT_TIER_WEIGHTS: Record<number, number[]> = {
   3: [0.20, 0.25, 0.25, 0.20, 0.10],
   4: [0.10, 0.20, 0.30, 0.25, 0.15],
   5: [0.05, 0.15, 0.25, 0.30, 0.25],
-  6: [0.02, 0.08, 0.20, 0.35, 0.35], // T6 items: mostly T4-T5 stats
+  6: [0.02, 0.08, 0.20, 0.35, 0.35],
+  7: [0.01, 0.05, 0.15, 0.35, 0.44],
+  8: [0.01, 0.04, 0.12, 0.33, 0.50],
+  9: [0.01, 0.03, 0.10, 0.30, 0.56],
+  10: [0.00, 0.02, 0.08, 0.28, 0.62],
+  11: [0.00, 0.01, 0.06, 0.25, 0.68],
+  12: [0.00, 0.01, 0.04, 0.20, 0.75], // T12 items: mostly T5 stats
 };
 
 // --- Open Stat Tier Weights ---

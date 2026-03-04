@@ -329,7 +329,7 @@ export class InventoryUI {
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
       const borderColor = hasItem ? getSlotBorderColor(tier) : 0x333344;
       this.slotGraphics.lineStyle(1, borderColor, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
@@ -378,7 +378,7 @@ export class InventoryUI {
       }
       this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
       const borderColor = hasItem ? getSlotBorderColor(tier) : 0x444455;
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);

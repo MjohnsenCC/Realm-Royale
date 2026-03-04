@@ -327,7 +327,7 @@ export class ItemTooltip {
     this.descText.setText("");
 
     const totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
-    const borderTier = item.isUT ? 7 : item.instanceTier;
+    const borderTier = item.isUT ? 13 : item.instanceTier;
     this.drawBgAndPosition(totalHeight, getSlotBorderColor(borderTier), screenX, screenY);
   }
 
@@ -355,9 +355,9 @@ export class ItemTooltip {
       this.tierText.setText(getCategoryName(def.category));
       this.tierText.setColor("#aaaaaa");
     } else {
-      const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+      const tierLabel = def.tier === 13 ? "UT" : `T${def.tier}`;
       this.tierText.setText(`${tierLabel} ${getCategoryName(def.category)}`);
-      this.tierText.setColor(def.tier === 7 ? "#ffaa00" : "#aaaaaa");
+      this.tierText.setColor(def.tier === 13 ? "#ffaa00" : "#aaaaaa");
     }
 
     // Stats

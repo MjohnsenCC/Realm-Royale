@@ -274,7 +274,7 @@ export class LootBagUI {
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
       const slotBorder = hasItem ? getSlotBorderColor(tier) : 0x333344;
       this.slotGraphics.lineStyle(1, slotBorder, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);

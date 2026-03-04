@@ -634,7 +634,7 @@ export class EnemyAI {
             ? ShootingPatternType.Spiral5
             : ShootingPatternType.Spread5,
           shootCooldown: 800,
-          projectileDamage: 24,
+          projectileDamage: 42,
           projectileSpeed: 120,
           projectileRange: 300,
           speed: 80,
@@ -650,7 +650,7 @@ export class EnemyAI {
           ...baseDef,
           shootingPattern: pattern,
           shootCooldown: 500,
-          projectileDamage: 30,
+          projectileDamage: 50,
           projectileSpeed: 120,
           projectileRange: 350,
           speed: 100,
@@ -673,7 +673,7 @@ export class EnemyAI {
             ? ShootingPatternType.Spiral8
             : ShootingPatternType.Spread5,
           shootCooldown: 900,
-          projectileDamage: 22,
+          projectileDamage: 45,
           speed: 30,
         };
       }
@@ -687,7 +687,7 @@ export class EnemyAI {
             ? ShootingPatternType.CounterSpiralDouble
             : ShootingPatternType.Spread5,
           shootCooldown: 650,
-          projectileDamage: 28,
+          projectileDamage: 55,
           speed: 40,
         };
       }
@@ -703,7 +703,7 @@ export class EnemyAI {
         ...baseDef,
         shootingPattern: pattern,
         shootCooldown: 450,
-        projectileDamage: 35,
+        projectileDamage: 65,
         speed: 50,
       };
     }

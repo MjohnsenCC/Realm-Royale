@@ -413,7 +413,7 @@ export class CraftingUI {
     const item = this.currentItem;
 
     // Slot background with tier border
-    const tier = item.isUT ? 7 : item.instanceTier;
+    const tier = item.isUT ? 13 : item.instanceTier;
     const borderColor = getSlotBorderColor(tier);
     this.itemSlotGraphics.fillStyle(0x444444, 0.4);
     this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
