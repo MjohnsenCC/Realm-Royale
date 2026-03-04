@@ -1802,7 +1802,7 @@ export class GameScene extends Phaser.Scene {
             }
           } else {
             const subtype = getItemSubtype(abilityItem.baseItemId);
-            as = getScaledAbilityStats(subtype, abilityItem.instanceTier);
+            as = getScaledAbilityStats(subtype, abilityItem.instanceTier, abilityItem.lockedStat1Tier, abilityItem.lockedStat2Tier);
           }
           if (as && now - this.lastLocalAbilityTime >= as.cooldown) {
             const mana = (localPlayer.mana as number) ?? 0;

@@ -894,7 +894,7 @@ export class GameRoom extends Room<GameState> {
             speedBoostDur = as.speedBoostDuration;
           } else {
             const subtype = getItemSubtype(abilitySchema.baseItemId);
-            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier);
+            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier, abilitySchema.lockedStat1Tier, abilitySchema.lockedStat2Tier);
             abilityDamage = scaled.damage;
             abilityRange = scaled.range;
             abilityProjSpeed = scaled.projectileSpeed;

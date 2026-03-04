@@ -30,10 +30,10 @@ export const ORB_MAX_STACK = 99;
 // --- Locked Stats by Item Category ---
 
 export const LOCKED_STATS_BY_CATEGORY: Record<number, [number, number]> = {
-  [ItemCategory.Weapon]: [StatType.AttackDamage, StatType.AttackSpeed],
-  [ItemCategory.Ability]: [StatType.AttackDamage, StatType.AttackSpeed],
+  [ItemCategory.Weapon]: [-1, -1],  // Uses inherent weapon stats (damage, fire rate)
+  [ItemCategory.Ability]: [-1, -1], // Uses inherent ability stats (damage, mana cost)
   [ItemCategory.Armor]: [StatType.Health, StatType.HealthRegen],
-  [ItemCategory.Ring]: [StatType.Health, StatType.ManaRegen],
+  [ItemCategory.Ring]: [StatType.Mana, StatType.ManaRegen],
 };
 
 // --- Open Stat Pools per Category ---
@@ -75,6 +75,25 @@ export const STAT_VALUES_BY_TIER: Record<number, Record<number, number>> = {
   [StatType.HealthRegen]: { 1: 0.3, 2: 0.7, 3: 1.2, 4: 2.0, 5: 3.0 },
   [StatType.ManaRegen]: { 1: 0.5, 2: 1.0, 3: 2.0, 4: 3.5, 5: 5.0 },
   [StatType.MovementSpeed]: { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 },
+  [StatType.Mana]: { 1: 25, 2: 60, 3: 100, 4: 150, 5: 225 },
+};
+
+// Separate locked stat value table for stats that scale differently as locked stats
+// (e.g., Health on armor gives much more than Health as an open stat)
+export const LOCKED_STAT_VALUES_BY_TIER: Record<number, Record<number, number>> = {
+  [StatType.Health]: { 1: 125, 2: 300, 3: 500, 4: 750, 5: 1125 },
+  [StatType.Mana]: { 1: 25, 2: 60, 3: 100, 4: 150, 5: 225 },
+};
+
+// --- Locked Quality Multiplier ---
+// For weapon/ability inherent stats, the locked stat tier acts as a quality modifier.
+// T3 is baseline (1.0), lower tiers reduce, higher tiers boost.
+export const LOCKED_QUALITY_MULTIPLIER: Record<number, number> = {
+  1: 0.85,
+  2: 0.93,
+  3: 1.0,
+  4: 1.08,
+  5: 1.18,
 };
 
 // --- Item Tier Multiplier ---
@@ -151,6 +170,7 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.HealthRegen]: "Health Regen",
   [StatType.ManaRegen]: "Mana Regen",
   [StatType.MovementSpeed]: "Movement Speed",
+  [StatType.Mana]: "Mana",
 };
 
 // --- Crafting Orb Definitions ---
@@ -326,9 +346,14 @@ export function rollInitialOpenStats(category: number): number[] {
 export function getStatValue(
   statType: number,
   statTier: number,
-  itemTier: number
+  itemTier: number,
+  isLocked: boolean = false
 ): number {
-  const baseValue = STAT_VALUES_BY_TIER[statType]?.[statTier] ?? 0;
+  const table =
+    isLocked && LOCKED_STAT_VALUES_BY_TIER[statType]
+      ? LOCKED_STAT_VALUES_BY_TIER
+      : STAT_VALUES_BY_TIER;
+  const baseValue = table[statType]?.[statTier] ?? 0;
   const multiplier = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
   return baseValue * multiplier;
 }
@@ -380,10 +405,12 @@ export function getEmptySlotCount(item: ItemInstanceData): number {
   return MAX_OPEN_STATS - getOpenStatCount(item);
 }
 
-/** Get weapon stats scaled by item tier. */
+/** Get weapon stats scaled by item tier and optional locked quality tiers. */
 export function getScaledWeaponStats(
   subtype: number,
-  itemTier: number
+  itemTier: number,
+  damageTier: number = 0,
+  fireRateTier: number = 0
 ): {
   damage: number;
   shootCooldown: number;
@@ -396,19 +423,23 @@ export function getScaledWeaponStats(
     return { damage: 20, shootCooldown: 300, range: 100, projectileSpeed: 300, projectileSize: 5 };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
+  const dmgQuality = damageTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[damageTier] ?? 1.0) : 1.0;
+  const frQuality = fireRateTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[fireRateTier] ?? 1.0) : 1.0;
   return {
-    damage: Math.round(template.baseDamage * mult),
-    shootCooldown: Math.round(template.baseCooldown / mult),
+    damage: Math.round(template.baseDamage * mult * dmgQuality),
+    shootCooldown: Math.round(template.baseCooldown / mult / frQuality),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
     projectileSpeed: Math.round(template.baseProjSpeed * (0.85 + 0.15 * mult)),
     projectileSize: Math.round(template.baseProjSize * (0.85 + 0.15 * mult)),
   };
 }
 
-/** Get ability stats scaled by item tier. */
+/** Get ability stats scaled by item tier and optional locked quality tiers. */
 export function getScaledAbilityStats(
   subtype: number,
-  itemTier: number
+  itemTier: number,
+  damageTier: number = 0,
+  manaCostTier: number = 0
 ): {
   damage: number;
   range: number;
@@ -423,12 +454,14 @@ export function getScaledAbilityStats(
     return { damage: 50, range: 500, projectileSpeed: 600, projectileSize: 12, manaCost: 30, cooldown: 1000, piercing: true };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
+  const dmgQuality = damageTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[damageTier] ?? 1.0) : 1.0;
+  const manaQuality = manaCostTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[manaCostTier] ?? 1.0) : 1.0;
   return {
-    damage: Math.round(template.baseDamage * mult),
+    damage: Math.round(template.baseDamage * mult * dmgQuality),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
     projectileSpeed: Math.round(template.baseProjSpeed * (0.85 + 0.15 * mult)),
     projectileSize: Math.round(template.baseProjSize * (0.85 + 0.15 * mult)),
-    manaCost: Math.round(template.baseManaCost * (1.1 - 0.1 * mult)),
+    manaCost: Math.round(template.baseManaCost * (1.1 - 0.1 * mult) / manaQuality),
     cooldown: Math.round(template.baseCooldown / mult),
     piercing: template.piercing,
   };

@@ -28,8 +28,11 @@ export class ItemTooltip {
   private nameText: Phaser.GameObjects.Text;
   private tierText: Phaser.GameObjects.Text;
   private statsText: Phaser.GameObjects.Text;
+  private dividerAboveLockedText: Phaser.GameObjects.Text;
   private lockedStatsText: Phaser.GameObjects.Text;
+  private dividerBelowLockedText: Phaser.GameObjects.Text;
   private openStatsText: Phaser.GameObjects.Text;
+  private hiddenStatsText: Phaser.GameObjects.Text;
   private shiftHintText: Phaser.GameObjects.Text;
   private descText: Phaser.GameObjects.Text;
 
@@ -97,6 +100,16 @@ export class ItemTooltip {
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.statsText);
 
+    this.dividerAboveLockedText = scene.add
+      .text(cx, 0, "────────────", {
+        fontSize: statsFontSize,
+        color: "#ffffff",
+        fontFamily: "monospace",
+        align: "center",
+      })
+      .setOrigin(0.5, 0);
+    this.container.add(this.dividerAboveLockedText);
+
     this.lockedStatsText = scene.add
       .text(cx, statsY, "", {
         fontSize: statsFontSize,
@@ -109,6 +122,16 @@ export class ItemTooltip {
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.lockedStatsText);
 
+    this.dividerBelowLockedText = scene.add
+      .text(cx, 0, "────────────", {
+        fontSize: statsFontSize,
+        color: "#ffffff",
+        fontFamily: "monospace",
+        align: "center",
+      })
+      .setOrigin(0.5, 0);
+    this.container.add(this.dividerBelowLockedText);
+
     this.openStatsText = scene.add
       .text(cx, statsY, "", {
         fontSize: statsFontSize,
@@ -120,6 +143,18 @@ export class ItemTooltip {
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.openStatsText);
+
+    this.hiddenStatsText = scene.add
+      .text(cx, 0, "", {
+        fontSize: statsFontSize,
+        color: "#aaffaa",
+        fontFamily: "monospace",
+        lineSpacing: 2,
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setWordWrapWidth(wrapWidth);
+    this.container.add(this.hiddenStatsText);
 
     this.shiftHintText = scene.add
       .text(cx, 0, "[SHIFT] for more info", {
@@ -178,48 +213,68 @@ export class ItemTooltip {
     this.tierText.setText(tierLabel);
     this.tierText.setColor("#aaaaaa");
 
-    // === Base stats (weapon/ability) ===
-    const baseLines: string[] = [];
-    if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier);
-      baseLines.push(`Damage: ${ws.damage}`);
-      baseLines.push(`Range: ${ws.range}`);
-      baseLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
-    } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier);
-      baseLines.push(`Damage: ${as.damage}`);
-      baseLines.push(`Mana Cost: ${as.manaCost}`);
-      baseLines.push(`Range: ${as.range}`);
-      if (as.piercing) baseLines.push(`Piercing: Yes`);
-    }
-    this.statsText.setText(baseLines.join("\n"));
+    // Clear base stats text (no longer used for tiered items)
+    this.statsText.setText("");
     this.statsText.setY(statsStartY);
 
-    // === Locked stats (dark/brown gray) ===
+    // === Build locked stats per category ===
     const lockedLines: string[] = [];
-    if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-      const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier);
-      const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
-      const tierInfo = shiftHeld ? ` (T${item.lockedStat1Tier})` : "";
-      lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
-    }
-    if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-      const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier);
-      const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
-      const tierInfo = shiftHeld ? ` (T${item.lockedStat2Tier})` : "";
-      lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
+    const hiddenLines: string[] = [];
+
+    if (category === ItemCategory.Weapon) {
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const dmgTier = shiftHeld && item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
+      const frTier = shiftHeld && item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
+      lockedLines.push(`Damage: ${ws.damage}${dmgTier}`);
+      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s${frTier}`);
+      // Range is hidden (shift only)
+      hiddenLines.push(`Range: ${ws.range}`);
+    } else if (category === ItemCategory.Ability) {
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const dmgTier = shiftHeld && item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
+      const manaTier = shiftHeld && item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
+      lockedLines.push(`Damage: ${as.damage}${dmgTier}`);
+      lockedLines.push(`Mana Cost: ${as.manaCost}${manaTier}`);
+      // Range and piercing are hidden (shift only)
+      hiddenLines.push(`Range: ${as.range}`);
+      if (as.piercing) hiddenLines.push(`Piercing: Yes`);
+    } else {
+      // Armor and Ring: use rolled locked stat bonuses
+      if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
+        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier, true);
+        const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
+        const tierInfo = shiftHeld ? ` (T${item.lockedStat1Tier})` : "";
+        lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
+      }
+      if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
+        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier, true);
+        const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
+        const tierInfo = shiftHeld ? ` (T${item.lockedStat2Tier})` : "";
+        lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
+      }
     }
 
-    let lockedY = statsStartY + this.statsText.height;
-    if (baseLines.length > 0 && lockedLines.length > 0) lockedY += 4;
+    // === Divider above locked stats ===
+    let currentY = statsStartY;
+    if (lockedLines.length > 0) {
+      this.dividerAboveLockedText.setText("────────────");
+      this.dividerAboveLockedText.setY(currentY);
+      currentY += this.dividerAboveLockedText.height + 2;
+    } else {
+      this.dividerAboveLockedText.setText("");
+    }
+
+    // === Locked stats ===
     this.lockedStatsText.setText(lockedLines.join("\n"));
-    this.lockedStatsText.setY(lockedY);
+    this.lockedStatsText.setY(currentY);
+    if (lockedLines.length > 0) {
+      currentY += this.lockedStatsText.height + 2;
+    }
 
-    // === Open stats (light blue) ===
+    // === Open stats ===
     const openLines: string[] = [];
     const openStatCount = Math.floor(item.openStats.length / 2);
     if (openStatCount > 0) {
-      openLines.push("────────────");
       for (let i = 0; i < item.openStats.length; i += 2) {
         const sType = item.openStats[i];
         const sTier = item.openStats[i + 1];
@@ -231,23 +286,43 @@ export class ItemTooltip {
       }
     }
 
-    let openY = lockedY + this.lockedStatsText.height;
-    if (lockedLines.length > 0 && openLines.length > 0) openY += 2;
+    // === Divider below locked stats (always shown when locked stats exist) ===
+    if (lockedLines.length > 0) {
+      this.dividerBelowLockedText.setText("────────────");
+      this.dividerBelowLockedText.setY(currentY);
+      currentY += this.dividerBelowLockedText.height + 2;
+    } else {
+      this.dividerBelowLockedText.setText("");
+    }
+
     this.openStatsText.setText(openLines.join("\n"));
-    this.openStatsText.setY(openY);
+    this.openStatsText.setY(currentY);
+    if (openStatCount > 0) {
+      currentY += this.openStatsText.height;
+    }
+
+    // === Hidden stats (shift-only) ===
+    if (shiftHeld && hiddenLines.length > 0) {
+      this.hiddenStatsText.setText(hiddenLines.join("\n"));
+      this.hiddenStatsText.setY(currentY + 4);
+      currentY += 4 + this.hiddenStatsText.height;
+      this.hiddenStatsText.setVisible(true);
+    } else {
+      this.hiddenStatsText.setText("");
+      this.hiddenStatsText.setVisible(false);
+    }
 
     // === SHIFT hint ===
-    const hasStatTiers = lockedLines.length > 0 || openStatCount > 0;
-    const contentBottom = openY + this.openStatsText.height;
-    if (!shiftHeld && hasStatTiers) {
-      this.shiftHintText.setY(contentBottom + 4);
+    const hasHiddenContent = hiddenLines.length > 0 || lockedLines.length > 0 || openStatCount > 0;
+    if (!shiftHeld && hasHiddenContent) {
+      this.shiftHintText.setY(currentY + 10);
       this.shiftHintText.setVisible(true);
+      currentY += 10 + this.shiftHintText.height;
     } else {
       this.shiftHintText.setVisible(false);
     }
 
-    const hintHeight = this.shiftHintText.visible ? this.shiftHintText.height + 4 : 0;
-    const statsBottom = contentBottom + hintHeight + 4;
+    const statsBottom = currentY + 4;
     this.descText.setY(statsBottom);
     this.descText.setText("");
 
@@ -331,8 +406,12 @@ export class ItemTooltip {
     this.statsText.setY(statsStartY);
 
     // Clear tiered-only text elements
+    this.dividerAboveLockedText.setText("");
     this.lockedStatsText.setText("");
+    this.dividerBelowLockedText.setText("");
     this.openStatsText.setText("");
+    this.hiddenStatsText.setText("");
+    this.hiddenStatsText.setVisible(false);
     this.shiftHintText.setVisible(false);
 
     // Description
@@ -365,8 +444,12 @@ export class ItemTooltip {
     this.statsText.setY(statsStartY);
 
     // Clear tiered-only text elements
+    this.dividerAboveLockedText.setText("");
     this.lockedStatsText.setText("");
+    this.dividerBelowLockedText.setText("");
     this.openStatsText.setText("");
+    this.hiddenStatsText.setText("");
+    this.hiddenStatsText.setVisible(false);
     this.shiftHintText.setVisible(false);
 
     const statsBottom = statsStartY + this.statsText.height + 4;

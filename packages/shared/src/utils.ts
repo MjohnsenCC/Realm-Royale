@@ -67,6 +67,7 @@ function accumulateItemBonuses(
     maxHp: number;
     hpRegen: number;
     manaRegen: number;
+    maxMana: number;
     speed: number;
     projSpeed: number;
   }
@@ -75,12 +76,12 @@ function accumulateItemBonuses(
   const tier = item.instanceTier;
 
   // Locked stats
-  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, tier);
-  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, tier);
+  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, tier, true);
+  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, tier, true);
 
   // Open stats (packed as [type, tier, type, tier, ...])
   for (let i = 0; i < item.openStats.length; i += 2) {
-    addStatBonus(bonuses, item.openStats[i], item.openStats[i + 1], tier);
+    addStatBonus(bonuses, item.openStats[i], item.openStats[i + 1], tier, false);
   }
 }
 
@@ -91,15 +92,17 @@ function addStatBonus(
     maxHp: number;
     hpRegen: number;
     manaRegen: number;
+    maxMana: number;
     speed: number;
     projSpeed: number;
   },
   statType: number,
   statTier: number,
-  itemTier: number
+  itemTier: number,
+  isLocked: boolean = false
 ): void {
   if (statType < 0 || statTier <= 0) return;
-  const value = getStatValue(statType, statTier, itemTier);
+  const value = getStatValue(statType, statTier, itemTier, isLocked);
   switch (statType) {
     case StatType.AttackDamage:
       bonuses.damage += value;
@@ -115,6 +118,9 @@ function addStatBonus(
       break;
     case StatType.ManaRegen:
       bonuses.manaRegen += value;
+      break;
+    case StatType.Mana:
+      bonuses.maxMana += value;
       break;
     case StatType.MovementSpeed:
       bonuses.speed += value;
@@ -145,6 +151,7 @@ export function computePlayerStats(
     maxHp: 0,
     hpRegen: 0,
     manaRegen: 0,
+    maxMana: 0,
     speed: 0,
     projSpeed: 0,
   };
@@ -170,7 +177,7 @@ export function computePlayerStats(
       }
     } else {
       const subtype = getItemSubtype(weapon.baseItemId);
-      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier);
+      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier, weapon.lockedStat1Tier, weapon.lockedStat2Tier);
       weaponDamage = scaled.damage;
       weaponCooldown = scaled.shootCooldown;
       weaponRange = scaled.range;
@@ -223,7 +230,7 @@ export function computePlayerStats(
     shootCooldown: Math.max(MIN_SHOOT_COOLDOWN, weaponCooldown - bonuses.cooldownReduction),
     speed: Math.min(MAX_SPEED, base.speed + bonuses.speed),
     hpRegen: base.hpRegen + bonuses.hpRegen,
-    maxMana: manaBase,
+    maxMana: manaBase + bonuses.maxMana,
     manaRegen: manaRegenBase + bonuses.manaRegen,
     weaponRange,
     weaponProjSpeed: weaponProjSpeed + bonuses.projSpeed,

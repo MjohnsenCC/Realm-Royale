@@ -218,6 +218,7 @@ export const StatType = {
   HealthRegen: 3,
   ManaRegen: 4,
   MovementSpeed: 5,
+  Mana: 6,
 } as const;
 export type StatType = (typeof StatType)[keyof typeof StatType];
 
