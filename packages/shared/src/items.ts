@@ -6,7 +6,20 @@ import {
   BagRarity,
   DungeonType,
   DifficultyZone,
+  CraftingOrbType,
 } from "./types";
+import {
+  ItemInstanceData,
+  LOCKED_STATS_BY_CATEGORY,
+  rollStatTier,
+  createEmptyItemInstance,
+  pickRandom,
+  rollInitialOpenStats,
+  ORB_DROP_CHANCES,
+  ORBS_BY_RARITY,
+  OrbRarity,
+  ORB_DEFINITIONS,
+} from "./itemStats";
 
 // --- Item ID Encoding: category * 100 + subtype * 10 + tier ---
 
@@ -30,7 +43,7 @@ export function makeItemId(
   return category * 100 + subtype * 10 + tier;
 }
 
-// --- Stat interfaces ---
+// --- Stat interfaces (kept for UT item definitions) ---
 
 export interface WeaponStats {
   damage: number;
@@ -92,7 +105,7 @@ export interface ItemDefinition {
 
 // --- Tier colors ---
 
-const TIER_COLORS: Record<number, number> = {
+export const TIER_COLORS: Record<number, number> = {
   1: 0x888888, // Gray
   2: 0x44aa44, // Green
   3: 0x4488ff, // Blue
@@ -110,7 +123,7 @@ export function isUTItem(itemId: number): boolean {
   return getItemTier(itemId) === ItemTier.UT;
 }
 
-// --- Item Definitions ---
+// --- Item Definitions (used for UT items and name/color lookups) ---
 
 export const ITEM_DEFS: Record<number, ItemDefinition> = {
   // ===== SWORDS (category=0, subtype=0) =====
@@ -366,6 +379,7 @@ const CATEGORY_NAMES: Record<number, string> = {
   [ItemCategory.Armor]: "Armor",
   [ItemCategory.Ring]: "Ring",
   [ItemCategory.Consumable]: "Consumable",
+  [ItemCategory.CraftingOrb]: "Crafting Orb",
 };
 
 export function getCategoryName(category: number): string {
@@ -376,8 +390,159 @@ export function isConsumableItem(itemId: number): boolean {
   return getItemCategory(itemId) === ItemCategory.Consumable;
 }
 
+export function isCraftingOrbItem(itemId: number): boolean {
+  return getItemCategory(itemId) === ItemCategory.CraftingOrb;
+}
+
 export function getConsumableSlotIndex(itemId: number): number {
   return getItemSubtype(itemId);
+}
+
+// --- Subtype display names ---
+
+const WEAPON_SUBTYPE_NAMES: Record<number, string> = {
+  [WeaponSubtype.Sword]: "Sword",
+  [WeaponSubtype.Bow]: "Bow",
+};
+
+const ABILITY_SUBTYPE_NAMES: Record<number, string> = {
+  [AbilitySubtype.Quiver]: "Quiver",
+};
+
+export function getSubtypeName(category: number, subtype: number): string {
+  if (category === ItemCategory.Weapon) return WEAPON_SUBTYPE_NAMES[subtype] ?? "Weapon";
+  if (category === ItemCategory.Ability) return ABILITY_SUBTYPE_NAMES[subtype] ?? "Ability";
+  if (category === ItemCategory.Armor) return "Armor";
+  if (category === ItemCategory.Ring) return "Ring";
+  if (category === ItemCategory.CraftingOrb) return ORB_DEFINITIONS[subtype]?.name ?? "Orb";
+  return "Unknown";
+}
+
+/** Get the display name for an item instance. */
+export function getItemInstanceName(item: ItemInstanceData): string {
+  if (item.baseItemId < 0) return "";
+
+  const category = getItemCategory(item.baseItemId);
+
+  // Crafting orbs
+  if (category === ItemCategory.CraftingOrb) {
+    const subtype = getItemSubtype(item.baseItemId);
+    return ORB_DEFINITIONS[subtype]?.name ?? "Unknown Orb";
+  }
+
+  // Consumables
+  if (category === ItemCategory.Consumable) {
+    const def = ITEM_DEFS[item.baseItemId];
+    return def?.name ?? "Consumable";
+  }
+
+  // UT items - use ITEM_DEFS name
+  if (item.isUT) {
+    const def = ITEM_DEFS[item.baseItemId];
+    return def?.name ?? "Unknown UT";
+  }
+
+  // Tiered items - use ITEM_DEFS name by looking up (category, subtype, tier)
+  const def = ITEM_DEFS[item.baseItemId];
+  if (def) return def.name;
+
+  // Fallback: generate name from category/subtype
+  const subtype = getItemSubtype(item.baseItemId);
+  return `${getSubtypeName(category, subtype)} T${item.instanceTier}`;
+}
+
+/** Get the display color for an item instance (used for icons). */
+export function getItemColor(item: ItemInstanceData): number {
+  if (item.baseItemId < 0) return 0x666666;
+
+  const category = getItemCategory(item.baseItemId);
+
+  // Crafting orbs
+  if (category === ItemCategory.CraftingOrb) {
+    const subtype = getItemSubtype(item.baseItemId);
+    return ORB_DEFINITIONS[subtype]?.color ?? 0xffffff;
+  }
+
+  // Consumables / UT items - use ITEM_DEFS color
+  if (category === ItemCategory.Consumable || item.isUT) {
+    const def = ITEM_DEFS[item.baseItemId];
+    return def?.color ?? 0xffffff;
+  }
+
+  // Tiered items - color by instance tier
+  return TIER_COLORS[item.instanceTier] ?? 0x888888;
+}
+
+// --- Item Instance Generation ---
+
+/** Generate a tiered item instance with random locked stat tiers and optional pre-rolled open stats. */
+export function generateItemInstance(
+  category: number,
+  subtype: number,
+  tier: number,
+  prerollOpenStats: boolean = true
+): ItemInstanceData {
+  const lockedStats = LOCKED_STATS_BY_CATEGORY[category];
+  if (!lockedStats) {
+    return createEmptyItemInstance();
+  }
+
+  return {
+    baseItemId: makeItemId(category, subtype, tier),
+    instanceTier: tier,
+    isUT: false,
+    lockedStat1Type: lockedStats[0],
+    lockedStat1Tier: rollStatTier(tier),
+    lockedStat2Type: lockedStats[1],
+    lockedStat2Tier: rollStatTier(tier),
+    openStats: prerollOpenStats ? rollInitialOpenStats(category) : [],
+    forgeProtectedSlot: -1,
+  };
+}
+
+/** Generate a UT item instance (static stats from ITEM_DEFS, no crafting). */
+export function generateUTItemInstance(baseItemId: number): ItemInstanceData {
+  return {
+    baseItemId,
+    instanceTier: 0,
+    isUT: true,
+    lockedStat1Type: -1,
+    lockedStat1Tier: 0,
+    lockedStat2Type: -1,
+    lockedStat2Tier: 0,
+    openStats: [],
+    forgeProtectedSlot: -1,
+  };
+}
+
+/** Generate a consumable item instance. */
+export function generateConsumableInstance(baseItemId: number): ItemInstanceData {
+  return {
+    baseItemId,
+    instanceTier: 0,
+    isUT: false,
+    lockedStat1Type: -1,
+    lockedStat1Tier: 0,
+    lockedStat2Type: -1,
+    lockedStat2Tier: 0,
+    openStats: [],
+    forgeProtectedSlot: -1,
+  };
+}
+
+/** Generate a crafting orb item instance. */
+export function generateOrbInstance(orbType: number): ItemInstanceData {
+  return {
+    baseItemId: makeItemId(ItemCategory.CraftingOrb, orbType, 1),
+    instanceTier: 0,
+    isUT: false,
+    lockedStat1Type: -1,
+    lockedStat1Tier: 0,
+    lockedStat2Type: -1,
+    lockedStat2Tier: 0,
+    openStats: [],
+    forgeProtectedSlot: -1,
+  };
 }
 
 // --- Drop chance per difficulty zone ---
@@ -394,10 +559,6 @@ export const BAG_DROP_CHANCES: Record<
 };
 
 // --- Loot generation ---
-
-function pickRandom<T>(arr: T[]): T {
-  return arr[Math.floor(Math.random() * arr.length)];
-}
 
 /**
  * Roll which bag rarity (if any) drops from an enemy in the given biome.
@@ -426,10 +587,6 @@ const ZONE_TIER_RANGES: Record<
   [DifficultyZone.Godlands]: { green: [4, 5], red: [5, 6], black: [6, 6] },
 };
 
-/**
- * Generate item contents for a loot bag of the given rarity in the given biome.
- * Returns an array of encoded item IDs.
- */
 /** All UT item IDs (tier 7). */
 const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
   .map(Number)
@@ -445,10 +602,38 @@ const GENERAL_UT_ITEM_IDS = UT_ITEM_IDS.filter(
   (id) => !DUNGEON_EXCLUSIVE_UT_IDS.has(id)
 );
 
-export function rollBagLoot(bagRarity: number, biome: number): number[] {
+/**
+ * Roll orb drops for an enemy kill in a given biome.
+ * Returns an array of orb ItemInstanceData (may be empty).
+ */
+export function rollOrbDrops(biome: number): ItemInstanceData[] {
+  // Crafting orbs only drop in Godlands
+  if (biome !== DifficultyZone.Godlands) return [];
+
+  const chances = ORB_DROP_CHANCES[biome];
+  if (!chances) return [];
+
+  const orbs: ItemInstanceData[] = [];
+  for (const [rarityStr, chance] of Object.entries(chances)) {
+    const rarity = Number(rarityStr);
+    if (Math.random() < chance) {
+      const orbTypes = ORBS_BY_RARITY[rarity];
+      if (orbTypes && orbTypes.length > 0) {
+        orbs.push(generateOrbInstance(pickRandom(orbTypes)));
+      }
+    }
+  }
+  return orbs;
+}
+
+/**
+ * Generate item instances for a loot bag of the given rarity in the given biome.
+ * Returns an array of ItemInstanceData.
+ */
+export function rollBagLoot(bagRarity: number, biome: number): ItemInstanceData[] {
   // Black bags drop 1 random non-dungeon-exclusive UT item
   if (bagRarity === BagRarity.Black) {
-    return [pickRandom(GENERAL_UT_ITEM_IDS)];
+    return [generateUTItemInstance(pickRandom(GENERAL_UT_ITEM_IDS))];
   }
 
   const tierRanges = ZONE_TIER_RANGES[biome];
@@ -477,7 +662,7 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
     ItemCategory.Ring,
   ];
 
-  const items: number[] = [];
+  const items: ItemInstanceData[] = [];
   for (let i = 0; i < itemCount; i++) {
     const category = pickRandom(categories);
     const tier =
@@ -490,16 +675,20 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
         Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
     }
 
-    items.push(makeItemId(category, subtype, tier));
+    items.push(generateItemInstance(category, subtype, tier));
   }
 
   // Consumable drops (Lowlands and above)
   if (biome >= DifficultyZone.Lowlands && Math.random() < 0.4) {
     const roll = Math.random();
-    if (roll < 0.4) items.push(makeItemId(4, 0, 1)); // Health Pot
-    else if (roll < 0.8) items.push(makeItemId(4, 1, 1)); // Mana Pot
-    else items.push(makeItemId(4, 2, 1)); // Portal Gem
+    if (roll < 0.4) items.push(generateConsumableInstance(makeItemId(4, 0, 1)));
+    else if (roll < 0.8) items.push(generateConsumableInstance(makeItemId(4, 1, 1)));
+    else items.push(generateConsumableInstance(makeItemId(4, 2, 1)));
   }
+
+  // Orb drops
+  const orbDrops = rollOrbDrops(biome);
+  items.push(...orbDrops);
 
   return items;
 }
@@ -509,7 +698,7 @@ export function rollBagLoot(bagRarity: number, biome: number): number[] {
  */
 export function rollBossLoot(dungeonType: number): {
   bagRarity: number;
-  items: number[];
+  items: ItemInstanceData[];
 } {
   return rollBossLootWithRarity(dungeonType, 0.3);
 }
@@ -521,18 +710,18 @@ export function rollBossLoot(dungeonType: number): {
 export function rollBossLootWithRarity(
   dungeonType: number,
   blackBagChance: number
-): { bagRarity: number; items: number[] } {
+): { bagRarity: number; items: ItemInstanceData[] } {
   const isBlack = Math.random() < blackBagChance;
   const bagRarity = isBlack ? BagRarity.Black : BagRarity.Red;
 
   if (bagRarity === BagRarity.Black) {
     if (dungeonType === DungeonType.InfernalPit) {
-      return { bagRarity, items: [UT_WEAPON_ID] };
+      return { bagRarity, items: [generateUTItemInstance(UT_WEAPON_ID)] };
     }
     if (dungeonType === DungeonType.VoidSanctum) {
-      return { bagRarity, items: [UT_ARMOR_ID] };
+      return { bagRarity, items: [generateUTItemInstance(UT_ARMOR_ID)] };
     }
-    return { bagRarity, items: [pickRandom(GENERAL_UT_ITEM_IDS)] };
+    return { bagRarity, items: [generateUTItemInstance(pickRandom(GENERAL_UT_ITEM_IDS))] };
   }
 
   const itemCount = 1 + Math.floor(Math.random() * 2); // 1-2
@@ -542,7 +731,7 @@ export function rollBossLootWithRarity(
     ItemCategory.Armor,
     ItemCategory.Ring,
   ];
-  const items: number[] = [];
+  const items: ItemInstanceData[] = [];
   for (let i = 0; i < itemCount; i++) {
     const category = pickRandom(categories);
     const tier = Math.random() < 0.5 ? 5 : 6;
@@ -551,7 +740,7 @@ export function rollBossLootWithRarity(
       subtype =
         Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
     }
-    items.push(makeItemId(category, subtype, tier));
+    items.push(generateItemInstance(category, subtype, tier));
   }
   return { bagRarity, items };
 }

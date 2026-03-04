@@ -1,7 +1,8 @@
 import { Schema, type, ArraySchema } from "@colyseus/schema";
+import { ItemInstance, createEmptyItemSchema } from "./ItemInstance";
 
 export class LootBagItem extends Schema {
-  @type("int16") itemType: number = -1; // -1 = empty slot
+  @type(ItemInstance) item: ItemInstance = createEmptyItemSchema();
 }
 
 export class LootBag extends Schema {

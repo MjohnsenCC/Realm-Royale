@@ -1,5 +1,6 @@
 import Phaser from "phaser";
-import { ItemCategory, WeaponSubtype, ConsumableSubtype } from "@rotmg-lite/shared";
+import { ItemCategory, WeaponSubtype, ConsumableSubtype, CraftingOrbType } from "@rotmg-lite/shared";
+import { TIER_COLORS, ORB_DEFINITIONS } from "@rotmg-lite/shared";
 
 /**
  * Draw an item icon shape on a Phaser Graphics object.
@@ -105,13 +106,24 @@ export function drawItemIcon(
       g.fillPath();
       g.strokePath();
     }
+  } else if (category === ItemCategory.CraftingOrb) {
+    // Crafting orb: circle with inner glow
+    const orbColor = ORB_DEFINITIONS[subtype]?.color ?? color;
+    g.fillStyle(orbColor, 0.9);
+    g.fillCircle(cx, cy, half * 0.5);
+    g.lineStyle(1, 0xffffff, 0.4);
+    g.strokeCircle(cx, cy, half * 0.5);
+    // Inner highlight
+    g.fillStyle(0xffffff, 0.3);
+    g.fillCircle(cx - half * 0.12, cy - half * 0.15, half * 0.15);
   }
 }
 
 /**
  * Get the slot border color based on item tier.
- * T1-T6 = gray, UT (T7) = gold.
+ * Uses tier colors for tiered items, gold for UT.
  */
 export function getSlotBorderColor(tier: number): number {
-  return tier === 7 ? 0xffdd00 : 0x666666;
+  if (tier === 7) return 0xffdd00; // UT gold
+  return 0x666666; // All tiered items use grey border
 }

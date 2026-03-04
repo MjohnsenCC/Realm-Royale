@@ -75,6 +75,7 @@ export class HUD {
   private consumableCountTexts: Phaser.GameObjects.Text[] = [];
   private consumableKeyTexts: Phaser.GameObjects.Text[] = [];
   private consumableSlotPositions: { x: number; y: number }[] = [];
+  private consumableZones: Phaser.GameObjects.Zone[] = [];
   private consumableSlotSize: number = 0;
   private currentConsumables: [number, number, number] = [0, 0, 0];
 
@@ -284,6 +285,34 @@ export class HUD {
         .setScrollFactor(0)
         .setDepth(103);
       this.consumableKeyTexts.push(keyText);
+    }
+
+    // Consumable slot tooltip zones
+    const consumableItemIds = [401, 411, 421];
+    for (let i = 0; i < 3; i++) {
+      const pos = this.consumableSlotPositions[i];
+      const zone = scene.add
+        .zone(pos.x + iconBtnSize / 2, pos.y + iconBtnSize / 2, iconBtnSize, iconBtnSize)
+        .setScrollFactor(0)
+        .setDepth(104)
+        .setInteractive();
+
+      zone.on("pointerover", () => {
+        if (this.currentConsumables[i] > 0) {
+          const ptr = this.scene.input.activePointer;
+          this.inventoryUI.getTooltip().showById(consumableItemIds[i], ptr.x, ptr.y);
+        }
+      });
+      zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        if (this.currentConsumables[i] > 0) {
+          this.inventoryUI.getTooltip().showById(consumableItemIds[i], pointer.x, pointer.y);
+        }
+      });
+      zone.on("pointerout", () => {
+        this.inventoryUI.getTooltip().hide();
+      });
+
+      this.consumableZones.push(zone);
     }
 
     this.drawConsumableSlots();
@@ -678,7 +707,7 @@ export class HUD {
     const mapH = zoneDims.height;
 
     // Compute visible region based on zoom
-    const zoom = this.minimapZoom;
+    const zoom = zone === "nexus" ? 1 : this.minimapZoom;
     const visibleW = mapW / zoom;
     const visibleH = mapH / zoom;
     const viewX = Math.max(0, Math.min(localX - visibleW / 2, mapW - visibleW));
@@ -775,6 +804,11 @@ export class HUD {
       this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
       mmY + this.mmHeight - btnPad
     );
+
+    // Hide zoom buttons in nexus (full map always shown)
+    const inNexus = zone === "nexus";
+    this.minimapZoomInBtn.setVisible(!inNexus);
+    this.minimapZoomOutBtn.setVisible(!inNexus);
   }
 
   private renderMinimapBiomes(

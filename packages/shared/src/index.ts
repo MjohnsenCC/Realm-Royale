@@ -4,6 +4,8 @@ export * from "./utils";
 export * from "./enemies";
 export * from "./noise";
 export * from "./items";
+export * from "./itemStats";
+export * from "./crafting";
 export * from "./dungeonMap";
 export * from "./dungeonModifiers";
 export * from "./nexusMap";

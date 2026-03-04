@@ -67,6 +67,12 @@ export const NEXUS_TILES_Y = 50;
 export const NEXUS_WIDTH = NEXUS_TILES_X * TILE_SIZE; // 2000
 export const NEXUS_HEIGHT = NEXUS_TILES_Y * TILE_SIZE; // 2000
 
+// Crafting table (located in nexus east room)
+export const CRAFTING_TABLE_X = 43 * TILE_SIZE; // 1720 — center of east room
+export const CRAFTING_TABLE_Y = 25.5 * TILE_SIZE; // 1020 — center of east room
+export const CRAFTING_TABLE_RADIUS = 36;
+export const CRAFTING_TABLE_INTERACT_RADIUS = 60;
+
 // Portal (located in nexus north room, takes player to hostile zone)
 export const PORTAL_X = 25.5 * TILE_SIZE; // 1020 — center of north room
 export const PORTAL_Y = 7 * TILE_SIZE; // 280 — center of north room

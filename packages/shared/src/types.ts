@@ -206,8 +206,33 @@ export const ItemCategory = {
   Armor: 2,
   Ring: 3,
   Consumable: 4,
+  CraftingOrb: 5,
 } as const;
 export type ItemCategory = (typeof ItemCategory)[keyof typeof ItemCategory];
+
+// Stat types for the item instance system
+export const StatType = {
+  AttackDamage: 0,
+  AttackSpeed: 1,
+  Health: 2,
+  HealthRegen: 3,
+  ManaRegen: 4,
+  MovementSpeed: 5,
+} as const;
+export type StatType = (typeof StatType)[keyof typeof StatType];
+
+// Crafting orb types
+export const CraftingOrbType = {
+  Blank: 0,
+  Ember: 1,
+  Shard: 2,
+  Chaos: 3,
+  Flux: 4,
+  Void: 5,
+  Prism: 6,
+  Forge: 7,
+} as const;
+export type CraftingOrbType = (typeof CraftingOrbType)[keyof typeof CraftingOrbType];
 
 // Weapon subtypes
 export const WeaponSubtype = {
@@ -287,5 +312,7 @@ export const ClientMessage = {
   UseHealthPot: "useHealthPot",
   UseManaPot: "useManaPot",
   UsePortalGem: "usePortalGem",
+  UseCraftingOrb: "useCraftingOrb",
+  ToggleUnlimitedOrbs: "toggleUnlimitedOrbs",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

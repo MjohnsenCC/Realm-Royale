@@ -1,5 +1,14 @@
 import Phaser from "phaser";
-import { BAG_SIZE, BagRarity, ITEM_DEFS, ClientMessage } from "@rotmg-lite/shared";
+import {
+  BAG_SIZE,
+  BagRarity,
+  ClientMessage,
+  getItemCategory,
+  getItemSubtype,
+  getItemColor,
+} from "@rotmg-lite/shared";
+import type { ItemInstanceData } from "@rotmg-lite/shared";
+import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
@@ -41,9 +50,14 @@ export class LootBagUI {
   private room: any = null;
   private visible: boolean = false;
   private currentBagId: string = "";
-  private currentItems: number[] = new Array(BAG_SIZE).fill(-1);
+  private currentItems: ItemInstanceData[] = Array.from(
+    { length: BAG_SIZE },
+    () => createEmptyItemInstance()
+  );
   private currentBagRarity: number = 0;
   private tooltip: ItemTooltip;
+  private shiftKey: Phaser.Input.Keyboard.Key | null = null;
+  private lastHoveredItem: { item: ItemInstanceData; screenX: number; screenY: number } | null = null;
 
   // Scaled dimensions
   private S: number;
@@ -61,6 +75,12 @@ export class LootBagUI {
   constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invSectionX: number, unifiedPanelY: number) {
     this.scene = scene;
     this.tooltip = tooltip;
+
+    if (scene.input.keyboard) {
+      this.shiftKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+      this.shiftKey.on("down", () => this.refreshTooltipShift());
+      this.shiftKey.on("up", () => this.refreshTooltipShift());
+    }
 
     this.S = getUIScale();
     const S = this.S;
@@ -108,19 +128,24 @@ export class LootBagUI {
       });
 
       zone.on("pointerover", () => {
-        const itemId = this.currentItems[i];
-        if (itemId >= 0) {
+        const item = this.currentItems[i];
+        if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
-          this.tooltip.show(itemId, ptr.x, ptr.y);
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: ptr.x, screenY: ptr.y };
+          this.tooltip.show(item, ptr.x, ptr.y, shiftHeld);
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        const itemId = this.currentItems[i];
-        if (itemId >= 0) {
-          this.tooltip.show(itemId, pointer.x, pointer.y);
+        const item = this.currentItems[i];
+        if (item && item.baseItemId >= 0) {
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: pointer.x, screenY: pointer.y };
+          this.tooltip.show(item, pointer.x, pointer.y, shiftHeld);
         }
       });
       zone.on("pointerout", () => {
+        this.lastHoveredItem = null;
         this.tooltip.hide();
       });
 
@@ -158,11 +183,11 @@ export class LootBagUI {
     this.room = room;
   }
 
-  show(bagId: string, bagRarity: number, items: number[]): void {
+  show(bagId: string, bagRarity: number, items: ItemInstanceData[]): void {
     this.currentBagId = bagId;
     this.currentBagRarity = bagRarity;
     for (let i = 0; i < BAG_SIZE; i++) {
-      this.currentItems[i] = i < items.length ? items[i] : -1;
+      this.currentItems[i] = i < items.length ? items[i] : createEmptyItemInstance();
     }
     this.setVisible(true);
     this.redraw();
@@ -170,17 +195,18 @@ export class LootBagUI {
 
   hide(): void {
     this.currentBagId = "";
+    this.lastHoveredItem = null;
     this.tooltip.hide();
     this.setVisible(false);
   }
 
-  updateItems(items: number[]): void {
+  updateItems(items: ItemInstanceData[]): void {
     if (!this.visible) return;
     let changed = false;
     for (let i = 0; i < BAG_SIZE; i++) {
-      const val = i < items.length ? items[i] : -1;
-      if (this.currentItems[i] !== val) {
-        this.currentItems[i] = val;
+      const newItem = i < items.length ? items[i] : createEmptyItemInstance();
+      if (this.currentItems[i].baseItemId !== newItem.baseItemId) {
+        this.currentItems[i] = newItem;
         changed = true;
       }
     }
@@ -238,34 +264,37 @@ export class LootBagUI {
       const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
       const sy = panelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
 
-      const itemType = this.currentItems[i];
-      const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
+      const item = this.currentItems[i];
+      const hasItem = item && item.baseItemId >= 0;
 
-      if (def) {
+      if (hasItem) {
         this.slotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const slotBorder = def ? getSlotBorderColor(def.tier) : 0x333344;
+      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const slotBorder = hasItem ? getSlotBorderColor(tier) : 0x333344;
       this.slotGraphics.lineStyle(1, slotBorder, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Draw item icon shape instead of text name
       this.itemTexts[i].setText("");
-      if (def) {
+      if (hasItem) {
+        const category = getItemCategory(item.baseItemId);
+        const subtype = getItemSubtype(item.baseItemId);
+        const color = getItemColor(item);
         const iconSize = this.slotSize * 0.55;
         drawItemIcon(
           this.slotGraphics,
           sx + this.slotSize / 2,
           sy + this.slotSize / 2 - this.slotSize * 0.05,
           iconSize,
-          def.category,
-          def.subtype,
-          def.color
+          category,
+          subtype,
+          color
         );
-        const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+        const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
         this.tierTexts[i].setText(tierLabel);
       } else {
         this.tierTexts[i].setText("");
@@ -276,9 +305,17 @@ export class LootBagUI {
     }
   }
 
+  private refreshTooltipShift(): void {
+    if (this.lastHoveredItem) {
+      const { item, screenX, screenY } = this.lastHoveredItem;
+      const shiftHeld = this.shiftKey?.isDown ?? false;
+      this.tooltip.show(item, screenX, screenY, shiftHeld);
+    }
+  }
+
   private onPickupItem(slotIndex: number): void {
     if (!this.room || !this.currentBagId) return;
-    if (this.currentItems[slotIndex] === -1) return;
+    if (this.currentItems[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.PickupItem, {
       bagId: this.currentBagId,
       slotIndex,

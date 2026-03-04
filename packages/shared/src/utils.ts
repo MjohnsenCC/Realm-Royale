@@ -20,13 +20,18 @@ import {
   HOSTILE_HEIGHT,
   NEXUS_WIDTH,
   NEXUS_HEIGHT,
-  DUNGEON_WIDTH,
-  DUNGEON_HEIGHT,
   TILE_SIZE,
 } from "./constants";
-import { ItemCategory, PlayerZone, DungeonType } from "./types";
+import { ItemCategory, PlayerZone, DungeonType, StatType } from "./types";
 import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
-import { ITEM_DEFS } from "./items";
+import { ITEM_DEFS, getItemCategory, getItemSubtype } from "./items";
+import {
+  ItemInstanceData,
+  isEmptyItem,
+  getStatValue,
+  getScaledWeaponStats,
+  getScaledAbilityStats,
+} from "./itemStats";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
 export function xpForLevel(level: number): number {
@@ -53,10 +58,74 @@ export function getStatsForLevel(level: number) {
   };
 }
 
+/** Accumulate stat bonuses from an item's locked + open stats. */
+function accumulateItemBonuses(
+  item: ItemInstanceData,
+  bonuses: {
+    damage: number;
+    cooldownReduction: number;
+    maxHp: number;
+    hpRegen: number;
+    manaRegen: number;
+    speed: number;
+    projSpeed: number;
+  }
+): void {
+  if (isEmptyItem(item) || item.isUT) return;
+  const tier = item.instanceTier;
+
+  // Locked stats
+  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, tier);
+  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, tier);
+
+  // Open stats (packed as [type, tier, type, tier, ...])
+  for (let i = 0; i < item.openStats.length; i += 2) {
+    addStatBonus(bonuses, item.openStats[i], item.openStats[i + 1], tier);
+  }
+}
+
+function addStatBonus(
+  bonuses: {
+    damage: number;
+    cooldownReduction: number;
+    maxHp: number;
+    hpRegen: number;
+    manaRegen: number;
+    speed: number;
+    projSpeed: number;
+  },
+  statType: number,
+  statTier: number,
+  itemTier: number
+): void {
+  if (statType < 0 || statTier <= 0) return;
+  const value = getStatValue(statType, statTier, itemTier);
+  switch (statType) {
+    case StatType.AttackDamage:
+      bonuses.damage += value;
+      break;
+    case StatType.AttackSpeed:
+      bonuses.cooldownReduction += value;
+      break;
+    case StatType.Health:
+      bonuses.maxHp += value;
+      break;
+    case StatType.HealthRegen:
+      bonuses.hpRegen += value;
+      break;
+    case StatType.ManaRegen:
+      bonuses.manaRegen += value;
+      break;
+    case StatType.MovementSpeed:
+      bonuses.speed += value;
+      break;
+  }
+}
+
 /** Compute full player stats combining level + equipment bonuses. */
 export function computePlayerStats(
   level: number,
-  equipment: number[]
+  equipment: ItemInstanceData[]
 ): {
   maxHp: number;
   damage: number;
@@ -70,58 +139,77 @@ export function computePlayerStats(
   weaponProjSize: number;
 } {
   const base = getStatsForLevel(level);
-  let maxHpBonus = 0;
-  let damageBonus = 0;
-  let speedBonus = 0;
-  let hpRegenBonus = 0;
-  let maxManaBonus = 0;
-  let manaRegenBonus = 0;
-  let projSpeedBonus = 0;
+  const bonuses = {
+    damage: 0,
+    cooldownReduction: 0,
+    maxHp: 0,
+    hpRegen: 0,
+    manaRegen: 0,
+    speed: 0,
+    projSpeed: 0,
+  };
 
-  // Weapon stats (fallback if no weapon)
+  // Default weapon stats (fallback if no weapon)
   let weaponDamage = base.damage;
   let weaponCooldown = base.shootCooldown;
   let weaponRange = 100;
   let weaponProjSpeed = 300;
   let weaponProjSize = 5;
 
-  const weaponId = equipment[ItemCategory.Weapon] ?? -1;
-  if (weaponId >= 0) {
-    const def = ITEM_DEFS[weaponId];
-    if (def?.weaponStats) {
-      weaponDamage = def.weaponStats.damage;
-      weaponCooldown = def.weaponStats.shootCooldown;
-      weaponRange = def.weaponStats.range;
-      weaponProjSpeed = def.weaponStats.projectileSpeed;
-      weaponProjSize = def.weaponStats.projectileSize;
+  // --- Weapon ---
+  const weapon = equipment[ItemCategory.Weapon];
+  if (weapon && !isEmptyItem(weapon)) {
+    if (weapon.isUT) {
+      const def = ITEM_DEFS[weapon.baseItemId];
+      if (def?.weaponStats) {
+        weaponDamage = def.weaponStats.damage;
+        weaponCooldown = def.weaponStats.shootCooldown;
+        weaponRange = def.weaponStats.range;
+        weaponProjSpeed = def.weaponStats.projectileSpeed;
+        weaponProjSize = def.weaponStats.projectileSize;
+      }
+    } else {
+      const subtype = getItemSubtype(weapon.baseItemId);
+      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier);
+      weaponDamage = scaled.damage;
+      weaponCooldown = scaled.shootCooldown;
+      weaponRange = scaled.range;
+      weaponProjSpeed = scaled.projectileSpeed;
+      weaponProjSize = scaled.projectileSize;
     }
   }
 
-  // Armor
-  const armorId = equipment[ItemCategory.Armor] ?? -1;
-  if (armorId >= 0) {
-    const def = ITEM_DEFS[armorId];
+  // --- Armor (UT fallback) ---
+  const armor = equipment[ItemCategory.Armor];
+  if (armor && !isEmptyItem(armor) && armor.isUT) {
+    const def = ITEM_DEFS[armor.baseItemId];
     if (def?.armorStats) {
-      maxHpBonus += def.armorStats.maxHpBonus;
+      bonuses.maxHp += def.armorStats.maxHpBonus;
       if (def.armorStats.manaRegenBonus) {
-        manaRegenBonus += def.armorStats.manaRegenBonus;
+        bonuses.manaRegen += def.armorStats.manaRegenBonus;
       }
     }
   }
 
-  // Ring
-  const ringId = equipment[ItemCategory.Ring] ?? -1;
-  if (ringId >= 0) {
-    const def = ITEM_DEFS[ringId];
+  // --- Ring (UT fallback) ---
+  const ring = equipment[ItemCategory.Ring];
+  if (ring && !isEmptyItem(ring) && ring.isUT) {
+    const def = ITEM_DEFS[ring.baseItemId];
     if (def?.ringStats) {
-      speedBonus += def.ringStats.speedBonus;
-      damageBonus += def.ringStats.damageBonus;
-      hpRegenBonus += def.ringStats.hpRegenBonus;
-      maxHpBonus += def.ringStats.maxHpBonus;
-      maxManaBonus += def.ringStats.maxManaBonus;
+      bonuses.speed += def.ringStats.speedBonus;
+      bonuses.damage += def.ringStats.damageBonus;
+      bonuses.hpRegen += def.ringStats.hpRegenBonus;
+      bonuses.maxHp += def.ringStats.maxHpBonus;
       if (def.ringStats.projSpeedBonus) {
-        projSpeedBonus += def.ringStats.projSpeedBonus;
+        bonuses.projSpeed += def.ringStats.projSpeedBonus;
       }
+    }
+  }
+
+  // --- Accumulate locked + open stat bonuses from all tiered equipment ---
+  for (const item of equipment) {
+    if (item) {
+      accumulateItemBonuses(item, bonuses);
     }
   }
 
@@ -130,15 +218,15 @@ export function computePlayerStats(
   const manaRegenBase = BASE_MANA_REGEN + (l - 1) * MANA_REGEN_PER_LEVEL;
 
   return {
-    maxHp: base.maxHp + maxHpBonus,
-    damage: weaponDamage + damageBonus,
-    shootCooldown: weaponCooldown,
-    speed: Math.min(MAX_SPEED, base.speed + speedBonus),
-    hpRegen: base.hpRegen + hpRegenBonus,
-    maxMana: manaBase + maxManaBonus,
-    manaRegen: manaRegenBase + manaRegenBonus,
+    maxHp: base.maxHp + bonuses.maxHp,
+    damage: weaponDamage + bonuses.damage,
+    shootCooldown: Math.max(MIN_SHOOT_COOLDOWN, weaponCooldown - bonuses.cooldownReduction),
+    speed: Math.min(MAX_SPEED, base.speed + bonuses.speed),
+    hpRegen: base.hpRegen + bonuses.hpRegen,
+    maxMana: manaBase,
+    manaRegen: manaRegenBase + bonuses.manaRegen,
     weaponRange,
-    weaponProjSpeed: weaponProjSpeed + projSpeedBonus,
+    weaponProjSpeed: weaponProjSpeed + bonuses.projSpeed,
     weaponProjSize,
   };
 }

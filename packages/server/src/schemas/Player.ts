@@ -10,6 +10,7 @@ import {
   BASE_MAX_MANA,
   BASE_MANA_REGEN,
 } from "@rotmg-lite/shared";
+import { ItemInstance, createEmptyItemSchema } from "./ItemInstance";
 
 export class Player extends Schema {
   @type("string") id: string = "";
@@ -24,12 +25,12 @@ export class Player extends Schema {
   @type("boolean") alive: boolean = true;
   @type("uint32") lastProcessedInput: number = 0; // synced to client for reconciliation
   @type("string") zone: string = "nexus"; // "nexus" | "hostile"
-  @type(["int16"]) inventory = new ArraySchema<number>(
-    ...new Array(INVENTORY_SIZE).fill(-1)
-  ); // 8 slots, -1 = empty
-  @type(["int16"]) equipment = new ArraySchema<number>(
-    ...new Array(EQUIPMENT_SLOTS).fill(-1)
-  ); // 4 slots: weapon, ability, armor, ring
+  @type([ItemInstance]) inventory = new ArraySchema<ItemInstance>(
+    ...Array.from({ length: INVENTORY_SIZE }, () => createEmptyItemSchema())
+  );
+  @type([ItemInstance]) equipment = new ArraySchema<ItemInstance>(
+    ...Array.from({ length: EQUIPMENT_SLOTS }, () => createEmptyItemSchema())
+  );
   @type("number") mana: number = BASE_MAX_MANA;
   @type("number") maxMana: number = BASE_MAX_MANA;
   @type("number") cachedSpeed: number = PLAYER_SPEED; // synced for client prediction
@@ -39,10 +40,15 @@ export class Player extends Schema {
   @type("int8") manaPots: number = 0;
   @type("int8") portalGems: number = 0;
 
-  // Inventory stack counts (parallel to inventory array; 1 for non-stackable items)
-  @type(["int8"]) inventoryCounts = new ArraySchema<number>(
-    ...new Array(INVENTORY_SIZE).fill(0)
-  );
+  // Crafting orb counters
+  @type("int8") orbBlank: number = 0;
+  @type("int8") orbEmber: number = 0;
+  @type("int8") orbShard: number = 0;
+  @type("int8") orbChaos: number = 0;
+  @type("int8") orbFlux: number = 0;
+  @type("int8") orbVoid: number = 0;
+  @type("int8") orbPrism: number = 0;
+  @type("int8") orbForge: number = 0;
 
   // Server-only fields (not synced — no @type decorator)
   lastShootTime: number = 0;
@@ -83,6 +89,9 @@ export class Player extends Schema {
   dungeonReturnX: number = 0;
   dungeonReturnY: number = 0;
   dungeonReturnZone: string = "";
+
+  // Server-only: testing flag for unlimited crafting orbs
+  unlimitedOrbs: boolean = false;
 
   // Server-only: invulnerable during zone loading transition or portal gem
   invulnerable: boolean = false;

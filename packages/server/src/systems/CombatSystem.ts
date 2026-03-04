@@ -19,6 +19,7 @@ import {
   EnemyAIState,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
+import { schemaToItemData } from "../schemas/ItemInstance";
 
 export interface CombatEvent {
   type: "playerDied" | "enemyKilled" | "bossHit";
@@ -142,10 +143,10 @@ export class CombatSystem {
                 if (newLevel !== player.level) {
                   player.level = newLevel;
                   const eq = [
-                    player.equipment[0] ?? -1,
-                    player.equipment[1] ?? -1,
-                    player.equipment[2] ?? -1,
-                    player.equipment[3] ?? -1,
+                    schemaToItemData(player.equipment[0]!),
+                    schemaToItemData(player.equipment[1]!),
+                    schemaToItemData(player.equipment[2]!),
+                    schemaToItemData(player.equipment[3]!),
                   ];
                   const stats = computePlayerStats(newLevel, eq);
                   const oldMaxHp = player.maxHp;

@@ -10,6 +10,7 @@ import { CombatSystem } from "../systems/CombatSystem";
 import { ShootingPatternSystem } from "../systems/ShootingPatternSystem";
 import { DungeonSystem } from "../systems/DungeonSystem";
 import { DungeonPortal } from "../schemas/DungeonPortal";
+import { ItemInstance, schemaToItemData, itemDataToSchema, updateSchemaFromData, createEmptyItemSchema } from "../schemas/ItemInstance";
 import { generateId } from "../utils/idGenerator";
 import {
   ClientMessage,
@@ -24,6 +25,7 @@ import {
   PortalType,
   DungeonType,
   BagRarity,
+  CraftingOrbType,
   TICK_INTERVAL,
   PLAYER_RADIUS,
   ROAD_SPEED_MULTIPLIER,
@@ -39,10 +41,6 @@ import {
   BAG_SIZE,
   BAG_PICKUP_RADIUS,
   BAG_LIFETIME,
-  DEFAULT_WEAPON,
-  DEFAULT_ABILITY,
-  DEFAULT_ARMOR,
-  DEFAULT_RING,
   normalizeVector,
   applyMovement,
   distanceBetween,
@@ -67,10 +65,10 @@ import {
   isRiverAt,
   isWaterTile,
   generateDungeonStats,
-  makeItemId,
   generateNexusMap,
   getPackDef,
   isConsumableItem,
+  isCraftingOrbItem,
   getConsumableSlotIndex,
   CONSUMABLE_MAX_STACKS,
   HEALTH_POT_HEAL,
@@ -78,6 +76,14 @@ import {
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
   PORTAL_GEM_INVULN_MS,
+  generateItemInstance,
+  generateConsumableInstance,
+  isEmptyItem,
+  ItemInstanceData,
+  createEmptyItemInstance,
+  applyCraftingOrb,
+  getScaledWeaponStats,
+  getScaledAbilityStats,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import * as fs from "fs";
@@ -89,12 +95,11 @@ const FILTER_REFRESH_INTERVAL = 2; // every 2 ticks (100ms at 20Hz)
 
 /** Recalculate all player stats from level + equipment. */
 function recalcPlayerStats(player: Player): void {
-  const eq = [
-    player.equipment[0] ?? -1,
-    player.equipment[1] ?? -1,
-    player.equipment[2] ?? -1,
-    player.equipment[3] ?? -1,
-  ];
+  const eq: ItemInstanceData[] = [];
+  for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+    const slot = player.equipment[i];
+    eq.push(slot ? schemaToItemData(slot) : createEmptyItemInstance());
+  }
   const stats = computePlayerStats(player.level, eq);
 
   const oldMaxHp = player.maxHp;
@@ -292,28 +297,38 @@ export class GameRoom extends Room<GameState> {
         const slotIndex = data.slotIndex;
         if (slotIndex < 0 || slotIndex >= bag.items.length) return;
         const bagItem = bag.items[slotIndex];
-        if (!bagItem || bagItem.itemType === -1) return;
+        if (!bagItem || bagItem.item.baseItemId === -1) return;
 
-        // Consumable items go to dedicated slots first, then inventory
-        if (isConsumableItem(bagItem.itemType)) {
-          if (!this.addConsumableToPlayer(player, bagItem.itemType)) return;
-          bagItem.itemType = -1;
-        } else {
+        const itemData = schemaToItemData(bagItem.item);
+        const itemId = itemData.baseItemId;
+
+        // Consumable items go to dedicated slots
+        if (isConsumableItem(itemId)) {
+          if (!this.addConsumableToPlayer(player, itemId)) return;
+          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+        }
+        // Crafting orbs go to orb counter
+        else if (isCraftingOrbItem(itemId)) {
+          const orbType = getItemSubtype(itemId);
+          this.addOrbToPlayer(player, orbType);
+          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+        }
+        // Equipment goes to inventory
+        else {
           let emptySlot = -1;
           for (let i = 0; i < player.inventory.length; i++) {
-            if (player.inventory[i] === -1) {
+            if (player.inventory[i]!.baseItemId === -1) {
               emptySlot = i;
               break;
             }
           }
           if (emptySlot === -1) return;
 
-          player.inventory[emptySlot] = bagItem.itemType;
-          player.inventoryCounts[emptySlot] = 1;
-          bagItem.itemType = -1;
+          updateSchemaFromData(player.inventory[emptySlot]!, itemData);
+          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
         }
 
-        const allEmpty = bag.items.every((item) => item.itemType === -1);
+        const allEmpty = bag.items.every((item) => item.item.baseItemId === -1);
         if (allEmpty) {
           this.state.lootBags.delete(bag.id);
           this.state.players.forEach((p) => {
@@ -323,8 +338,6 @@ export class GameRoom extends Room<GameState> {
               if (c) c.send(ServerMessage.BagClosed, {});
             }
           });
-        } else {
-          this.broadcastBagUpdate(bag);
         }
       }
     );
@@ -338,37 +351,24 @@ export class GameRoom extends Room<GameState> {
 
         const slotIndex = data.slotIndex;
         if (slotIndex < 0 || slotIndex >= INVENTORY_SIZE) return;
-        const itemType = player.inventory[slotIndex] ?? -1;
-        if (itemType === -1) return;
+        const invItem = player.inventory[slotIndex];
+        if (!invItem || invItem.baseItemId === -1) return;
 
-        // Handle consumable stacks: drop one, keep rest
-        if (isConsumableItem(itemType)) {
-          const count = player.inventoryCounts[slotIndex] || 1;
-          if (count > 1) {
-            player.inventoryCounts[slotIndex] = count - 1;
-          } else {
-            player.inventory[slotIndex] = -1;
-            player.inventoryCounts[slotIndex] = 0;
-          }
-        } else {
-          player.inventory[slotIndex] = -1;
-          player.inventoryCounts[slotIndex] = 0;
-        }
+        const itemData = schemaToItemData(invItem);
+        updateSchemaFromData(invItem, createEmptyItemInstance());
 
         if (player.openBagId) {
           const openBag = this.state.lootBags.get(player.openBagId);
           if (openBag) {
-            const emptySlot = openBag.items.findIndex((item) => item.itemType === -1);
-            const slotItem = emptySlot !== -1 ? openBag.items[emptySlot] : undefined;
-            if (slotItem) {
-              slotItem.itemType = itemType;
-              this.broadcastBagUpdate(openBag);
+            const emptySlot = openBag.items.findIndex((item) => item.item.baseItemId === -1);
+            if (emptySlot !== -1) {
+              updateSchemaFromData(openBag.items[emptySlot]!.item, itemData);
               return;
             }
           }
         }
 
-        this.spawnLootBag(player.x, player.y, BagRarity.Green, [itemType], player.zone);
+        this.spawnLootBag(player.x, player.y, BagRarity.Green, [itemData], player.zone);
       }
     );
 
@@ -382,8 +382,9 @@ export class GameRoom extends Room<GameState> {
         const slot = data.inventorySlot;
         if (slot < 0 || slot >= INVENTORY_SIZE) return;
 
-        const itemId = player.inventory[slot] ?? -1;
-        if (itemId === -1) return;
+        const invItem = player.inventory[slot];
+        if (!invItem || invItem.baseItemId === -1) return;
+        const itemId = invItem.baseItemId;
 
         // Consumable: move from inventory to dedicated slot
         if (isConsumableItem(itemId)) {
@@ -392,22 +393,26 @@ export class GameRoom extends Room<GameState> {
           const current = this.getConsumableCount(player, slotIdx);
           if (current >= maxStack) return;
           this.setConsumableCount(player, slotIdx, current + 1);
-          const invCount = player.inventoryCounts[slot] || 1;
-          if (invCount > 1) {
-            player.inventoryCounts[slot] = invCount - 1;
-          } else {
-            player.inventory[slot] = -1;
-            player.inventoryCounts[slot] = 0;
-          }
+          updateSchemaFromData(invItem, createEmptyItemInstance());
+          return;
+        }
+
+        // Crafting orb: add to orb counter
+        if (isCraftingOrbItem(itemId)) {
+          const orbType = getItemSubtype(itemId);
+          this.addOrbToPlayer(player, orbType);
+          updateSchemaFromData(invItem, createEmptyItemInstance());
           return;
         }
 
         const category = getItemCategory(itemId);
         if (category < 0 || category >= EQUIPMENT_SLOTS) return;
 
-        const currentEquipped = player.equipment[category] ?? -1;
-        player.equipment[category] = itemId;
-        player.inventory[slot] = currentEquipped;
+        // Swap equipment and inventory
+        const currentEquipped = schemaToItemData(player.equipment[category]!);
+        const newEquip = schemaToItemData(invItem);
+        updateSchemaFromData(player.equipment[category]!, newEquip);
+        updateSchemaFromData(player.inventory[slot]!, currentEquipped);
 
         recalcPlayerStats(player);
       }
@@ -457,6 +462,51 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Listen for crafting orb use
+    this.onMessage(
+      ClientMessage.UseCraftingOrb,
+      (client, data: { orbType: number; location: "inventory" | "equipment"; slotIndex: number; forgeSlotIndex?: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const orbType = data.orbType;
+        if (orbType < 0 || orbType > 7) return;
+        if (!player.unlimitedOrbs && this.getOrbCount(player, orbType) <= 0) return;
+
+        // Get target item
+        let targetSchema: ItemInstance | undefined;
+        if (data.location === "equipment") {
+          if (data.slotIndex < 0 || data.slotIndex >= EQUIPMENT_SLOTS) return;
+          targetSchema = player.equipment[data.slotIndex];
+        } else {
+          if (data.slotIndex < 0 || data.slotIndex >= INVENTORY_SIZE) return;
+          targetSchema = player.inventory[data.slotIndex];
+        }
+        if (!targetSchema || targetSchema.baseItemId === -1) return;
+
+        const itemData = schemaToItemData(targetSchema);
+        const result = applyCraftingOrb(orbType, itemData, data.forgeSlotIndex);
+
+        if (result.success) {
+          if (!player.unlimitedOrbs) {
+            this.setOrbCount(player, orbType, this.getOrbCount(player, orbType) - 1);
+          }
+          updateSchemaFromData(targetSchema, result.item);
+          // Recalc stats if equipped item was modified
+          if (data.location === "equipment") {
+            recalcPlayerStats(player);
+          }
+        }
+      }
+    );
+
+    // TESTING: Toggle unlimited crafting orbs
+    this.onMessage(ClientMessage.ToggleUnlimitedOrbs, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      player.unlimitedOrbs = !player.unlimitedOrbs;
+    });
+
     // Spawn permanent test portals in nexus (bottom area)
     this.spawnNexusTestPortals();
 
@@ -482,10 +532,11 @@ export class GameRoom extends Room<GameState> {
     player.xp = 0;
     player.alive = true;
 
-    player.equipment[ItemCategory.Weapon] = DEFAULT_WEAPON;
-    player.equipment[ItemCategory.Ability] = DEFAULT_ABILITY;
-    player.equipment[ItemCategory.Armor] = DEFAULT_ARMOR;
-    player.equipment[ItemCategory.Ring] = DEFAULT_RING;
+    // Default equipment: T1 items with random locked stat tiers (no pre-rolled open stats)
+    updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false));
+    updateSchemaFromData(player.equipment[ItemCategory.Ability]!, generateItemInstance(ItemCategory.Ability, 0, 1, false));
+    updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, 0, 1, false));
+    updateSchemaFromData(player.equipment[ItemCategory.Ring]!, generateItemInstance(ItemCategory.Ring, 0, 1, false));
 
     // Starting consumables
     player.healthPots = 3;
@@ -567,39 +618,52 @@ export class GameRoom extends Room<GameState> {
     else player.portalGems = count;
   }
 
-  /** Try to add a consumable to dedicated slot first, then inventory stack, then empty inv slot. */
+  /** Try to add a consumable to dedicated slot. */
   private addConsumableToPlayer(player: Player, itemId: number): boolean {
     const slotIdx = getConsumableSlotIndex(itemId);
     const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
 
-    // 1. Try dedicated slot
     const current = this.getConsumableCount(player, slotIdx);
     if (current < maxStack) {
       this.setConsumableCount(player, slotIdx, current + 1);
       return true;
     }
 
-    // 2. Try stacking in existing inventory slot with same item
-    for (let i = 0; i < player.inventory.length; i++) {
-      if (player.inventory[i] === itemId) {
-        const count = player.inventoryCounts[i] || 1;
-        if (count < maxStack) {
-          player.inventoryCounts[i] = count + 1;
-          return true;
-        }
-      }
-    }
-
-    // 3. Try empty inventory slot
-    for (let i = 0; i < player.inventory.length; i++) {
-      if (player.inventory[i] === -1) {
-        player.inventory[i] = itemId;
-        player.inventoryCounts[i] = 1;
-        return true;
-      }
-    }
-
     return false;
+  }
+
+  /** Add a crafting orb to the player's orb counter. */
+  private addOrbToPlayer(player: Player, orbType: number): void {
+    const current = this.getOrbCount(player, orbType);
+    this.setOrbCount(player, orbType, current + 1);
+  }
+
+  private getOrbCount(player: Player, orbType: number): number {
+    switch (orbType) {
+      case CraftingOrbType.Blank: return player.orbBlank;
+      case CraftingOrbType.Ember: return player.orbEmber;
+      case CraftingOrbType.Shard: return player.orbShard;
+      case CraftingOrbType.Chaos: return player.orbChaos;
+      case CraftingOrbType.Flux: return player.orbFlux;
+      case CraftingOrbType.Void: return player.orbVoid;
+      case CraftingOrbType.Prism: return player.orbPrism;
+      case CraftingOrbType.Forge: return player.orbForge;
+      default: return 0;
+    }
+  }
+
+  private setOrbCount(player: Player, orbType: number, count: number): void {
+    const val = Math.max(0, Math.min(99, count));
+    switch (orbType) {
+      case CraftingOrbType.Blank: player.orbBlank = val; break;
+      case CraftingOrbType.Ember: player.orbEmber = val; break;
+      case CraftingOrbType.Shard: player.orbShard = val; break;
+      case CraftingOrbType.Chaos: player.orbChaos = val; break;
+      case CraftingOrbType.Flux: player.orbFlux = val; break;
+      case CraftingOrbType.Void: player.orbVoid = val; break;
+      case CraftingOrbType.Prism: player.orbPrism = val; break;
+      case CraftingOrbType.Forge: player.orbForge = val; break;
+    }
   }
 
   private teleportPlayerToNexus(player: Player, client: Client): void {
@@ -762,12 +826,18 @@ export class GameRoom extends Room<GameState> {
         if (now - player.lastShootTime >= player.cachedShootCooldown) {
           player.lastShootTime = now;
 
-          const weaponId = player.equipment[ItemCategory.Weapon] ?? -1;
-          const weaponDef = weaponId >= 0 ? ITEM_DEFS[weaponId] : null;
-          const isSword = weaponId >= 0 && getItemSubtype(weaponId) === WeaponSubtype.Sword;
+          const weaponSchema = player.equipment[ItemCategory.Weapon];
+          const hasWeapon = weaponSchema && weaponSchema.baseItemId >= 0;
+          const isSword = hasWeapon && getItemSubtype(weaponSchema.baseItemId) === WeaponSubtype.Sword;
 
-          const projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
-          const spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
+          // Multi-projectile and spread only for UT weapons (e.g. Doom Blade)
+          let projectileCount = 1;
+          let spreadAngle = 0;
+          if (hasWeapon && weaponSchema.isUT) {
+            const weaponDef = ITEM_DEFS[weaponSchema.baseItemId];
+            projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
+            spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
+          }
 
           for (let p = 0; p < projectileCount; p++) {
             let angle = player.aimAngle;
@@ -801,13 +871,42 @@ export class GameRoom extends Room<GameState> {
       // Handle ability (Space key)
       if (player.inputUseAbility) {
         const now = Date.now();
-        const abilityId = player.equipment[ItemCategory.Ability] ?? -1;
-        if (abilityId >= 0) {
-          const abilityDef = ITEM_DEFS[abilityId];
-          const as = abilityDef?.abilityStats;
-          if (as && now - player.lastAbilityTime >= as.cooldown) {
-            if (player.mana >= as.manaCost) {
-              player.mana -= as.manaCost;
+        const abilitySchema = player.equipment[ItemCategory.Ability];
+        if (abilitySchema && abilitySchema.baseItemId >= 0) {
+          // Get ability stats based on UT or tiered
+          let abilityDamage: number, abilityRange: number, abilityProjSpeed: number;
+          let abilityProjSize: number, abilityManaCost: number, abilityCooldown: number;
+          let abilityPiercing = true;
+          let speedBoostAmt: number | undefined, speedBoostDur: number | undefined;
+
+          if (abilitySchema.isUT) {
+            const def = ITEM_DEFS[abilitySchema.baseItemId];
+            const as = def?.abilityStats;
+            if (!as) return;
+            abilityDamage = as.damage;
+            abilityRange = as.range;
+            abilityProjSpeed = as.projectileSpeed;
+            abilityProjSize = as.projectileSize;
+            abilityManaCost = as.manaCost;
+            abilityCooldown = as.cooldown;
+            abilityPiercing = as.piercing;
+            speedBoostAmt = as.speedBoostAmount;
+            speedBoostDur = as.speedBoostDuration;
+          } else {
+            const subtype = getItemSubtype(abilitySchema.baseItemId);
+            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier);
+            abilityDamage = scaled.damage;
+            abilityRange = scaled.range;
+            abilityProjSpeed = scaled.projectileSpeed;
+            abilityProjSize = scaled.projectileSize;
+            abilityManaCost = scaled.manaCost;
+            abilityCooldown = scaled.cooldown;
+            abilityPiercing = scaled.piercing;
+          }
+
+          if (now - player.lastAbilityTime >= abilityCooldown) {
+            if (player.mana >= abilityManaCost) {
+              player.mana -= abilityManaCost;
               player.lastAbilityTime = now;
 
               const proj = new Projectile();
@@ -817,21 +916,21 @@ export class GameRoom extends Room<GameState> {
               proj.angle = player.aimAngle;
               proj.ownerType = EntityType.Player;
               proj.ownerId = player.id;
-              proj.speed = as.projectileSpeed;
-              proj.damage = as.damage;
+              proj.speed = abilityProjSpeed;
+              proj.damage = abilityDamage;
               proj.startX = player.x;
               proj.startY = player.y;
-              proj.maxRange = as.range;
-              proj.collisionRadius = as.projectileSize;
+              proj.maxRange = abilityRange;
+              proj.collisionRadius = abilityProjSize;
               proj.projType = ProjectileType.QuiverShot;
-              proj.piercing = as.piercing;
+              proj.piercing = abilityPiercing;
               proj.zone = player.zone;
 
               this.state.projectiles.set(proj.id, proj);
 
-              if (as.speedBoostAmount && as.speedBoostDuration) {
-                player.speedBoostAmount = as.speedBoostAmount;
-                player.speedBoostUntil = now + as.speedBoostDuration;
+              if (speedBoostAmt && speedBoostDur) {
+                player.speedBoostAmount = speedBoostAmt;
+                player.speedBoostUntil = now + speedBoostDur;
               }
             }
           }
@@ -926,8 +1025,8 @@ export class GameRoom extends Room<GameState> {
           if (event.enemyX !== undefined && event.enemyY !== undefined) {
             const bagRarity = rollBagDrop(event.biome);
             if (bagRarity >= 0) {
-              const loot = rollBagLoot(bagRarity, event.biome);
-              this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, loot, "hostile");
+              const lootItems = rollBagLoot(bagRarity, event.biome);
+              this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, "hostile");
             }
 
             // Roll for dungeon portal spawn (only specific Godlands enemies)
@@ -978,7 +1077,7 @@ export class GameRoom extends Room<GameState> {
                   if (category === ItemCategory.Weapon) {
                     subtype = Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
                   }
-                  bossLoot.items.push(makeItemId(category, subtype, tier));
+                  bossLoot.items.push(generateItemInstance(category, subtype, tier));
                 }
               }
 
@@ -1145,7 +1244,7 @@ export class GameRoom extends Room<GameState> {
     x: number,
     y: number,
     bagRarity: number,
-    itemTypes: number[],
+    items: ItemInstanceData[],
     zone: string = "hostile"
   ): void {
     const bag = new LootBag();
@@ -1157,25 +1256,13 @@ export class GameRoom extends Room<GameState> {
     bag.zone = zone;
 
     for (let i = 0; i < BAG_SIZE; i++) {
-      const item = new LootBagItem();
-      item.itemType = i < itemTypes.length ? itemTypes[i] : -1;
-      bag.items.push(item);
+      const bagItem = new LootBagItem();
+      if (i < items.length) {
+        updateSchemaFromData(bagItem.item, items[i]);
+      }
+      bag.items.push(bagItem);
     }
 
     this.state.lootBags.set(bag.id, bag);
-  }
-
-  private broadcastBagUpdate(bag: LootBag): void {
-    const items = bag.items.map((item) => item.itemType);
-    this.state.players.forEach((p) => {
-      if (p.openBagId !== bag.id) return;
-      const c = this.clients.find((cl) => cl.sessionId === p.id);
-      if (c) {
-        c.send(ServerMessage.BagUpdated, {
-          bagId: bag.id,
-          items,
-        });
-      }
-    });
   }
 }

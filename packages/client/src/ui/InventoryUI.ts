@@ -2,11 +2,14 @@ import Phaser from "phaser";
 import {
   INVENTORY_SIZE,
   EQUIPMENT_SLOTS,
-  ITEM_DEFS,
   ClientMessage,
-  getCategoryName,
-  isConsumableItem,
+  getItemCategory,
+  getItemSubtype,
+  getItemColor,
+  ItemCategory,
 } from "@rotmg-lite/shared";
+import type { ItemInstanceData } from "@rotmg-lite/shared";
+import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
@@ -31,8 +34,10 @@ export class InventoryUI {
   private itemTexts: Phaser.GameObjects.Text[] = [];
   private slotZones: Phaser.GameObjects.Zone[] = [];
   private room: any = null;
-  private currentInventory: number[] = new Array(INVENTORY_SIZE).fill(-1);
-  private currentCounts: number[] = new Array(INVENTORY_SIZE).fill(0);
+  private currentInventory: ItemInstanceData[] = Array.from(
+    { length: INVENTORY_SIZE },
+    () => createEmptyItemInstance()
+  );
 
   private tierTexts: Phaser.GameObjects.Text[] = [];
 
@@ -41,10 +46,18 @@ export class InventoryUI {
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
-  private currentEquipment: number[] = new Array(EQUIPMENT_SLOTS).fill(-1);
+  private currentEquipment: ItemInstanceData[] = Array.from(
+    { length: EQUIPMENT_SLOTS },
+    () => createEmptyItemInstance()
+  );
 
   // Tooltip
   private tooltip: ItemTooltip;
+  private shiftKey: Phaser.Input.Keyboard.Key | null = null;
+  private lastHoveredItem: { item: ItemInstanceData; screenX: number; screenY: number } | null = null;
+
+  // Crafting mode: when set, left-clicks select items for crafting instead of equipping
+  private craftingSelectCallback: ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null = null;
 
   // Scaled dimensions
   private S: number;
@@ -60,6 +73,12 @@ export class InventoryUI {
   constructor(scene: Phaser.Scene, config: InventoryUIConfig) {
     this.scene = scene;
     this.tooltip = new ItemTooltip(scene);
+
+    if (scene.input.keyboard) {
+      this.shiftKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+      this.shiftKey.on("down", () => this.refreshTooltipShift());
+      this.shiftKey.on("up", () => this.refreshTooltipShift());
+    }
 
     this.S = getUIScale();
     const S = this.S;
@@ -88,20 +107,33 @@ export class InventoryUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerover", () => {
-        const itemId = this.currentEquipment[i];
-        if (itemId >= 0) {
+        const item = this.currentEquipment[i];
+        if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
-          this.tooltip.show(itemId, ptr.x, ptr.y);
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: ptr.x, screenY: ptr.y };
+          this.tooltip.show(item, ptr.x, ptr.y, shiftHeld);
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        const itemId = this.currentEquipment[i];
-        if (itemId >= 0) {
-          this.tooltip.show(itemId, pointer.x, pointer.y);
+        const item = this.currentEquipment[i];
+        if (item && item.baseItemId >= 0) {
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: pointer.x, screenY: pointer.y };
+          this.tooltip.show(item, pointer.x, pointer.y, shiftHeld);
         }
       });
       zone.on("pointerout", () => {
+        this.lastHoveredItem = null;
         this.tooltip.hide();
+      });
+      zone.on("pointerdown", () => {
+        if (this.craftingSelectCallback) {
+          const item = this.currentEquipment[i];
+          if (item && item.baseItemId >= 0) {
+            this.craftingSelectCallback("equipment", i, item);
+          }
+        }
       });
 
       this.eqSlotZones.push(zone);
@@ -147,6 +179,13 @@ export class InventoryUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (this.craftingSelectCallback && pointer.leftButtonDown()) {
+          const item = this.currentInventory[i];
+          if (item && item.baseItemId >= 0) {
+            this.craftingSelectCallback("inventory", i, item);
+          }
+          return;
+        }
         if (pointer.rightButtonDown()) {
           this.onDropItem(i);
         } else if (pointer.leftButtonDown()) {
@@ -155,19 +194,24 @@ export class InventoryUI {
       });
 
       zone.on("pointerover", () => {
-        const itemId = this.currentInventory[i];
-        if (itemId >= 0) {
+        const item = this.currentInventory[i];
+        if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
-          this.tooltip.show(itemId, ptr.x, ptr.y);
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: ptr.x, screenY: ptr.y };
+          this.tooltip.show(item, ptr.x, ptr.y, shiftHeld);
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        const itemId = this.currentInventory[i];
-        if (itemId >= 0) {
-          this.tooltip.show(itemId, pointer.x, pointer.y);
+        const item = this.currentInventory[i];
+        if (item && item.baseItemId >= 0) {
+          const shiftHeld = this.shiftKey?.isDown ?? false;
+          this.lastHoveredItem = { item, screenX: pointer.x, screenY: pointer.y };
+          this.tooltip.show(item, pointer.x, pointer.y, shiftHeld);
         }
       });
       zone.on("pointerout", () => {
+        this.lastHoveredItem = null;
         this.tooltip.hide();
       });
 
@@ -210,7 +254,7 @@ export class InventoryUI {
     return this.tooltip;
   }
 
-  getEquipment(): number[] {
+  getEquipment(): ItemInstanceData[] {
     return this.currentEquipment;
   }
 
@@ -222,14 +266,24 @@ export class InventoryUI {
     return this.slotGap;
   }
 
-  updateInventory(inventory: number[], counts?: number[]): void {
+  setCraftingSelectCallback(cb: ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null): void {
+    this.craftingSelectCallback = cb;
+  }
+
+  getInventory(): ItemInstanceData[] {
+    return this.currentInventory;
+  }
+
+  updateInventory(inventory: ItemInstanceData[]): void {
     let changed = false;
     for (let i = 0; i < INVENTORY_SIZE; i++) {
-      const val = i < inventory.length ? inventory[i] : -1;
-      const cnt = counts && i < counts.length ? counts[i] : 0;
-      if (this.currentInventory[i] !== val || this.currentCounts[i] !== cnt) {
-        this.currentInventory[i] = val;
-        this.currentCounts[i] = cnt;
+      const newItem = i < inventory.length ? inventory[i] : createEmptyItemInstance();
+      if (this.currentInventory[i].baseItemId !== newItem.baseItemId ||
+          this.currentInventory[i].instanceTier !== newItem.instanceTier ||
+          this.currentInventory[i].openStats.length !== newItem.openStats.length ||
+          this.currentInventory[i].lockedStat1Tier !== newItem.lockedStat1Tier ||
+          this.currentInventory[i].lockedStat2Tier !== newItem.lockedStat2Tier) {
+        this.currentInventory[i] = newItem;
         changed = true;
       }
     }
@@ -238,12 +292,16 @@ export class InventoryUI {
     }
   }
 
-  updateEquipment(equipment: number[]): void {
+  updateEquipment(equipment: ItemInstanceData[]): void {
     let changed = false;
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
-      const val = i < equipment.length ? equipment[i] : -1;
-      if (this.currentEquipment[i] !== val) {
-        this.currentEquipment[i] = val;
+      const newItem = i < equipment.length ? equipment[i] : createEmptyItemInstance();
+      if (this.currentEquipment[i].baseItemId !== newItem.baseItemId ||
+          this.currentEquipment[i].instanceTier !== newItem.instanceTier ||
+          this.currentEquipment[i].openStats.length !== newItem.openStats.length ||
+          this.currentEquipment[i].lockedStat1Tier !== newItem.lockedStat1Tier ||
+          this.currentEquipment[i].lockedStat2Tier !== newItem.lockedStat2Tier) {
+        this.currentEquipment[i] = newItem;
         changed = true;
       }
     }
@@ -261,40 +319,38 @@ export class InventoryUI {
       const sx = this.invX + col * (this.slotSize + this.slotGap);
       const sy = this.invY + row * (this.slotSize + this.slotGap);
 
-      const itemType = this.currentInventory[i];
-      const def = itemType >= 0 ? ITEM_DEFS[itemType] : null;
+      const item = this.currentInventory[i];
+      const hasItem = item && item.baseItemId >= 0;
 
-      if (def) {
+      if (hasItem) {
         this.slotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.slotGraphics.fillStyle(0x222233, 0.6);
       }
       this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const borderColor = def ? getSlotBorderColor(def.tier) : 0x333344;
+      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const borderColor = hasItem ? getSlotBorderColor(tier) : 0x333344;
       this.slotGraphics.lineStyle(1, borderColor, 1);
       this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
-      // Draw item icon shape instead of text name
       this.itemTexts[i].setText("");
-      if (def) {
+      if (hasItem) {
+        const category = getItemCategory(item.baseItemId);
+        const subtype = getItemSubtype(item.baseItemId);
+        const color = getItemColor(item);
         const iconSize = this.slotSize * 0.55;
         drawItemIcon(
           this.slotGraphics,
           sx + this.slotSize / 2,
           sy + this.slotSize / 2 - this.slotSize * 0.05,
           iconSize,
-          def.category,
-          def.subtype,
-          def.color
+          category,
+          subtype,
+          color
         );
-        // Tier or stack count label at bottom-right
-        if (isConsumableItem(itemType) && this.currentCounts[i] > 0) {
-          this.tierTexts[i].setText(`x${this.currentCounts[i]}`);
-        } else {
-          const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
-          this.tierTexts[i].setText(tierLabel);
-        }
+        const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
+        this.tierTexts[i].setText(tierLabel);
       } else {
         this.tierTexts[i].setText("");
       }
@@ -312,35 +368,37 @@ export class InventoryUI {
       const sx = this.eqX + i * (this.slotSize + this.slotGap);
       const sy = this.eqY;
 
-      const itemId = this.currentEquipment[i];
-      const def = itemId >= 0 ? ITEM_DEFS[itemId] : null;
+      const item = this.currentEquipment[i];
+      const hasItem = item && item.baseItemId >= 0;
 
-      if (def) {
+      if (hasItem) {
         this.eqSlotGraphics.fillStyle(0x444444, 0.4);
       } else {
         this.eqSlotGraphics.fillStyle(0x222233, 0.6);
       }
       this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
 
-      const borderColor = def ? getSlotBorderColor(def.tier) : 0x444455;
+      const tier = hasItem ? (item.isUT ? 7 : item.instanceTier) : 0;
+      const borderColor = hasItem ? getSlotBorderColor(tier) : 0x444455;
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
-      if (def) {
-        // Draw icon shape instead of text name
+      if (hasItem) {
         this.eqItemTexts[i].setText("");
+        const category = getItemCategory(item.baseItemId);
+        const subtype = getItemSubtype(item.baseItemId);
+        const color = getItemColor(item);
         const iconSize = this.slotSize * 0.55;
         drawItemIcon(
           this.eqSlotGraphics,
           sx + this.slotSize / 2,
           sy + this.slotSize / 2 - this.slotSize * 0.05,
           iconSize,
-          def.category,
-          def.subtype,
-          def.color
+          category,
+          subtype,
+          color
         );
-        // Tier label at bottom-right
-        const tierLabel = def.tier === 7 ? "UT" : `T${def.tier}`;
+        const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
         this.eqTierTexts[i].setText(tierLabel);
       } else {
         this.eqItemTexts[i].setText(EQ_SLOT_LABELS[i]);
@@ -354,15 +412,23 @@ export class InventoryUI {
     }
   }
 
+  private refreshTooltipShift(): void {
+    if (this.lastHoveredItem) {
+      const { item, screenX, screenY } = this.lastHoveredItem;
+      const shiftHeld = this.shiftKey?.isDown ?? false;
+      this.tooltip.show(item, screenX, screenY, shiftHeld);
+    }
+  }
+
   private onDropItem(slotIndex: number): void {
     if (!this.room) return;
-    if (this.currentInventory[slotIndex] === -1) return;
+    if (this.currentInventory[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.DropItem, { slotIndex });
   }
 
   private onEquipItem(slotIndex: number): void {
     if (!this.room) return;
-    if (this.currentInventory[slotIndex] === -1) return;
+    if (this.currentInventory[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.EquipItem, { inventorySlot: slotIndex });
   }
 

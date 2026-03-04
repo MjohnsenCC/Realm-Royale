@@ -6,6 +6,7 @@ import { SnapshotBuffer } from "../entities/SnapshotBuffer";
 import { ProjectileSprite } from "../entities/ProjectileSprite";
 import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
+import { CraftingUI } from "../ui/CraftingUI";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { getUIScale } from "../ui/UIScale";
 import {
@@ -16,6 +17,10 @@ import {
   PORTAL_X,
   PORTAL_Y,
   PORTAL_RADIUS,
+  CRAFTING_TABLE_X,
+  CRAFTING_TABLE_Y,
+  CRAFTING_TABLE_RADIUS,
+  CRAFTING_TABLE_INTERACT_RADIUS,
   TILE_SIZE,
   PLAYER_RADIUS,
   ROAD_SPEED_MULTIPLIER,
@@ -34,6 +39,7 @@ import {
   isDungeonZone,
   computePlayerStats,
   getItemSubtype,
+  getScaledAbilityStats,
   DUNGEON_VISUALS,
   REALM_BIOME_VISUALS,
   ZONE_TO_DUNGEON,
@@ -53,8 +59,10 @@ import {
   ITEM_DEFS,
   circlesOverlap,
   ENEMY_DEFS,
+  isEmptyItem,
+  createEmptyItemInstance,
 } from "@rotmg-lite/shared";
-import type { DungeonMapData } from "@rotmg-lite/shared";
+import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
 // Colyseus schema decoded types (client-side generic)
 interface SchemaInstance {
@@ -107,6 +115,7 @@ export class GameScene extends Phaser.Scene {
     G: Phaser.Input.Keyboard.Key;
     SPACE: Phaser.Input.Keyboard.Key;
     SHIFT: Phaser.Input.Keyboard.Key;
+    U: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -137,6 +146,8 @@ export class GameScene extends Phaser.Scene {
 
   // Dungeon tooltip (shows stats when near a portal)
   private dungeonTooltip!: DungeonTooltip;
+  private craftingUI!: CraftingUI;
+  private nearCraftingTable: boolean = false;
 
   // Q key cooldown to prevent spam
   private returnToNexusCooldown: number = 0;
@@ -271,6 +282,7 @@ export class GameScene extends Phaser.Scene {
         G: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.G),
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
         SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
+        U: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U),
       };
     }
 
@@ -283,6 +295,13 @@ export class GameScene extends Phaser.Scene {
     // Portal gem: right-click minimap → teleport
     this.hud.setPortalGemCallback((worldX: number, worldY: number) => {
       this.network.sendUsePortalGem(worldX, worldY);
+    });
+
+    // Create crafting UI
+    this.craftingUI = new CraftingUI(this);
+    this.craftingUI.setRoom(room);
+    this.craftingUI.setOnClose(() => {
+      this.hud.inventoryUI.setCraftingSelectCallback(null);
     });
 
     // Create dungeon tooltip (shows portal stats above minimap)
@@ -402,13 +421,7 @@ export class GameScene extends Phaser.Scene {
         const bagSchema = (state.lootBags as unknown as { get(key: string): SchemaInstance | undefined }).get(data.bagId);
         if (!bagSchema) return;
 
-        const items: number[] = [];
-        const bagItems = bagSchema.items as unknown as { forEach(cb: (item: SchemaInstance) => void): void };
-        if (bagItems && typeof bagItems.forEach === "function") {
-          bagItems.forEach((item: SchemaInstance) => {
-            items.push(item.itemType as number);
-          });
-        }
+        const items = readBagItems(bagSchema);
         this.hud.lootBagUI.show(
           data.bagId,
           bagSchema.bagRarity as number,
@@ -420,16 +433,6 @@ export class GameScene extends Phaser.Scene {
     room.onMessage(ServerMessage.BagClosed, () => {
       this.hud.lootBagUI.hide();
     });
-
-    // Listen for bag contents updates (items picked up or dropped by any player)
-    room.onMessage(
-      ServerMessage.BagUpdated,
-      (data: { bagId: string; items: number[] }) => {
-        if (this.hud.lootBagUI.getBagId() === data.bagId) {
-          this.hud.lootBagUI.updateItems(data.items);
-        }
-      }
-    );
 
     // Listen for death notification — show death screen, hide player, wait for respawn
     room.onMessage(ServerMessage.PlayerDied, () => {
@@ -676,6 +679,24 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // Draw crafting table in east room
+    const ctx = CRAFTING_TABLE_X;
+    const cty = CRAFTING_TABLE_Y;
+    const ctr = CRAFTING_TABLE_RADIUS;
+
+    // Table surface
+    this.groundGraphics.fillStyle(0x553311, 0.9);
+    this.groundGraphics.fillRoundedRect(ctx - ctr, cty - ctr * 0.6, ctr * 2, ctr * 1.2, 6);
+    this.groundGraphics.lineStyle(2, 0x886633, 0.8);
+    this.groundGraphics.strokeRoundedRect(ctx - ctr, cty - ctr * 0.6, ctr * 2, ctr * 1.2, 6);
+
+    // Anvil/rune symbol
+    this.groundGraphics.fillStyle(0xaa8844, 0.7);
+    this.groundGraphics.fillCircle(ctx, cty, 12);
+    this.groundGraphics.lineStyle(2, 0xddaa55, 0.6);
+    this.groundGraphics.strokeCircle(ctx, cty, 12);
+    this.groundGraphics.strokeCircle(ctx, cty, 18);
+
     // Nexus label at spawn center
     this.clearNexusLabels();
     const label = this.add
@@ -687,6 +708,17 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.5);
     this.nexusLabels.push(label);
+
+    // Crafting table label
+    const craftLabel = this.add
+      .text(ctx, cty + ctr * 0.6 + 14, "Crafting Table", {
+        fontSize: "12px",
+        color: "#ddaa55",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.6);
+    this.nexusLabels.push(craftLabel);
   }
 
   private drawHostileGround(): void {
@@ -1587,7 +1619,7 @@ export class GameScene extends Phaser.Scene {
           this.returnToNexusCooldown = 1000;
         }
 
-        // E key — interact with portals
+        // E key — interact with portals or crafting table
         if (this.portalInteractCooldown > 0) {
           this.portalInteractCooldown -= delta;
         }
@@ -1595,7 +1627,11 @@ export class GameScene extends Phaser.Scene {
           this.keys.E.isDown &&
           this.portalInteractCooldown <= 0
         ) {
-          this.network.sendInteractPortal();
+          if (this.nearCraftingTable) {
+            this.openCraftingUI(state, sessionId);
+          } else {
+            this.network.sendInteractPortal();
+          }
           this.portalInteractCooldown = 500;
         }
 
@@ -1615,6 +1651,11 @@ export class GameScene extends Phaser.Scene {
         if (this.keys.G.isDown && this.manaPotCooldown <= 0) {
           this.network.sendUseManaPot();
           this.manaPotCooldown = 500;
+        }
+
+        // U key — TESTING: toggle unlimited crafting orbs
+        if (Phaser.Input.Keyboard.JustDown(this.keys.U) && this.craftingUI.isVisible()) {
+          this.craftingUI.toggleUnlimitedOrbs();
         }
       }
 
@@ -1638,7 +1679,7 @@ export class GameScene extends Phaser.Scene {
 
       // Only shoot if not clicking on UI panels
       const pointer = this.input.activePointer;
-      const overUI = this.hud.isOverPanel(pointer.x, pointer.y);
+      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
       shooting = pointer.isDown && !overUI;
     }
 
@@ -1695,20 +1736,25 @@ export class GameScene extends Phaser.Scene {
     // Spawn visual-only projectiles instantly so shooting/abilities feel responsive.
     if (localSprite && localPlayer) {
       const now = performance.now();
-      const equipment = localPlayer.equipment as { length: number; [i: number]: number };
+      const eqData = readEquipmentData(localPlayer);
       const level = (localPlayer.level as number) ?? 1;
 
       // Predicted weapon projectiles
       if (shooting) {
-        const weaponId = equipment[ItemCategory.Weapon] ?? -1;
-        if (weaponId >= 0) {
-          const stats = computePlayerStats(level, Array.from({ length: equipment.length }, (_, i) => equipment[i] as number));
+        const weaponItem = eqData[ItemCategory.Weapon];
+        if (weaponItem && !isEmptyItem(weaponItem)) {
+          const stats = computePlayerStats(level, eqData);
           if (now - this.lastLocalShootTime >= stats.shootCooldown) {
             this.lastLocalShootTime = now;
-            const weaponDef = ITEM_DEFS[weaponId];
-            const isSword = getItemSubtype(weaponId) === WeaponSubtype.Sword;
-            const projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
-            const spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
+            const isSword = getItemSubtype(weaponItem.baseItemId) === WeaponSubtype.Sword;
+            // UT weapons may have multi-projectile
+            let projectileCount = 1;
+            let spreadAngle = 0;
+            if (weaponItem.isUT) {
+              const weaponDef = ITEM_DEFS[weaponItem.baseItemId];
+              projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
+              spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
+            }
 
             for (let p = 0; p < projectileCount; p++) {
               let angle = aimAngle;
@@ -1745,10 +1791,19 @@ export class GameScene extends Phaser.Scene {
 
       // Predicted ability projectiles
       if (useAbility) {
-        const abilityId = equipment[ItemCategory.Ability] ?? -1;
-        if (abilityId >= 0) {
-          const abilityDef = ITEM_DEFS[abilityId];
-          const as = abilityDef?.abilityStats;
+        const abilityItem = eqData[ItemCategory.Ability];
+        if (abilityItem && !isEmptyItem(abilityItem)) {
+          // Get ability stats (UT uses ITEM_DEFS, tiered uses templates)
+          let as: { damage: number; range: number; projectileSpeed: number; projectileSize: number; manaCost: number; cooldown: number; piercing: boolean } | null = null;
+          if (abilityItem.isUT) {
+            const abilityDef = ITEM_DEFS[abilityItem.baseItemId];
+            if (abilityDef?.abilityStats) {
+              as = abilityDef.abilityStats;
+            }
+          } else {
+            const subtype = getItemSubtype(abilityItem.baseItemId);
+            as = getScaledAbilityStats(subtype, abilityItem.instanceTier);
+          }
           if (as && now - this.lastLocalAbilityTime >= as.cooldown) {
             const mana = (localPlayer.mana as number) ?? 0;
             if (mana >= as.manaCost) {
@@ -2005,27 +2060,41 @@ export class GameScene extends Phaser.Scene {
       this.lastKnownXp = currentXp;
       this.lastKnownLevel = currentLevel;
 
-      // Update inventory UI from synced player inventory
-      const inv = localPlayer.inventory as unknown as { length: number; [index: number]: number };
-      const invCounts = localPlayer.inventoryCounts as unknown as { length: number; [index: number]: number };
-      if (inv && typeof inv.length === "number") {
-        const items: number[] = [];
-        const counts: number[] = [];
-        for (let i = 0; i < inv.length; i++) {
-          items.push(inv[i]);
-          counts.push(invCounts?.[i] ?? 0);
+      // Update inventory UI from synced player inventory (ItemInstance schemas)
+      const invItems = readInventoryData(localPlayer);
+      this.hud.inventoryUI.updateInventory(invItems);
+
+      // Update equipment UI from synced player equipment (ItemInstance schemas)
+      const eqItems = readEquipmentData(localPlayer);
+      this.hud.inventoryUI.updateEquipment(eqItems);
+
+      // Update crafting UI if open (sync selected item + orb counts each frame)
+      if (this.craftingUI.isVisible()) {
+        const slotIdx = this.craftingUI.getCurrentSlotIndex();
+        if (slotIdx >= 0) {
+          const sourceItems = this.craftingUI.getCurrentLocation() === "equipment" ? eqItems : invItems;
+          if (slotIdx < sourceItems.length) {
+            this.craftingUI.updateItem(sourceItems[slotIdx]);
+          }
         }
-        this.hud.inventoryUI.updateInventory(items, counts);
+        this.craftingUI.updateOrbCounts(readOrbCounts(localPlayer));
+
+        // Close crafting UI if player walks away from table
+        if (!this.nearCraftingTable) {
+          this.craftingUI.hide();
+        }
       }
 
-      // Update equipment UI from synced player equipment
-      const eq = localPlayer.equipment as unknown as { length: number; [index: number]: number };
-      if (eq && typeof eq.length === "number") {
-        const eqItems: number[] = [];
-        for (let i = 0; i < eq.length; i++) {
-          eqItems.push(eq[i]);
+      // Update loot bag if open (schema auto-syncs, so re-read items each frame)
+      if (this.hud.lootBagUI.isVisible()) {
+        const bagId = this.hud.lootBagUI.getBagId();
+        if (bagId) {
+          const bagSchema = (this.decodedState?.lootBags as unknown as { get(key: string): SchemaInstance | undefined })?.get(bagId);
+          if (bagSchema) {
+            const bagItems = readBagItems(bagSchema);
+            this.hud.lootBagUI.updateItems(bagItems);
+          }
         }
-        this.hud.inventoryUI.updateEquipment(eqItems);
       }
     }
   }
@@ -2044,6 +2113,7 @@ export class GameScene extends Phaser.Scene {
     this.clearDungeonPortalSprites();
     this.pressEText?.destroy();
     this.dungeonTooltip?.hide();
+    this.craftingUI?.hide();
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.inputSendTimer = 0;
@@ -2300,6 +2370,19 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // Check crafting table in nexus
+    this.nearCraftingTable = false;
+    if (!nearPortal && this.localZone === "nexus") {
+      const dx = px - CRAFTING_TABLE_X;
+      const dy = py - CRAFTING_TABLE_Y;
+      if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
+        nearPortal = true;
+        portalX = CRAFTING_TABLE_X;
+        portalY = CRAFTING_TABLE_Y;
+        this.nearCraftingTable = true;
+      }
+    }
+
     // Check dungeon portals
     if (!nearPortal) {
       this.dungeonPortalSprites.forEach((ps) => {
@@ -2315,11 +2398,32 @@ export class GameScene extends Phaser.Scene {
     }
 
     if (nearPortal) {
+      const label = this.nearCraftingTable ? "Press E to Craft" : "Press E";
+      this.pressEText.setText(label);
       this.pressEText.setPosition(portalX, portalY + DUNGEON_PORTAL_RADIUS + 20);
       this.pressEText.setVisible(true);
     } else {
       this.pressEText.setVisible(false);
     }
+  }
+
+  private openCraftingUI(state: DecodedState, sessionId: string): void {
+    const localPlayer = state.players.get(sessionId);
+    if (!localPlayer) return;
+
+    // Toggle: if already open, close it
+    if (this.craftingUI.isVisible()) {
+      this.craftingUI.hide();
+      return;
+    }
+
+    const orbCounts = readOrbCounts(localPlayer);
+    this.craftingUI.show(orbCounts);
+
+    // Set callback: clicking inventory/equipment slots selects item for crafting
+    this.hud.inventoryUI.setCraftingSelectCallback((location, slotIndex, item) => {
+      this.craftingUI.selectItem(item, location, slotIndex);
+    });
   }
 
   private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {
@@ -2416,4 +2520,91 @@ export class GameScene extends Phaser.Scene {
       this.dungeonTooltip.hide();
     }
   }
+}
+
+// --- Helper: convert Colyseus ItemInstance schema to ItemInstanceData ---
+
+function readItemSchema(schema: SchemaInstance): ItemInstanceData {
+  const openStatsRaw = schema.openStats as unknown as { length: number; [i: number]: number } | undefined;
+  const openStats: number[] = [];
+  if (openStatsRaw && typeof openStatsRaw.length === "number") {
+    for (let i = 0; i < openStatsRaw.length; i++) {
+      openStats.push(openStatsRaw[i]);
+    }
+  }
+  return {
+    baseItemId: (schema.baseItemId as number) ?? -1,
+    instanceTier: (schema.instanceTier as number) ?? 0,
+    isUT: (schema.isUT as boolean) ?? false,
+    lockedStat1Type: (schema.lockedStat1Type as number) ?? -1,
+    lockedStat1Tier: (schema.lockedStat1Tier as number) ?? 0,
+    lockedStat2Type: (schema.lockedStat2Type as number) ?? -1,
+    lockedStat2Tier: (schema.lockedStat2Tier as number) ?? 0,
+    openStats,
+    forgeProtectedSlot: (schema.forgeProtectedSlot as number) ?? -1,
+  };
+}
+
+function readOrbCounts(player: SchemaInstance): number[] {
+  const counts = new Array(8).fill(0);
+  counts[0] = (player.orbBlank as number) ?? 0;
+  counts[1] = (player.orbEmber as number) ?? 0;
+  counts[2] = (player.orbShard as number) ?? 0;
+  counts[3] = (player.orbChaos as number) ?? 0;
+  counts[4] = (player.orbFlux as number) ?? 0;
+  counts[5] = (player.orbVoid as number) ?? 0;
+  counts[6] = (player.orbPrism as number) ?? 0;
+  counts[7] = (player.orbForge as number) ?? 0;
+  return counts;
+}
+
+function readInventoryData(player: SchemaInstance): ItemInstanceData[] {
+  const inv = player.inventory as unknown as { length: number; forEach?: (cb: (item: SchemaInstance) => void) => void; [i: number]: SchemaInstance };
+  const items: ItemInstanceData[] = [];
+  if (inv && typeof inv.length === "number") {
+    if (typeof inv.forEach === "function") {
+      inv.forEach((itemSchema: SchemaInstance) => {
+        items.push(readItemSchema(itemSchema));
+      });
+    } else {
+      for (let i = 0; i < inv.length; i++) {
+        items.push(readItemSchema(inv[i]));
+      }
+    }
+  }
+  return items;
+}
+
+function readEquipmentData(player: SchemaInstance): ItemInstanceData[] {
+  const eq = player.equipment as unknown as { length: number; forEach?: (cb: (item: SchemaInstance) => void) => void; [i: number]: SchemaInstance };
+  const items: ItemInstanceData[] = [];
+  if (eq && typeof eq.length === "number") {
+    if (typeof eq.forEach === "function") {
+      eq.forEach((itemSchema: SchemaInstance) => {
+        items.push(readItemSchema(itemSchema));
+      });
+    } else {
+      for (let i = 0; i < eq.length; i++) {
+        items.push(readItemSchema(eq[i]));
+      }
+    }
+  }
+  return items;
+}
+
+function readBagItems(bagSchema: SchemaInstance): ItemInstanceData[] {
+  const items: ItemInstanceData[] = [];
+  const bagItems = bagSchema.items as unknown as { forEach(cb: (item: SchemaInstance) => void): void };
+  if (bagItems && typeof bagItems.forEach === "function") {
+    bagItems.forEach((lootBagItem: SchemaInstance) => {
+      // LootBagItem has an `item` field which is an ItemInstance schema
+      const itemSchema = lootBagItem.item as SchemaInstance;
+      if (itemSchema) {
+        items.push(readItemSchema(itemSchema));
+      } else {
+        items.push(createEmptyItemInstance());
+      }
+    });
+  }
+  return items;
 }
