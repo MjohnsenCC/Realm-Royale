@@ -17,6 +17,7 @@ import {
   getZoneDimensions,
   DungeonTile,
   EnemyAIState,
+  isHostileZone,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { schemaToItemData } from "../schemas/ItemInstance";
@@ -92,7 +93,7 @@ export class CombatSystem {
       }
 
       // Check if projectile hit water in hostile zone
-      if (proj.zone === "hostile" && getRealmMap() && isWaterTile(proj.x, proj.y)) {
+      if (isHostileZone(proj.zone) && getRealmMap() && isWaterTile(proj.x, proj.y)) {
         projectilesToRemove.push(id);
         return;
       }

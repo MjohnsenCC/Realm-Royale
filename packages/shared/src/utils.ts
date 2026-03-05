@@ -22,7 +22,7 @@ import {
   NEXUS_HEIGHT,
   TILE_SIZE,
 } from "./constants";
-import { ItemCategory, PlayerZone, DungeonType, StatType } from "./types";
+import { ItemCategory, PlayerZone, DungeonType, StatType, getZoneBase } from "./types";
 import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
 import { ITEM_DEFS, getItemCategory, getItemSubtype } from "./items";
 import {
@@ -288,14 +288,15 @@ const ZONE_TO_DUNGEON_TYPE: Record<string, number> = {
   [PlayerZone.DungeonVoid]: DungeonType.VoidSanctum,
 };
 
-/** Get zone dimensions for a given zone string. */
+/** Get zone dimensions for a given zone string (supports instanced zones like "hostile:1"). */
 export function getZoneDimensions(zone: string): {
   width: number;
   height: number;
 } {
-  if (zone === PlayerZone.Nexus)
+  const base = getZoneBase(zone);
+  if (base === PlayerZone.Nexus)
     return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
-  const dType = ZONE_TO_DUNGEON_TYPE[zone];
+  const dType = ZONE_TO_DUNGEON_TYPE[base];
   if (dType !== undefined) {
     // Use actual generated dimensions if available (dynamic grid sizing)
     const generated = getGeneratedDungeonDimensions(dType);

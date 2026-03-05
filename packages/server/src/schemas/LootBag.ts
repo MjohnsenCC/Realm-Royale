@@ -14,5 +14,5 @@ export class LootBag extends Schema {
 
   // Server-only (not synced)
   createdAt: number = 0;
-  zone: string = "hostile";
+  zone: string = "";
 }

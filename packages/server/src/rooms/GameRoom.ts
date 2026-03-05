@@ -32,8 +32,10 @@ import {
   RIVER_SPEED_MULTIPLIER,
   HOSTILE_CENTER_X,
   HOSTILE_CENTER_Y,
-  PORTAL_X,
-  PORTAL_Y,
+  REALM_PORTAL_1_X,
+  REALM_PORTAL_1_Y,
+  REALM_PORTAL_2_X,
+  REALM_PORTAL_2_Y,
   PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   INVENTORY_SIZE,
@@ -54,7 +56,8 @@ import {
   rollBossLootWithRarity,
   isDungeonZone,
   DUNGEON_TO_ZONE,
-  ZONE_TO_DUNGEON,
+  isHostileZone,
+  getDungeonTypeFromZone,
   resolveWallCollision,
   resolveHostileCollision,
   resolveDecorationCollision,
@@ -188,19 +191,25 @@ export class GameRoom extends Room<GameState> {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return;
 
-      // Check nexus portal
+      // Check nexus realm portals
       if (player.zone === "nexus") {
-        const dist = distanceBetween(player.x, player.y, PORTAL_X, PORTAL_Y);
-        if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
-          player.invulnerable = true;
-          player.invulnerableSince = Date.now();
-          player.zone = "hostile";
-          const spawnPos = this.getHostileSpawnPosition();
-          player.x = spawnPos.x;
-          player.y = spawnPos.y;
-          this.removePlayerProjectiles(player.id);
-          client.send(ServerMessage.ZoneChanged, { zone: "hostile" });
-          return;
+        const realmPortals = [
+          { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, realmId: "1" },
+          { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, realmId: "2" },
+        ];
+        for (const rp of realmPortals) {
+          const dist = distanceBetween(player.x, player.y, rp.x, rp.y);
+          if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
+            player.invulnerable = true;
+            player.invulnerableSince = Date.now();
+            player.zone = `hostile:${rp.realmId}`;
+            const spawnPos = this.getHostileSpawnPosition();
+            player.x = spawnPos.x;
+            player.y = spawnPos.y;
+            this.removePlayerProjectiles(player.id);
+            client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+            return;
+          }
         }
       }
 
@@ -218,23 +227,21 @@ export class GameRoom extends Room<GameState> {
         ) {
           // Enter dungeon
           const dungeonType = portal.dungeonType;
-          const dungeonZone = DUNGEON_TO_ZONE[dungeonType];
-          if (!dungeonZone) return;
+          const dungeonBase = DUNGEON_TO_ZONE[dungeonType];
+          if (!dungeonBase) return;
+          const dungeonZone = `${dungeonBase}:${portal.id}`;
 
           // Store return position and zone
           player.dungeonReturnX = portal.x;
           player.dungeonReturnY = portal.y;
           player.dungeonReturnZone = player.zone;
 
-          // Only create dungeon if no player already there
-          let dungeonAlreadyActive = false;
-          this.state.players.forEach((p) => {
-            if (p.zone === dungeonZone && p.id !== player.id)
-              dungeonAlreadyActive = true;
-          });
+          // Only create dungeon if this portal's instance doesn't exist yet
+          const dungeonAlreadyActive = this.dungeonSystem.getDungeonMap(dungeonZone) !== undefined;
           if (!dungeonAlreadyActive) {
             this.dungeonSystem.createDungeonInstance(
               dungeonType,
+              dungeonZone,
               this.state,
               {
                 modifierIds: Array.from(portal.modifierIds) as number[],
@@ -262,7 +269,7 @@ export class GameRoom extends Room<GameState> {
           // Exit dungeon: return to the zone the player entered from
           player.invulnerable = true;
           player.invulnerableSince = Date.now();
-          const returnZone = portal.exitReturnZone || "hostile";
+          const returnZone = portal.exitReturnZone || "hostile:1";
           player.zone = returnZone;
           player.x = portal.exitReturnX;
           player.y = portal.exitReturnY;
@@ -444,7 +451,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { targetX: number; targetY: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
-        if (player.zone !== "hostile") return;
+        if (!isHostileZone(player.zone)) return;
         if (player.portalGems <= 0) return;
         const { targetX, targetY } = data;
         if (
@@ -768,7 +775,7 @@ export class GameRoom extends Room<GameState> {
         for (const input of player.pendingInputs) {
           // Terrain speed modifiers in hostile zone
           let inputSpeed = effectiveSpeed;
-          if (player.zone === "hostile") {
+          if (isHostileZone(player.zone)) {
             if (isRoadAt(player.x, player.y)) {
               inputSpeed *= ROAD_SPEED_MULTIPLIER;
             } else if (isRiverAt(player.x, player.y)) {
@@ -798,14 +805,14 @@ export class GameRoom extends Room<GameState> {
           }
 
           // Water collision in hostile zone
-          if (player.zone === "hostile" && getRealmMap()) {
+          if (isHostileZone(player.zone) && getRealmMap()) {
             const waterResult = resolveHostileCollision(player.x, player.y, PLAYER_RADIUS);
             player.x = waterResult.x;
             player.y = waterResult.y;
           }
 
           // Decoration collision in hostile zone (trees, large rocks, cacti, ruins)
-          if (player.zone === "hostile" && getRealmMap()) {
+          if (isHostileZone(player.zone) && getRealmMap()) {
             const decoResult = resolveDecorationCollision(player.x, player.y, PLAYER_RADIUS);
             player.x = decoResult.x;
             player.y = decoResult.y;
@@ -940,7 +947,7 @@ export class GameRoom extends Room<GameState> {
 
     // 2. Run enemy AI (pass dungeon maps for wall collision)
     const dungeonMaps = new Map<string, import("@rotmg-lite/shared").DungeonMapData>();
-    for (const zone of ["dungeon_infernal", "dungeon_void"]) {
+    for (const zone of this.dungeonSystem.getActiveDungeonZones()) {
       const mapData = this.dungeonSystem.getDungeonMap(zone);
       if (mapData) dungeonMaps.set(zone, mapData);
     }
@@ -979,7 +986,7 @@ export class GameRoom extends Room<GameState> {
 
     // 2c. Pack leader minion respawn (overworld packs)
     this.state.enemies.forEach((enemy) => {
-      if (!enemy.isPackLeader || enemy.zone !== "hostile" || enemy.aiState !== EnemyAIState.Aggro) return;
+      if (!enemy.isPackLeader || !isHostileZone(enemy.zone) || enemy.aiState !== EnemyAIState.Aggro) return;
       const packDef = getPackDef(enemy.enemyType);
       if (!packDef) return;
       if (now - enemy.lastMinionSpawnTime < packDef.respawnCooldown) return;
@@ -997,7 +1004,8 @@ export class GameRoom extends Room<GameState> {
           enemy.y,
           enemy.id,
           packDef.minionType,
-          this.state
+          this.state,
+          enemy.zone
         );
       }
     });
@@ -1016,17 +1024,17 @@ export class GameRoom extends Room<GameState> {
           client.send(ServerMessage.PlayerDied, {});
         }
       } else if (event.type === "enemyKilled") {
-        const zone = event.enemyZone ?? "hostile";
+        const zone = event.enemyZone ?? "hostile:1";
 
-        if (zone === "hostile" && event.biome !== undefined) {
+        if (isHostileZone(zone) && event.biome !== undefined) {
           // Overworld kill: respawn + loot + dungeon portal chance
-          this.spawnSystem.onEnemyKilled(event.biome, event.enemyX!, event.enemyY!, event.enemyId);
+          this.spawnSystem.onEnemyKilled(event.biome, event.enemyX!, event.enemyY!, event.enemyId, zone);
 
           if (event.enemyX !== undefined && event.enemyY !== undefined) {
             const bagRarity = rollBagDrop(event.biome);
             if (bagRarity >= 0) {
               const lootItems = rollBagLoot(bagRarity, event.biome);
-              this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, "hostile");
+              this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, zone);
             }
 
             // Roll for dungeon portal spawn (only specific Godlands enemies)
@@ -1035,7 +1043,8 @@ export class GameRoom extends Room<GameState> {
               event.enemyX,
               event.enemyY,
               this.state,
-              event.enemyType
+              event.enemyType,
+              zone
             );
           }
         } else if (isDungeonZone(zone)) {
@@ -1055,7 +1064,7 @@ export class GameRoom extends Room<GameState> {
 
           if (event.isBoss && event.enemyX !== undefined && event.enemyY !== undefined) {
             // Boss killed: guaranteed good loot + exit portal
-            const dungeonType = ZONE_TO_DUNGEON[zone];
+            const dungeonType = getDungeonTypeFromZone(zone);
             if (dungeonType !== undefined) {
               const dungeonStats = this.dungeonSystem.getDungeonStats(zone);
 
@@ -1097,12 +1106,12 @@ export class GameRoom extends Room<GameState> {
               // Find return position and zone from any player in this dungeon
               let returnX = HOSTILE_CENTER_X;
               let returnY = HOSTILE_CENTER_Y;
-              let returnZone = "hostile";
+              let returnZone = "hostile:1";
               this.state.players.forEach((p) => {
                 if (p.zone === zone) {
                   returnX = p.dungeonReturnX;
                   returnY = p.dungeonReturnY;
-                  returnZone = p.dungeonReturnZone || "hostile";
+                  returnZone = p.dungeonReturnZone || "hostile:1";
                 }
               });
 
@@ -1245,7 +1254,7 @@ export class GameRoom extends Room<GameState> {
     y: number,
     bagRarity: number,
     items: ItemInstanceData[],
-    zone: string = "hostile"
+    zone: string = "hostile:1"
   ): void {
     const bag = new LootBag();
     bag.id = generateId("bag");

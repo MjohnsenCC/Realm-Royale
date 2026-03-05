@@ -1,5 +1,6 @@
 import * as Colyseus from "colyseus.js";
 import { PlayerInput, ClientMessage } from "@rotmg-lite/shared";
+import { getServerUrl } from "./ServerConfig";
 
 export class NetworkManager {
   private static instance: NetworkManager;
@@ -7,12 +8,7 @@ export class NetworkManager {
   private room: Colyseus.Room | null = null;
 
   private constructor() {
-    // In production, connect via same host. In dev (port 5173), connect to 2567.
-    const protocol = window.location.protocol === "https:" ? "wss:" : "ws:";
-    const host = window.location.hostname;
-    const port = window.location.port === "5173" ? "2567" : window.location.port;
-    const url = `${protocol}//${host}:${port}`;
-    this.client = new Colyseus.Client(url);
+    this.client = new Colyseus.Client(getServerUrl());
   }
 
   static getInstance(): NetworkManager {
@@ -23,6 +19,7 @@ export class NetworkManager {
   }
 
   async joinGame(playerName: string): Promise<Colyseus.Room> {
+    this.client = new Colyseus.Client(getServerUrl());
     this.room = await this.client.joinOrCreate("game_room", {
       name: playerName,
     });

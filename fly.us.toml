@@ -1,5 +1,5 @@
-app = "rotmg-lite"
-primary_region = "ams"
+app = "rotmg-lite-us"
+primary_region = "iad"
 
 [build]
 
@@ -11,5 +11,5 @@ primary_region = "ams"
   min_machines_running = 1
 
 [[vm]]
-  size = "performance-1x"
-  memory = "2gb"
+  size = "shared-cpu-1x"
+  memory = "256mb"

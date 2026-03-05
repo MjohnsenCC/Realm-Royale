@@ -13,6 +13,7 @@ import {
   getRealmMap,
   isPackLeader,
   getPackDef,
+  isHostileZone,
 } from "@rotmg-lite/shared";
 import type { RealmMapData } from "@rotmg-lite/shared";
 
@@ -46,6 +47,16 @@ interface ChunkRespawnEntry {
   chunkY: number;
   count: number; // Batch size (2-4)
   timer: number; // ms remaining
+}
+
+// Per-realm mutable state
+interface RealmState {
+  realmZone: string; // e.g. "hostile:1"
+  chunks: ChunkData[][];
+  activeChunks: Set<string>;
+  respawnQueue: ChunkRespawnEntry[];
+  enemyChunkMap: Map<string, string>; // enemyId -> "cx,cy"
+  initialized: boolean;
 }
 
 // Target density per 100x100 chunk by difficulty zone
@@ -100,38 +111,58 @@ function getRespawnDelay(zone: number): number {
 }
 
 export class BiomeSpawnSystem {
-  private chunks: ChunkData[][] = []; // [cy][cx]
-  private activeChunks = new Set<string>();
-  private respawnQueue: ChunkRespawnEntry[] = [];
-  private initialized = false;
-  // Track which chunk each enemy belongs to (enemyId -> "cx,cy")
-  private enemyChunkMap = new Map<string, string>();
+  private realms = new Map<string, RealmState>();
 
   update(deltaTime: number, state: GameState): void {
-    // Check if any hostile player exists
-    let hasHostilePlayer = false;
+    // Find which realms have players
+    const activeRealmZones = new Set<string>();
     state.players.forEach((p) => {
-      if (p.alive && p.zone === "hostile") hasHostilePlayer = true;
+      if (p.alive && isHostileZone(p.zone)) {
+        activeRealmZones.add(p.zone);
+      }
     });
-    if (!hasHostilePlayer) return;
 
+    if (activeRealmZones.size === 0) return;
+
+    for (const realmZone of activeRealmZones) {
+      let realm = this.realms.get(realmZone);
+      if (!realm) {
+        realm = this.createRealmState(realmZone);
+        this.realms.set(realmZone, realm);
+      }
+      this.updateRealm(realm, deltaTime, state);
+    }
+  }
+
+  private createRealmState(realmZone: string): RealmState {
+    return {
+      realmZone,
+      chunks: [],
+      activeChunks: new Set(),
+      respawnQueue: [],
+      enemyChunkMap: new Map(),
+      initialized: false,
+    };
+  }
+
+  private updateRealm(realm: RealmState, deltaTime: number, state: GameState): void {
     // Initial chunk index build
-    if (!this.initialized) {
-      this.buildChunkIndex();
-      this.initialized = true;
+    if (!realm.initialized) {
+      this.buildChunkIndex(realm);
+      realm.initialized = true;
     }
 
     // Lazy chunk activation/deactivation
-    this.updateChunkActivation(state);
+    this.updateChunkActivation(realm, state);
 
     // Process respawn queue
-    for (let i = this.respawnQueue.length - 1; i >= 0; i--) {
-      this.respawnQueue[i].timer -= deltaTime;
-      if (this.respawnQueue[i].timer <= 0) {
-        const entry = this.respawnQueue.splice(i, 1)[0];
+    for (let i = realm.respawnQueue.length - 1; i >= 0; i--) {
+      realm.respawnQueue[i].timer -= deltaTime;
+      if (realm.respawnQueue[i].timer <= 0) {
+        const entry = realm.respawnQueue.splice(i, 1)[0];
         const key = `${entry.chunkX},${entry.chunkY}`;
-        if (this.activeChunks.has(key)) {
-          this.batchRespawnInChunk(entry, state);
+        if (realm.activeChunks.has(key)) {
+          this.batchRespawnInChunk(realm, entry, state);
         }
       }
     }
@@ -141,8 +172,13 @@ export class BiomeSpawnSystem {
     _difficultyZone: number,
     enemyX: number,
     enemyY: number,
-    enemyId?: string
+    enemyId?: string,
+    realmZone?: string
   ): void {
+    const zone = realmZone ?? "hostile:1";
+    const realm = this.realms.get(zone);
+    if (!realm) return;
+
     // Find chunk from position
     const cx = Math.floor(enemyX / CHUNK_PX);
     const cy = Math.floor(enemyY / CHUNK_PX);
@@ -151,29 +187,29 @@ export class BiomeSpawnSystem {
       cy >= CHUNK_COUNT ||
       cx < 0 ||
       cx >= CHUNK_COUNT ||
-      !this.chunks[cy]
+      !realm.chunks[cy]
     )
       return;
-    const chunk = this.chunks[cy][cx];
+    const chunk = realm.chunks[cy][cx];
     if (!chunk) return;
 
     chunk.currentCount = Math.max(0, chunk.currentCount - 1);
 
     // Remove from tracking map
     if (enemyId) {
-      this.enemyChunkMap.delete(enemyId);
+      realm.enemyChunkMap.delete(enemyId);
     }
 
     // Queue respawn if below 60% density and not already queued
     if (chunk.currentCount < chunk.targetDensity * 0.6) {
       const key = `${cx},${cy}`;
-      const alreadyQueued = this.respawnQueue.some(
+      const alreadyQueued = realm.respawnQueue.some(
         (e) => e.chunkX === cx && e.chunkY === cy
       );
-      if (!alreadyQueued && this.activeChunks.has(key)) {
+      if (!alreadyQueued && realm.activeChunks.has(key)) {
         const deficit = chunk.targetDensity - chunk.currentCount;
         const batch = Math.min(deficit, 2 + Math.floor(Math.random() * 3)); // 2-4
-        this.respawnQueue.push({
+        realm.respawnQueue.push({
           chunkX: cx,
           chunkY: cy,
           count: batch,
@@ -184,24 +220,20 @@ export class BiomeSpawnSystem {
   }
 
   reset(): void {
-    this.chunks = [];
-    this.activeChunks.clear();
-    this.respawnQueue = [];
-    this.enemyChunkMap.clear();
-    this.initialized = false;
+    this.realms.clear();
   }
 
   // --- Chunk index building ---
 
-  private buildChunkIndex(): void {
+  private buildChunkIndex(realm: RealmState): void {
     const map = getRealmMap();
     if (!map) return;
 
-    this.chunks = [];
+    realm.chunks = [];
     for (let cy = 0; cy < CHUNK_COUNT; cy++) {
-      this.chunks[cy] = [];
+      realm.chunks[cy] = [];
       for (let cx = 0; cx < CHUNK_COUNT; cx++) {
-        this.chunks[cy][cx] = this.buildSingleChunk(cx, cy, map);
+        realm.chunks[cy][cx] = this.buildSingleChunk(cx, cy, map);
       }
     }
   }
@@ -306,10 +338,10 @@ export class BiomeSpawnSystem {
 
   // --- Lazy chunk activation ---
 
-  private updateChunkActivation(state: GameState): void {
+  private updateChunkActivation(realm: RealmState, state: GameState): void {
     const playerPositions: { x: number; y: number }[] = [];
     state.players.forEach((p) => {
-      if (p.alive && p.zone === "hostile") {
+      if (p.alive && p.zone === realm.realmZone) {
         playerPositions.push({ x: p.x, y: p.y });
       }
     });
@@ -368,13 +400,13 @@ export class BiomeSpawnSystem {
 
     // Activate new chunks
     for (const key of shouldBeActive) {
-      if (!this.activeChunks.has(key)) {
-        this.activateChunk(key, state, map);
+      if (!realm.activeChunks.has(key)) {
+        this.activateChunk(realm, key, state, map);
       }
     }
 
     // Deactivate distant chunks
-    for (const key of this.activeChunks) {
+    for (const key of realm.activeChunks) {
       const [cxs, cys] = key.split(",");
       const cx = parseInt(cxs);
       const cy = parseInt(cys);
@@ -393,66 +425,68 @@ export class BiomeSpawnSystem {
       }
 
       if (!anyNear) {
-        this.deactivateChunk(key, state);
+        this.deactivateChunk(realm, key, state);
       }
     }
   }
 
   private activateChunk(
+    realm: RealmState,
     key: string,
     state: GameState,
     map: RealmMapData
   ): void {
-    this.activeChunks.add(key);
+    realm.activeChunks.add(key);
     const [cxs, cys] = key.split(",");
     const cx = parseInt(cxs);
     const cy = parseInt(cys);
-    const chunk = this.chunks[cy]?.[cx];
+    const chunk = realm.chunks[cy]?.[cx];
     if (!chunk || chunk.targetDensity === 0 || chunk.spawnPositionCount === 0)
       return;
 
     // Collect player positions to filter out on-screen spawns
     const playerPositions: { x: number; y: number }[] = [];
     state.players.forEach((p) => {
-      if (p.alive && p.zone === "hostile") {
+      if (p.alive && p.zone === realm.realmZone) {
         playerPositions.push({ x: p.x, y: p.y });
       }
     });
 
-    this.populateChunk(chunk, state, map, playerPositions);
+    this.populateChunk(realm, chunk, state, map, playerPositions);
   }
 
-  private deactivateChunk(key: string, state: GameState): void {
-    this.activeChunks.delete(key);
+  private deactivateChunk(realm: RealmState, key: string, state: GameState): void {
+    realm.activeChunks.delete(key);
 
     // Remove respawn entries for this chunk
     const [cxs, cys] = key.split(",");
     const cx = parseInt(cxs);
     const cy = parseInt(cys);
-    this.respawnQueue = this.respawnQueue.filter(
+    realm.respawnQueue = realm.respawnQueue.filter(
       (e) => e.chunkX !== cx || e.chunkY !== cy
     );
 
     // Despawn enemies in this chunk
     const toRemove: string[] = [];
-    for (const [enemyId, chunkKey] of this.enemyChunkMap) {
+    for (const [enemyId, chunkKey] of realm.enemyChunkMap) {
       if (chunkKey === key) {
         toRemove.push(enemyId);
       }
     }
     for (const enemyId of toRemove) {
       state.enemies.delete(enemyId);
-      this.enemyChunkMap.delete(enemyId);
+      realm.enemyChunkMap.delete(enemyId);
     }
 
     // Reset chunk count
-    const chunk = this.chunks[cy]?.[cx];
+    const chunk = realm.chunks[cy]?.[cx];
     if (chunk) chunk.currentCount = 0;
   }
 
   // --- Grid-jitter population ---
 
   private populateChunk(
+    realm: RealmState,
     chunk: ChunkData,
     state: GameState,
     map: RealmMapData,
@@ -537,7 +571,7 @@ export class BiomeSpawnSystem {
       if (tooClose) {
         deferred++;
       } else {
-        this.spawnEnemyAtPosition(pos.x, pos.y, chunk, state, map);
+        this.spawnEnemyAtPosition(realm, pos.x, pos.y, chunk, state, map);
       }
     }
 
@@ -547,7 +581,7 @@ export class BiomeSpawnSystem {
       const batches = Math.ceil(deferred / batchSize);
       for (let i = 0; i < batches; i++) {
         const count = Math.min(batchSize, deferred - i * batchSize);
-        this.respawnQueue.push({
+        realm.respawnQueue.push({
           chunkX: chunk.chunkX,
           chunkY: chunk.chunkY,
           count,
@@ -560,6 +594,7 @@ export class BiomeSpawnSystem {
   // --- Enemy spawning ---
 
   private spawnEnemyAtPosition(
+    realm: RealmState,
     x: number,
     y: number,
     chunk: ChunkData,
@@ -591,7 +626,7 @@ export class BiomeSpawnSystem {
 
     // Pack leader: spawn leader + minions as a cluster
     if (isPackLeader(enemyType)) {
-      this.spawnPackAtPosition(x, y, enemyType, chunk, state);
+      this.spawnPackAtPosition(realm, x, y, enemyType, chunk, state);
       return;
     }
 
@@ -607,16 +642,18 @@ export class BiomeSpawnSystem {
     enemy.aiState = EnemyAIState.Idle;
     enemy.idleTargetX = x + (Math.random() - 0.5) * 60;
     enemy.idleTargetY = y + (Math.random() - 0.5) * 60;
+    enemy.zone = realm.realmZone;
 
     state.enemies.set(enemy.id, enemy);
     chunk.currentCount++;
-    this.enemyChunkMap.set(
+    realm.enemyChunkMap.set(
       enemy.id,
       `${chunk.chunkX},${chunk.chunkY}`
     );
   }
 
   private spawnPackAtPosition(
+    realm: RealmState,
     x: number,
     y: number,
     leaderType: number,
@@ -642,10 +679,11 @@ export class BiomeSpawnSystem {
     leader.idleTargetX = x + (Math.random() - 0.5) * 60;
     leader.idleTargetY = y + (Math.random() - 0.5) * 60;
     leader.isPackLeader = true;
+    leader.zone = realm.realmZone;
 
     state.enemies.set(leader.id, leader);
     chunk.currentCount++;
-    this.enemyChunkMap.set(leader.id, `${chunk.chunkX},${chunk.chunkY}`);
+    realm.enemyChunkMap.set(leader.id, `${chunk.chunkX},${chunk.chunkY}`);
 
     // Spawn minions clustered around leader
     const minionDef = ENEMY_DEFS[packDef.minionType];
@@ -671,10 +709,11 @@ export class BiomeSpawnSystem {
       minion.idleTargetX = mx + (Math.random() - 0.5) * 60;
       minion.idleTargetY = my + (Math.random() - 0.5) * 60;
       minion.packLeaderId = leader.id;
+      minion.zone = realm.realmZone;
 
       state.enemies.set(minion.id, minion);
       chunk.currentCount++;
-      this.enemyChunkMap.set(minion.id, `${chunk.chunkX},${chunk.chunkY}`);
+      realm.enemyChunkMap.set(minion.id, `${chunk.chunkX},${chunk.chunkY}`);
     }
   }
 
@@ -684,16 +723,20 @@ export class BiomeSpawnSystem {
     leaderY: number,
     leaderId: string,
     minionType: number,
-    state: GameState
+    state: GameState,
+    realmZone: string
   ): void {
     const minionDef = ENEMY_DEFS[minionType];
     if (!minionDef) return;
+
+    const realm = this.realms.get(realmZone);
+    if (!realm) return;
 
     // Find chunk for leader position
     const cx = Math.floor(leaderX / CHUNK_PX);
     const cy = Math.floor(leaderY / CHUNK_PX);
     if (cy < 0 || cy >= CHUNK_COUNT || cx < 0 || cx >= CHUNK_COUNT) return;
-    const chunk = this.chunks[cy]?.[cx];
+    const chunk = realm.chunks[cy]?.[cx];
     if (!chunk) return;
 
     const angle = Math.random() * Math.PI * 2;
@@ -714,10 +757,11 @@ export class BiomeSpawnSystem {
     minion.idleTargetX = mx + (Math.random() - 0.5) * 60;
     minion.idleTargetY = my + (Math.random() - 0.5) * 60;
     minion.packLeaderId = leaderId;
+    minion.zone = realmZone;
 
     state.enemies.set(minion.id, minion);
     chunk.currentCount++;
-    this.enemyChunkMap.set(minion.id, `${cx},${cy}`);
+    realm.enemyChunkMap.set(minion.id, `${cx},${cy}`);
   }
 
   private getBlendedCandidates(
@@ -780,10 +824,11 @@ export class BiomeSpawnSystem {
   // --- Batch respawn ---
 
   private batchRespawnInChunk(
+    realm: RealmState,
     entry: ChunkRespawnEntry,
     state: GameState
   ): void {
-    const chunk = this.chunks[entry.chunkY]?.[entry.chunkX];
+    const chunk = realm.chunks[entry.chunkY]?.[entry.chunkX];
     if (!chunk || chunk.spawnPositionCount === 0) return;
 
     const map = getRealmMap();
@@ -797,7 +842,7 @@ export class BiomeSpawnSystem {
     // Collect player positions for off-screen check
     const playerPositions: { x: number; y: number }[] = [];
     state.players.forEach((p) => {
-      if (p.alive && p.zone === "hostile") {
+      if (p.alive && p.zone === realm.realmZone) {
         playerPositions.push({ x: p.x, y: p.y });
       }
     });
@@ -820,7 +865,7 @@ export class BiomeSpawnSystem {
         }
 
         if (!tooClose) {
-          this.spawnEnemyAtPosition(px, py, chunk, state, map);
+          this.spawnEnemyAtPosition(realm, px, py, chunk, state, map);
           break;
         }
       }

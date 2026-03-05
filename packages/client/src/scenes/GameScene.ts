@@ -14,8 +14,10 @@ import {
   HOSTILE_HEIGHT,
   HOSTILE_TILES,
   HOSTILE_TILE_SIZE,
-  PORTAL_X,
-  PORTAL_Y,
+  REALM_PORTAL_1_X,
+  REALM_PORTAL_1_Y,
+  REALM_PORTAL_2_X,
+  REALM_PORTAL_2_Y,
   PORTAL_RADIUS,
   CRAFTING_TABLE_X,
   CRAFTING_TABLE_Y,
@@ -42,7 +44,9 @@ import {
   getScaledAbilityStats,
   DUNGEON_VISUALS,
   REALM_BIOME_VISUALS,
-  ZONE_TO_DUNGEON,
+  isHostileZone,
+  getZoneInstance,
+  getDungeonTypeFromZone,
   DUNGEON_PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   generateDungeonMap,
@@ -322,7 +326,7 @@ export class GameScene extends Phaser.Scene {
       // Generate dungeon map from seed if entering a dungeon, or use nexus map
       if (isDungeonZone(data.zone) && data.dungeonSeed !== undefined) {
         this.dungeonSeed = data.dungeonSeed;
-        this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, ZONE_TO_DUNGEON[data.zone]);
+        this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, getDungeonTypeFromZone(data.zone)!);
       } else if (data.zone === "nexus") {
         this.currentDungeonMap = this.nexusMap;
       } else {
@@ -372,7 +376,7 @@ export class GameScene extends Phaser.Scene {
         });
       };
 
-      if (data.zone === "hostile" && !getRealmMap()) {
+      if (isHostileZone(data.zone) && !getRealmMap()) {
         // Fetch realm map JSON from server assets
         fetch("/assets/realm-map.json")
           .then((resp) => resp.text())
@@ -520,8 +524,8 @@ export class GameScene extends Phaser.Scene {
 
   private getZoneDisplayInfo(zone: string): { name: string; color: string; difficulty?: string; difficultyColor?: string } {
     if (isDungeonZone(zone)) {
-      const dungeonType = ZONE_TO_DUNGEON[zone];
-      const visuals = DUNGEON_VISUALS[dungeonType];
+      const dungeonType = getDungeonTypeFromZone(zone);
+      const visuals = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
       if (visuals) {
         const color = dungeonType === 0 ? "#ff4400" : "#8833ee";
         const difficulty = dungeonType === 0 ? "Hard" : "Extreme";
@@ -530,8 +534,9 @@ export class GameScene extends Phaser.Scene {
       }
       return { name: "Dungeon", color: "#ffffff" };
     }
-    if (zone === "hostile") {
-      return { name: "The Wilds", color: "#e94560" };
+    if (isHostileZone(zone)) {
+      const inst = getZoneInstance(zone) || "1";
+      return { name: `Realm ${inst}`, color: "#e94560" };
     }
     return { name: "Nexus", color: "#44aa66" };
   }
@@ -623,6 +628,10 @@ export class GameScene extends Phaser.Scene {
       label.destroy();
     }
     this.nexusLabels = [];
+    for (const label of this.realmPortalLabels) {
+      label.destroy();
+    }
+    this.realmPortalLabels = [];
   }
 
   private drawGround(): void {
@@ -1281,30 +1290,50 @@ export class GameScene extends Phaser.Scene {
     this.lastChunkCY = -1;
   }
 
+  private realmPortalLabels: Phaser.GameObjects.Text[] = [];
+
   private drawPortal(): void {
     this.portalGraphics.clear();
+    // Clean up old labels
+    for (const lbl of this.realmPortalLabels) lbl.destroy();
+    this.realmPortalLabels = [];
+
     if (this.localZone !== "nexus") return;
 
-    // Outer glow
-    this.portalGraphics.lineStyle(4, 0x8844ff, 0.3);
-    this.portalGraphics.strokeCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS + 12);
+    const portals = [
+      { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, label: "Realm 1" },
+      { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, label: "Realm 2" },
+    ];
 
-    // Mid glow
-    this.portalGraphics.lineStyle(3, 0x9955ff, 0.5);
-    this.portalGraphics.strokeCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS + 4);
+    for (const p of portals) {
+      // Outer glow
+      this.portalGraphics.lineStyle(4, 0x8844ff, 0.3);
+      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS + 12);
 
-    // Main ring
-    this.portalGraphics.lineStyle(3, 0xaa66ff, 0.8);
-    this.portalGraphics.strokeCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS);
+      // Mid glow
+      this.portalGraphics.lineStyle(3, 0x9955ff, 0.5);
+      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS + 4);
 
-    // Inner fill
-    this.portalGraphics.fillStyle(0x6622cc, 0.4);
-    this.portalGraphics.fillCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS - 4);
+      // Main ring
+      this.portalGraphics.lineStyle(3, 0xaa66ff, 0.8);
+      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS);
 
-    // Bright core
-    this.portalGraphics.fillStyle(0xaa66ff, 0.25);
-    this.portalGraphics.fillCircle(PORTAL_X, PORTAL_Y, PORTAL_RADIUS / 2);
+      // Inner fill
+      this.portalGraphics.fillStyle(0x6622cc, 0.4);
+      this.portalGraphics.fillCircle(p.x, p.y, PORTAL_RADIUS - 4);
 
+      // Bright core
+      this.portalGraphics.fillStyle(0xaa66ff, 0.25);
+      this.portalGraphics.fillCircle(p.x, p.y, PORTAL_RADIUS / 2);
+
+      // Label
+      const lbl = this.add.text(p.x, p.y - PORTAL_RADIUS - 14, p.label, {
+        fontSize: "12px",
+        color: "#aa66ff",
+        fontFamily: "monospace",
+      }).setOrigin(0.5).setDepth(6);
+      this.realmPortalLabels.push(lbl);
+    }
   }
 
   private setupStateListeners(state: DecodedState): void {
@@ -1364,7 +1393,7 @@ export class GameScene extends Phaser.Scene {
           for (const input of this.pendingInputs) {
             // Terrain speed modifiers in hostile zone
             let inputReconSpeed = reconSpeed;
-            if (this.localZone === "hostile") {
+            if (isHostileZone(this.localZone)) {
               if (isRoadAt(reconX, reconY)) {
                 inputReconSpeed *= ROAD_SPEED_MULTIPLIER;
               } else if (isRiverAt(reconX, reconY)) {
@@ -1392,13 +1421,13 @@ export class GameScene extends Phaser.Scene {
               reconY = wallResult.y;
             }
             // Water collision in hostile zone
-            if (this.localZone === "hostile" && getRealmMap()) {
+            if (isHostileZone(this.localZone) && getRealmMap()) {
               const waterResult = resolveHostileCollision(reconX, reconY, PLAYER_RADIUS);
               reconX = waterResult.x;
               reconY = waterResult.y;
             }
             // Decoration collision in hostile zone
-            if (this.localZone === "hostile" && getRealmMap()) {
+            if (isHostileZone(this.localZone) && getRealmMap()) {
               const decoResult = resolveDecorationCollision(reconX, reconY, PLAYER_RADIUS);
               reconX = decoResult.x;
               reconY = decoResult.y;
@@ -1843,7 +1872,7 @@ export class GameScene extends Phaser.Scene {
       if (mx !== 0 || my !== 0) {
         // Terrain speed modifiers in hostile zone
         let predSpeed = localSpeed;
-        if (this.localZone === "hostile") {
+        if (isHostileZone(this.localZone)) {
           if (isRoadAt(localSprite.x, localSprite.y)) {
             predSpeed *= ROAD_SPEED_MULTIPLIER;
           } else if (isRiverAt(localSprite.x, localSprite.y)) {
@@ -1871,13 +1900,13 @@ export class GameScene extends Phaser.Scene {
           predY = wallResult.y;
         }
         // Water collision in hostile zone
-        if (this.localZone === "hostile" && getRealmMap()) {
+        if (isHostileZone(this.localZone) && getRealmMap()) {
           const waterResult = resolveHostileCollision(predX, predY, PLAYER_RADIUS);
           predX = waterResult.x;
           predY = waterResult.y;
         }
         // Decoration collision in hostile zone
-        if (this.localZone === "hostile" && getRealmMap()) {
+        if (isHostileZone(this.localZone) && getRealmMap()) {
           const decoResult = resolveDecorationCollision(predX, predY, PLAYER_RADIUS);
           predX = decoResult.x;
           predY = decoResult.y;
@@ -2013,7 +2042,7 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
-    if (this.localZone === "hostile") {
+    if (isHostileZone(this.localZone)) {
       this.drawHostileGround();
     }
 
@@ -2269,8 +2298,8 @@ export class GameScene extends Phaser.Scene {
   }
 
   private drawDungeonGround(): void {
-    const dungeonType = ZONE_TO_DUNGEON[this.localZone];
-    const visual = DUNGEON_VISUALS[dungeonType];
+    const dungeonType = getDungeonTypeFromZone(this.localZone);
+    const visual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
     if (!visual) return;
 
     const mapData = this.currentDungeonMap;
@@ -2359,14 +2388,21 @@ export class GameScene extends Phaser.Scene {
     let portalX = 0;
     let portalY = 0;
 
-    // Check nexus portal
+    // Check nexus realm portals
     if (this.localZone === "nexus") {
-      const dx = px - PORTAL_X;
-      const dy = py - PORTAL_Y;
-      if (dx * dx + dy * dy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
-        nearPortal = true;
-        portalX = PORTAL_X;
-        portalY = PORTAL_Y;
+      const realmPortals = [
+        { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y },
+        { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y },
+      ];
+      for (const rp of realmPortals) {
+        const dx = px - rp.x;
+        const dy = py - rp.y;
+        if (dx * dx + dy * dy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
+          nearPortal = true;
+          portalX = rp.x;
+          portalY = rp.y;
+          break;
+        }
       }
     }
 

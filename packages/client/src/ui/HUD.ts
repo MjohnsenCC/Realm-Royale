@@ -15,13 +15,14 @@ import {
   DUNGEON_VISUALS,
   REALM_BIOME_VISUALS,
   DIFFICULTY_ZONE_NAMES,
-  ZONE_TO_DUNGEON,
+  getDungeonTypeFromZone,
   xpForLevel,
   getRealmMap,
   getDifficultyAt,
   computePlayerStats,
   generateNexusMap,
   DungeonTile,
+  isHostileZone,
 } from "@rotmg-lite/shared";
 
 export class HUD {
@@ -521,8 +522,8 @@ export class HUD {
       this.zoneText.setColor("#44aa66");
       this.qHintText.setVisible(false);
     } else if (isDungeonZone(zone)) {
-      const dungeonType = ZONE_TO_DUNGEON[zone];
-      const dungeonVisual = DUNGEON_VISUALS[dungeonType];
+      const dungeonType = getDungeonTypeFromZone(zone);
+      const dungeonVisual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
       const dungeonName = dungeonVisual ? dungeonVisual.name : "Dungeon";
       this.zoneText.setText(dungeonName);
       const color = dungeonType === 0 ? "#ff4400" : "#6600cc";
@@ -741,7 +742,7 @@ export class HUD {
       this.minimapBiomeCached &&
       this.minimapBiomeCachedZone === zone;
 
-    if (zone === "hostile") {
+    if (isHostileZone(zone)) {
       if (!canUseCache) {
         this.minimapBiomeGraphics.clear();
         if (this.renderMinimapBiomes(mmX, mmY, viewX, viewY, visibleW, visibleH)) {
@@ -782,8 +783,9 @@ export class HUD {
       this.minimapDots.fillRect(dx - 1, dy - 1, 3, 3);
     });
 
-    // Player dots
+    // Player dots (only show players in the same zone)
     players.forEach((player) => {
+      if (player.zone !== zone) return;
       const isLocal =
         Math.abs(player.x - localX) < 5 && Math.abs(player.y - localY) < 5;
       this.minimapDots.fillStyle(isLocal ? 0xffffff : 0x4488ff, 1);

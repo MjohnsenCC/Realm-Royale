@@ -73,10 +73,15 @@ export const CRAFTING_TABLE_Y = 25.5 * TILE_SIZE; // 1020 — center of east roo
 export const CRAFTING_TABLE_RADIUS = 36;
 export const CRAFTING_TABLE_INTERACT_RADIUS = 60;
 
-// Portal (located in nexus north room, takes player to hostile zone)
-export const PORTAL_X = 25.5 * TILE_SIZE; // 1020 — center of north room
-export const PORTAL_Y = 7 * TILE_SIZE; // 280 — center of north room
+// Realm portals (nexus north room, side by side)
+export const REALM_PORTAL_1_X = 23 * TILE_SIZE; // left side of north room
+export const REALM_PORTAL_1_Y = 7 * TILE_SIZE;
+export const REALM_PORTAL_2_X = 28 * TILE_SIZE; // right side of north room
+export const REALM_PORTAL_2_Y = 7 * TILE_SIZE;
 export const PORTAL_RADIUS = 40;
+// Legacy alias (kept for reference, no longer used directly)
+export const PORTAL_X = 25.5 * TILE_SIZE;
+export const PORTAL_Y = 7 * TILE_SIZE;
 
 // Inventory & Loot Bags
 export const INVENTORY_SIZE = 8;

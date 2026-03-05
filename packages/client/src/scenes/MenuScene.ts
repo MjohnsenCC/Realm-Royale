@@ -1,6 +1,11 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
 import { getUISize, setUISize, UISize } from "../ui/UIScale";
+import {
+  SERVERS,
+  getSelectedServerId,
+  setSelectedServerId,
+} from "../network/ServerConfig";
 
 interface Particle {
   graphics: Phaser.GameObjects.Graphics;
@@ -59,9 +64,61 @@ export class MenuScene extends Phaser.Scene {
       })
       .setOrigin(0.5);
 
+    // Server selector
+    this.add
+      .text(width / 2, height / 2 - 120, "Server", {
+        fontSize: "12px",
+        color: "#666688",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5);
+
+    const currentServerId = getSelectedServerId();
+    const serverButtons: Phaser.GameObjects.Text[] = [];
+    const totalServerBtnWidth = 180;
+    const serverBtnSpacing = totalServerBtnWidth / SERVERS.length;
+    const serverStartX =
+      width / 2 - totalServerBtnWidth / 2 + serverBtnSpacing / 2;
+
+    for (let i = 0; i < SERVERS.length; i++) {
+      const server = SERVERS[i];
+      const btn = this.add
+        .text(
+          serverStartX + i * serverBtnSpacing,
+          height / 2 - 100,
+          server.name,
+          {
+            fontSize: "16px",
+            color: server.id === currentServerId ? "#4488ff" : "#555566",
+            fontFamily: "monospace",
+          }
+        )
+        .setOrigin(0.5)
+        .setInteractive({ useHandCursor: true });
+
+      btn.on("pointerdown", () => {
+        setSelectedServerId(server.id);
+        for (let j = 0; j < serverButtons.length; j++) {
+          serverButtons[j].setColor(
+            SERVERS[j].id === server.id ? "#4488ff" : "#555566"
+          );
+        }
+      });
+      btn.on("pointerover", () => {
+        if (getSelectedServerId() !== server.id) btn.setColor("#8888aa");
+      });
+      btn.on("pointerout", () => {
+        btn.setColor(
+          getSelectedServerId() === server.id ? "#4488ff" : "#555566"
+        );
+      });
+
+      serverButtons.push(btn);
+    }
+
     // UI Scale selector
     this.add
-      .text(width / 2, height / 2 - 80, "UI Scale", {
+      .text(width / 2, height / 2 - 70, "UI Scale", {
         fontSize: "12px",
         color: "#666688",
         fontFamily: "monospace",
@@ -78,7 +135,7 @@ export class MenuScene extends Phaser.Scene {
 
     for (let i = 0; i < sizes.length; i++) {
       const btn = this.add
-        .text(startX + i * btnSpacing, height / 2 - 60, sizeLabels[i], {
+        .text(startX + i * btnSpacing, height / 2 - 50, sizeLabels[i], {
           fontSize: "16px",
           color: sizes[i] === currentSize ? "#4488ff" : "#555566",
           fontFamily: "monospace",
@@ -120,7 +177,7 @@ export class MenuScene extends Phaser.Scene {
       />
     `;
     const inputElement = this.add
-      .dom(width / 2, height / 2 - 10)
+      .dom(width / 2, height / 2)
       .createFromHTML(inputHTML);
 
     const htmlInput = inputElement.getChildByID(
@@ -137,7 +194,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Play button
     const playBtn = this.add
-      .text(width / 2, height / 2 + 60, "[ PLAY ]", {
+      .text(width / 2, height / 2 + 70, "[ PLAY ]", {
         fontSize: "32px",
         color: "#ffffff",
         fontFamily: "monospace",
@@ -147,7 +204,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Status text
     const statusText = this.add
-      .text(width / 2, height / 2 + 110, "", {
+      .text(width / 2, height / 2 + 120, "", {
         fontSize: "16px",
         color: "#aaaaaa",
         fontFamily: "monospace",

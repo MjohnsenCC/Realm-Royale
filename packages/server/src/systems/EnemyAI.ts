@@ -18,6 +18,7 @@ import {
   isTileWalkable,
   hasLineOfSight,
   isDungeonZone,
+  isHostileZone,
 } from "@rotmg-lite/shared";
 import type { EnemyDefinition, DungeonMapData } from "@rotmg-lite/shared";
 
@@ -579,7 +580,7 @@ export class EnemyAI {
     }
 
     // Apply water collision in hostile zone
-    if (enemy.zone === "hostile" && getRealmMap()) {
+    if (isHostileZone(enemy.zone) && getRealmMap()) {
       const resolved = resolveHostileCollision(enemy.x, enemy.y, def.radius);
       enemy.x = resolved.x;
       enemy.y = resolved.y;

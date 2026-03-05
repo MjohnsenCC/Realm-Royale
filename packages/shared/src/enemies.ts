@@ -7,6 +7,7 @@ import {
   IdleIntensity,
   RealmBiome,
   DifficultyZone,
+  getZoneBase,
 } from "./types";
 
 // --- Enemy Definition ---
@@ -1256,7 +1257,12 @@ export const INFERNAL_NORMAL_ROOM_VARIANTS: number[][] = [
 // --- Dungeon Helpers ---
 
 export function isDungeonZone(zone: string): boolean {
-  return zone === PlayerZone.DungeonInfernal || zone === PlayerZone.DungeonVoid;
+  const base = getZoneBase(zone);
+  return base === PlayerZone.DungeonInfernal || base === PlayerZone.DungeonVoid;
+}
+
+export function getDungeonTypeFromZone(zone: string): number | undefined {
+  return ZONE_TO_DUNGEON[getZoneBase(zone)];
 }
 
 export function isBossEnemy(enemyType: number): boolean {

@@ -46,7 +46,7 @@ export class ShootingPatternSystem {
       proj.startY = proj.y;
       proj.maxRange = def.projectileRange;
       proj.collisionRadius = def.projectileCollisionRadius ?? 5;
-      proj.zone = enemy.zone ?? "hostile";
+      proj.zone = enemy.zone || "hostile:1";
 
       state.projectiles.set(proj.id, proj);
     }

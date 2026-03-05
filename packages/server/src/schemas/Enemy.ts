@@ -35,7 +35,7 @@ export class Enemy extends Schema {
   retargetTimer: number = 0; // ms until next target re-evaluation (multiplayer)
 
   // Zone and boss tracking (server-only)
-  zone: string = "hostile";
+  zone: string = "";
   bossPhase: number = 0; // 0=sleeping, 1=phase1, 2=phase2, 3=phase3
   isBoss: boolean = false;
   isSwitch: boolean = false;

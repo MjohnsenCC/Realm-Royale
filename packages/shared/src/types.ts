@@ -185,6 +185,22 @@ export const PlayerZone = {
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
 
+// Zone instance helpers — zones use "base:instanceId" format
+// e.g. "hostile:1", "dungeon_infernal:dportal_abc"
+export function getZoneBase(zone: string): string {
+  const i = zone.indexOf(":");
+  return i === -1 ? zone : zone.substring(0, i);
+}
+
+export function getZoneInstance(zone: string): string {
+  const i = zone.indexOf(":");
+  return i === -1 ? "" : zone.substring(i + 1);
+}
+
+export function isHostileZone(zone: string): boolean {
+  return getZoneBase(zone) === "hostile";
+}
+
 export const DungeonType = {
   InfernalPit: 0,
   VoidSanctum: 1,

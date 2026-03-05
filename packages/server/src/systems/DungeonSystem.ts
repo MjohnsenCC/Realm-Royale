@@ -9,8 +9,6 @@ import {
   EnemyAIState,
   PortalType,
   DUNGEON_BOSS_TYPE,
-  DUNGEON_TO_ZONE,
-  ZONE_TO_DUNGEON,
   DUNGEON_PORTAL_LIFETIME,
   DUNGEON_DROP_CHANCE,
   ENEMY_DEFS,
@@ -22,7 +20,7 @@ import {
   generateDungeonStats,
   DungeonModifierId,
   getModifierTierValue,
-  isDungeonZone,
+  getDungeonTypeFromZone,
 } from "@rotmg-lite/shared";
 import type {
   DungeonMapData,
@@ -71,7 +69,8 @@ export class DungeonSystem {
     x: number,
     y: number,
     state: GameState,
-    enemyType?: number
+    enemyType?: number,
+    sourceZone?: string
   ): boolean {
     // Only specific enemies with a dungeonDrop property can spawn portals
     if (enemyType === undefined) return false;
@@ -90,7 +89,7 @@ export class DungeonSystem {
       dungeonType === DungeonType.InfernalPit
         ? PortalType.InfernalPitEntrance
         : PortalType.VoidSanctumEntrance;
-    portal.zone = "hostile";
+    portal.zone = sourceZone ?? "hostile:1";
     portal.createdAt = Date.now();
     portal.dungeonType = dungeonType;
 
@@ -107,14 +106,17 @@ export class DungeonSystem {
 
   /**
    * Create a dungeon instance: generate map, place enemies in rooms, place boss.
+   * @param dungeonType - DungeonType enum value
+   * @param zone - Full instanced zone string (e.g. "dungeon_infernal:dportal_abc")
+   * @param state - Game state
+   * @param stats - Optional dungeon modifier stats
    */
   createDungeonInstance(
     dungeonType: number,
+    zone: string,
     state: GameState,
     stats?: DungeonStats
   ): void {
-    const zone = DUNGEON_TO_ZONE[dungeonType];
-    if (!zone) return;
 
     // Store dungeon stats for this zone
     if (stats) {
@@ -474,7 +476,7 @@ export class DungeonSystem {
     const mapData = this.activeDungeonMaps.get(zone);
     if (!mapData) return;
 
-    const dungeonType = ZONE_TO_DUNGEON[zone];
+    const dungeonType = getDungeonTypeFromZone(zone);
     if (dungeonType === undefined) return;
 
     const bossType = DUNGEON_BOSS_TYPE[dungeonType];
@@ -518,7 +520,7 @@ export class DungeonSystem {
 
     // Boss wake timer (all dungeon types)
     for (const [zone, mapData] of this.activeDungeonMaps) {
-      const dungeonType = ZONE_TO_DUNGEON[zone];
+      const dungeonType = getDungeonTypeFromZone(zone);
       const isVoidSanctum = dungeonType === DungeonType.VoidSanctum;
 
       // VoidSanctum: skip if switches not yet destroyed
@@ -574,14 +576,20 @@ export class DungeonSystem {
     return bossAwokeZones;
   }
 
+  /**
+   * Get all currently active dungeon zone strings.
+   */
+  getActiveDungeonZones(): string[] {
+    return Array.from(this.activeDungeonMaps.keys());
+  }
+
   private cleanupEmptyDungeons(state: GameState): void {
     const occupiedZones = new Set<string>();
     state.players.forEach((player) => {
       if (player.alive) occupiedZones.add(player.zone);
     });
 
-    const dungeonZones = ["dungeon_infernal", "dungeon_void"];
-    for (const zone of dungeonZones) {
+    for (const zone of this.activeDungeonMaps.keys()) {
       if (occupiedZones.has(zone)) continue;
 
       // Clear seed, cached map, stats, and switch state for this zone
