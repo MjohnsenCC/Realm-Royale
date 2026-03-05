@@ -12,6 +12,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
@@ -61,6 +62,11 @@ export class LootBagUI {
   private tooltip: ItemTooltip;
   private shiftKey: Phaser.Input.Keyboard.Key | null = null;
   private lastHoveredItem: { item: ItemInstanceData; screenX: number; screenY: number } | null = null;
+
+  // Drag-and-drop
+  private dragManager: DragManager | null = null;
+  private dragActive = false;
+  private dragSourceSlot = -1;
 
   // Scaled dimensions
   private S: number;
@@ -126,11 +132,22 @@ export class LootBagUI {
 
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
         if (pointer.leftButtonDown()) {
+          const item = this.currentItems[i];
+          if (item && item.baseItemId >= 0 && this.dragManager) {
+            this.dragManager.onSlotPointerDown(
+              { type: "bag", bagId: this.currentBagId, slotIndex: i },
+              item,
+              pointer.x,
+              pointer.y
+            );
+            return;
+          }
           this.onPickupItem(i);
         }
       });
 
       zone.on("pointerover", () => {
+        if (this.dragActive) return;
         const item = this.currentItems[i];
         if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
@@ -140,6 +157,7 @@ export class LootBagUI {
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        if (this.dragActive) return;
         const item = this.currentItems[i];
         if (item && item.baseItemId >= 0) {
           const shiftHeld = this.shiftKey?.isDown ?? false;
@@ -197,6 +215,9 @@ export class LootBagUI {
   }
 
   hide(): void {
+    if (this.dragManager) {
+      this.dragManager.cancelDrag();
+    }
     this.currentBagId = "";
     this.lastHoveredItem = null;
     this.tooltip.hide();
@@ -302,6 +323,12 @@ export class LootBagUI {
       } else {
         this.tierTexts[i].setText("");
       }
+      // Drag source dim overlay
+      if (i === this.dragSourceSlot) {
+        this.slotGraphics.fillStyle(0x000000, 0.5);
+        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+      }
+
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
@@ -316,13 +343,52 @@ export class LootBagUI {
     }
   }
 
-  private onPickupItem(slotIndex: number): void {
+  onPickupItem(slotIndex: number): void {
     if (!this.room || !this.currentBagId) return;
     if (this.currentItems[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.PickupItem, {
       bagId: this.currentBagId,
       slotIndex,
     });
+  }
+
+  // --- Drag-and-drop support ---
+
+  setDragManager(dm: DragManager): void {
+    this.dragManager = dm;
+  }
+
+  setDragActive(active: boolean): void {
+    this.dragActive = active;
+    if (active) {
+      this.tooltip.hide();
+      this.lastHoveredItem = null;
+    }
+  }
+
+  setDragSourceSlot(slotIndex: number): void {
+    if (this.dragSourceSlot !== slotIndex) {
+      this.dragSourceSlot = slotIndex;
+      if (this.visible) this.redraw();
+    }
+  }
+
+  getBagSlotBounds(): { x: number; y: number; w: number; h: number }[] {
+    if (!this.visible) return [];
+    const panelX = this.anchorX;
+    const panelY = this.anchorY;
+    const bounds: { x: number; y: number; w: number; h: number }[] = [];
+    for (let i = 0; i < BAG_SIZE; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      bounds.push({
+        x: panelX + this.padding + col * (this.slotSize + this.slotGap),
+        y: panelY + this.header + this.padding + row * (this.slotSize + this.slotGap),
+        w: this.slotSize,
+        h: this.slotSize,
+      });
+    }
+    return bounds;
   }
 
   isOverPanel(screenX: number, screenY: number): boolean {

@@ -435,6 +435,87 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Listen for inventory slot swap (drag reorder)
+    this.onMessage(
+      ClientMessage.SwapInventory,
+      (client, data: { fromSlot: number; toSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const { fromSlot, toSlot } = data;
+        if (fromSlot < 0 || fromSlot >= INVENTORY_SIZE) return;
+        if (toSlot < 0 || toSlot >= INVENTORY_SIZE) return;
+        if (fromSlot === toSlot) return;
+
+        const fromData = schemaToItemData(player.inventory[fromSlot]!);
+        const toData = schemaToItemData(player.inventory[toSlot]!);
+        updateSchemaFromData(player.inventory[fromSlot]!, toData);
+        updateSchemaFromData(player.inventory[toSlot]!, fromData);
+      }
+    );
+
+    // Listen for unequip item (drag from equipment to inventory or ground)
+    this.onMessage(
+      ClientMessage.UnequipItem,
+      (client, data: { equipmentSlot: number; inventorySlot?: number; dropOnGround?: boolean }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const eqSlot = data.equipmentSlot;
+        if (eqSlot < 0 || eqSlot >= EQUIPMENT_SLOTS) return;
+
+        const equipItem = player.equipment[eqSlot];
+        if (!equipItem || equipItem.baseItemId === -1) return;
+
+        const eqData = schemaToItemData(equipItem);
+
+        // Drop on ground: unequip and spawn loot bag
+        if (data.dropOnGround) {
+          updateSchemaFromData(player.equipment[eqSlot]!, createEmptyItemInstance());
+          recalcPlayerStats(player);
+
+          if (player.openBagId) {
+            const openBag = this.state.lootBags.get(player.openBagId);
+            if (openBag) {
+              const emptyBagSlot = openBag.items.findIndex((item) => item.item.baseItemId === -1);
+              if (emptyBagSlot !== -1) {
+                updateSchemaFromData(openBag.items[emptyBagSlot]!.item, eqData);
+                return;
+              }
+            }
+          }
+
+          this.spawnLootBag(player.x, player.y, BagRarity.Green, [eqData], player.zone);
+          return;
+        }
+
+        // Unequip to specific inventory slot
+        const targetSlot = data.inventorySlot ?? -1;
+        if (targetSlot >= 0 && targetSlot < INVENTORY_SIZE) {
+          const invData = schemaToItemData(player.inventory[targetSlot]!);
+          if (invData.baseItemId >= 0) {
+            // Swap: only if inventory item is same category
+            const invCategory = getItemCategory(invData.baseItemId);
+            if (invCategory !== eqSlot) return;
+            updateSchemaFromData(player.equipment[eqSlot]!, invData);
+          } else {
+            updateSchemaFromData(player.equipment[eqSlot]!, createEmptyItemInstance());
+          }
+          updateSchemaFromData(player.inventory[targetSlot]!, eqData);
+        } else {
+          // Find first empty inventory slot
+          const emptySlot = player.inventory.findIndex(
+            (item: ItemInstance) => item.baseItemId === -1
+          );
+          if (emptySlot === -1) return;
+          updateSchemaFromData(player.equipment[eqSlot]!, createEmptyItemInstance());
+          updateSchemaFromData(player.inventory[emptySlot]!, eqData);
+        }
+
+        recalcPlayerStats(player);
+      }
+    );
+
     // Listen for health potion use (F key)
     this.onMessage(ClientMessage.UseHealthPot, (client) => {
       const player = this.state.players.get(client.sessionId);

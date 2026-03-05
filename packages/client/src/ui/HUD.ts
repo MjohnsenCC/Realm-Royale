@@ -3,6 +3,7 @@ import { PlayerSprite } from "../entities/PlayerSprite";
 import { EnemySprite } from "../entities/EnemySprite";
 import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
+import { DragManager } from "./DragManager";
 import { getUIScale } from "./UIScale";
 import {
   MINIMAP_WIDTH,
@@ -107,6 +108,7 @@ export class HUD {
   // Inventory & Loot Bag UI
   inventoryUI: InventoryUI;
   lootBagUI: LootBagUI;
+  dragManager: DragManager;
 
   // Section origins (stored for bar drawing)
   private barsX: number;
@@ -402,6 +404,19 @@ export class HUD {
 
     // --- Loot Bag UI (above unified panel, aligned with inventory section) ---
     this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
+
+    // --- Drag Manager ---
+    this.dragManager = new DragManager(scene);
+    this.dragManager.setInventoryUI(this.inventoryUI);
+    this.dragManager.setLootBagUI(this.lootBagUI);
+    this.dragManager.setPanelBoundsGetter(() => ({
+      x: this.panelX,
+      y: this.panelY,
+      w: this.panelW,
+      h: this.panelH,
+    }));
+    this.inventoryUI.setDragManager(this.dragManager);
+    this.lootBagUI.setDragManager(this.dragManager);
 
     // Draw initial bars
     this.drawHealthBar(100, 100, 0);

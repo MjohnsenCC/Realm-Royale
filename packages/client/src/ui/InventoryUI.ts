@@ -13,6 +13,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
@@ -58,6 +59,14 @@ export class InventoryUI {
 
   // Crafting mode: when set, left-clicks select items for crafting instead of equipping
   private craftingSelectCallback: ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null = null;
+
+  // Drag-and-drop
+  private dragManager: DragManager | null = null;
+  private dragActive = false;
+  private highlightedInvSlot = -1;
+  private highlightedEqSlot = -1;
+  private dragSourceSlot = -1;
+  private dragSourceEqSlot = -1;
 
   // Scaled dimensions
   private S: number;
@@ -107,6 +116,7 @@ export class InventoryUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerover", () => {
+        if (this.dragActive) return;
         const item = this.currentEquipment[i];
         if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
@@ -116,6 +126,7 @@ export class InventoryUI {
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        if (this.dragActive) return;
         const item = this.currentEquipment[i];
         if (item && item.baseItemId >= 0) {
           const shiftHeld = this.shiftKey?.isDown ?? false;
@@ -127,11 +138,24 @@ export class InventoryUI {
         this.lastHoveredItem = null;
         this.tooltip.hide();
       });
-      zone.on("pointerdown", () => {
-        if (this.craftingSelectCallback) {
+      zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.leftButtonDown()) {
           const item = this.currentEquipment[i];
-          if (item && item.baseItemId >= 0) {
-            this.craftingSelectCallback("equipment", i, item);
+          if (item && item.baseItemId >= 0 && this.dragManager) {
+            this.dragManager.onSlotPointerDown(
+              { type: "equipment", slotIndex: i },
+              item,
+              pointer.x,
+              pointer.y
+            );
+            return;
+          }
+          // Fallback: crafting select
+          if (this.craftingSelectCallback) {
+            const item2 = this.currentEquipment[i];
+            if (item2 && item2.baseItemId >= 0) {
+              this.craftingSelectCallback("equipment", i, item2);
+            }
           }
         }
       });
@@ -179,21 +203,35 @@ export class InventoryUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        if (this.craftingSelectCallback && pointer.leftButtonDown()) {
-          const item = this.currentInventory[i];
-          if (item && item.baseItemId >= 0) {
-            this.craftingSelectCallback("inventory", i, item);
-          }
-          return;
-        }
         if (pointer.rightButtonDown()) {
           this.onDropItem(i);
-        } else if (pointer.leftButtonDown()) {
+          return;
+        }
+        if (pointer.leftButtonDown()) {
+          const item = this.currentInventory[i];
+          if (item && item.baseItemId >= 0 && this.dragManager) {
+            this.dragManager.onSlotPointerDown(
+              { type: "inventory", slotIndex: i },
+              item,
+              pointer.x,
+              pointer.y
+            );
+            return;
+          }
+          // Fallback if no DragManager
+          if (this.craftingSelectCallback) {
+            const item2 = this.currentInventory[i];
+            if (item2 && item2.baseItemId >= 0) {
+              this.craftingSelectCallback("inventory", i, item2);
+            }
+            return;
+          }
           this.onEquipItem(i);
         }
       });
 
       zone.on("pointerover", () => {
+        if (this.dragActive) return;
         const item = this.currentInventory[i];
         if (item && item.baseItemId >= 0) {
           const ptr = this.scene.input.activePointer;
@@ -203,6 +241,7 @@ export class InventoryUI {
         }
       });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+        if (this.dragActive) return;
         const item = this.currentInventory[i];
         if (item && item.baseItemId >= 0) {
           const shiftHeld = this.shiftKey?.isDown ?? false;
@@ -359,6 +398,17 @@ export class InventoryUI {
         this.tierTexts[i].setText("");
       }
 
+      // Drag highlight overlays
+      if (i === this.dragSourceSlot) {
+        this.slotGraphics.fillStyle(0x000000, 0.5);
+        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+      } else if (i === this.highlightedInvSlot) {
+        this.slotGraphics.fillStyle(0x44ff44, 0.25);
+        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+        this.slotGraphics.lineStyle(2, 0x44ff44, 0.8);
+        this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+      }
+
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
@@ -387,8 +437,8 @@ export class InventoryUI {
       this.eqSlotGraphics.lineStyle(2, borderColor, 1);
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
+      this.eqItemTexts[i].setText("");
       if (hasItem) {
-        this.eqItemTexts[i].setText("");
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
         const color = getItemColor(item);
@@ -405,9 +455,29 @@ export class InventoryUI {
         const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
         this.eqTierTexts[i].setText(tierLabel);
       } else {
-        this.eqItemTexts[i].setText(EQ_SLOT_LABELS[i]);
-        this.eqItemTexts[i].setColor("#666666");
+        // Draw faded category icon as placeholder
+        const iconSize = this.slotSize * 0.55;
+        drawItemIcon(
+          this.eqSlotGraphics,
+          sx + this.slotSize / 2,
+          sy + this.slotSize / 2 - this.slotSize * 0.05,
+          iconSize,
+          i, // category index matches equipment slot index (0=weapon,1=ability,2=armor,3=ring)
+          0, // default subtype (sword, quiver, shield, ring)
+          0x444466
+        );
         this.eqTierTexts[i].setText("");
+      }
+
+      // Drag overlays
+      if (i === this.dragSourceEqSlot) {
+        this.eqSlotGraphics.fillStyle(0x000000, 0.5);
+        this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+      } else if (i === this.highlightedEqSlot) {
+        this.eqSlotGraphics.fillStyle(0x44aaff, 0.25);
+        this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+        this.eqSlotGraphics.lineStyle(2, 0x44aaff, 0.8);
+        this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
       }
 
       this.eqTierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
@@ -424,13 +494,13 @@ export class InventoryUI {
     }
   }
 
-  private onDropItem(slotIndex: number): void {
+  onDropItem(slotIndex: number): void {
     if (!this.room) return;
     if (this.currentInventory[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.DropItem, { slotIndex });
   }
 
-  private onEquipItem(slotIndex: number): void {
+  onEquipItem(slotIndex: number): void {
     if (!this.room) return;
     if (this.currentInventory[slotIndex].baseItemId < 0) return;
     this.room.send(ClientMessage.EquipItem, { inventorySlot: slotIndex });
@@ -444,6 +514,80 @@ export class InventoryUI {
       screenY >= panelY &&
       screenY <= panelY + panelH
     );
+  }
+
+  // --- Drag-and-drop support ---
+
+  setDragManager(dm: DragManager): void {
+    this.dragManager = dm;
+  }
+
+  getCraftingSelectCallback(): ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null {
+    return this.craftingSelectCallback;
+  }
+
+  setDragActive(active: boolean): void {
+    this.dragActive = active;
+    if (active) {
+      this.tooltip.hide();
+      this.lastHoveredItem = null;
+    }
+  }
+
+  setHighlightedInvSlot(slotIndex: number): void {
+    if (this.highlightedInvSlot !== slotIndex) {
+      this.highlightedInvSlot = slotIndex;
+      this.drawSlots();
+    }
+  }
+
+  setHighlightedEqSlot(slotIndex: number): void {
+    if (this.highlightedEqSlot !== slotIndex) {
+      this.highlightedEqSlot = slotIndex;
+      this.drawEquipmentSlots();
+    }
+  }
+
+  setDragSourceSlot(slotIndex: number): void {
+    if (this.dragSourceSlot !== slotIndex) {
+      this.dragSourceSlot = slotIndex;
+      this.drawSlots();
+    }
+  }
+
+  setDragSourceEqSlot(slotIndex: number): void {
+    if (this.dragSourceEqSlot !== slotIndex) {
+      this.dragSourceEqSlot = slotIndex;
+      this.drawEquipmentSlots();
+    }
+  }
+
+  getInvSlotBounds(): { x: number; y: number; w: number; h: number }[] {
+    const bounds: { x: number; y: number; w: number; h: number }[] = [];
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      bounds.push({
+        x: this.invX + col * (this.slotSize + this.slotGap),
+        y: this.invY + row * (this.slotSize + this.slotGap),
+        w: this.slotSize,
+        h: this.slotSize,
+      });
+    }
+    return bounds;
+  }
+
+  getEqSlotBounds(): { x: number; y: number; w: number; h: number }[] {
+    const bounds: { x: number; y: number; w: number; h: number }[] = [];
+    for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+      bounds.push({
+        x: this.eqX + i * (this.slotSize + this.slotGap),
+        y: this.eqY,
+        w: this.slotSize,
+        h: this.slotSize,
+      });
+    }
+    return bounds;
   }
 }
 

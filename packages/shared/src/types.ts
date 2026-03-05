@@ -338,5 +338,7 @@ export const ClientMessage = {
   UsePortalGem: "usePortalGem",
   UseCraftingOrb: "useCraftingOrb",
   ToggleUnlimitedOrbs: "toggleUnlimitedOrbs",
+  SwapInventory: "swapInventory",
+  UnequipItem: "unequipItem",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

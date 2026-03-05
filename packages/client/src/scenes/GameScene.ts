@@ -419,6 +419,7 @@ export class GameScene extends Phaser.Scene {
     // Set room on inventory/loot bag UIs so they can send messages
     this.hud.inventoryUI.setRoom(room);
     this.hud.lootBagUI.setRoom(room);
+    this.hud.dragManager.setRoom(room);
 
     // Listen for bag open/close (server proximity detection)
     room.onMessage(
@@ -1735,10 +1736,11 @@ export class GameScene extends Phaser.Scene {
         useAbility = true;
       }
 
-      // Only shoot if not clicking on UI panels
+      // Only shoot if not clicking on UI panels and not dragging items
       const pointer = this.input.activePointer;
       const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
-      shooting = pointer.isDown && !overUI;
+      const isDragging = this.hud.dragManager.isDragging();
+      shooting = pointer.isDown && !overUI && !isDragging;
     }
 
     if (localSprite) {
