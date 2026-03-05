@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
+import { AuthManager } from "../auth/AuthManager";
 import { getUISize, setUISize, UISize } from "../ui/UIScale";
 import {
   SERVERS,
@@ -43,6 +44,12 @@ export class MenuScene extends Phaser.Scene {
   create() {
     const { width, height } = this.scale;
     const cx = width / 2;
+
+    // If already authenticated, go straight to character select
+    if (AuthManager.getInstance().isAuthenticated()) {
+      this.scene.start("CharacterSelectScene");
+      return;
+    }
 
     // ─── 1. GRID BACKGROUND ───
     const grid = this.add.graphics().setDepth(0);
@@ -228,11 +235,67 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(11);
 
+    // ─── 5b. SIGN IN WITH GOOGLE ───
+    const googleBtnY = height * 0.37;
+    const googleBtnW = 240;
+    const googleBtnH = 40;
+
+    const googleBtnGfx = this.add.graphics().setDepth(5);
+    googleBtnGfx.fillStyle(0x222244, 0.9);
+    googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+    googleBtnGfx.lineStyle(1, 0x4488ff, 0.4);
+    googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+
+    const googleBtnText = this.add
+      .text(cx, googleBtnY + googleBtnH / 2, "SIGN IN WITH GOOGLE", {
+        fontSize: "15px",
+        color: "#4488ff",
+        fontFamily: "monospace",
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5)
+      .setDepth(6);
+
+    const googleBtnZone = this.add
+      .zone(cx, googleBtnY + googleBtnH / 2, googleBtnW, googleBtnH)
+      .setDepth(7)
+      .setInteractive({ useHandCursor: true });
+
+    googleBtnZone.on("pointerover", () => {
+      googleBtnGfx.clear();
+      googleBtnGfx.fillStyle(0x333366, 0.9);
+      googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.lineStyle(1, 0x4488ff, 0.7);
+      googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnText.setColor("#66aaff");
+    });
+    googleBtnZone.on("pointerout", () => {
+      googleBtnGfx.clear();
+      googleBtnGfx.fillStyle(0x222244, 0.9);
+      googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.lineStyle(1, 0x4488ff, 0.4);
+      googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnText.setColor("#4488ff");
+    });
+    googleBtnZone.on("pointerdown", () => {
+      window.location.href = "/auth/google";
+    });
+
+    // Divider: "or"
+    this.add
+      .text(cx, googleBtnY + googleBtnH + 14, "— or play as guest —", {
+        fontSize: "11px",
+        color: "#445566",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(5);
+
     // ─── 6. SETTINGS PANEL ───
     const panelW = 280;
     const panelH = 130;
     const panelX = cx - panelW / 2;
-    const panelY = height * 0.42;
+    const panelY = googleBtnY + googleBtnH + 38;
 
     const panel = this.add.graphics().setDepth(5);
     panel.fillStyle(0x222222, 0.85);

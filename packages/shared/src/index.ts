@@ -10,3 +10,4 @@ export * from "./dungeonMap";
 export * from "./dungeonModifiers";
 export * from "./nexusMap";
 export * from "./realmMap";
+export * from "./auth";

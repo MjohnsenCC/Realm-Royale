@@ -1,5 +1,5 @@
 import * as Colyseus from "colyseus.js";
-import { PlayerInput, ClientMessage } from "@rotmg-lite/shared";
+import { PlayerInput, ClientMessage, AuthenticatedJoinOptions } from "@rotmg-lite/shared";
 import { getServerUrl } from "./ServerConfig";
 
 export class NetworkManager {
@@ -18,11 +18,10 @@ export class NetworkManager {
     return NetworkManager.instance;
   }
 
-  async joinGame(playerName: string): Promise<Colyseus.Room> {
+  async joinGame(options: string | AuthenticatedJoinOptions): Promise<Colyseus.Room> {
     this.client = new Colyseus.Client(getServerUrl());
-    this.room = await this.client.joinOrCreate("game_room", {
-      name: playerName,
-    });
+    const joinOpts = typeof options === "string" ? { name: options } : options;
+    this.room = await this.client.joinOrCreate("game_room", joinOpts);
     return this.room;
   }
 

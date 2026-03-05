@@ -17,6 +17,14 @@ export default defineConfig({
         ws: true,
         changeOrigin: true,
       },
+      "/auth": {
+        target: "http://localhost:2567",
+        changeOrigin: true,
+      },
+      "/api": {
+        target: "http://localhost:2567",
+        changeOrigin: true,
+      },
     },
   },
   build: {

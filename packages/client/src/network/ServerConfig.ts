@@ -32,7 +32,10 @@ export function setSelectedServerId(id: string): void {
 }
 
 export function getServerUrl(): string {
-  if (window.location.port === "5173") {
+  if (
+    window.location.hostname === "localhost" ||
+    window.location.hostname === "127.0.0.1"
+  ) {
     return "ws://localhost:2567";
   }
   const server = SERVERS.find((s) => s.id === getSelectedServerId());

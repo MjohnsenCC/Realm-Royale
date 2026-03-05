@@ -50,6 +50,10 @@ export class Player extends Schema {
   @type("int8") orbPrism: number = 0;
   @type("int8") orbForge: number = 0;
 
+  // Server-only: persistence tracking (not synced)
+  accountId: string = "";
+  characterId: string = "";
+
   // Server-only fields (not synced — no @type decorator)
   lastShootTime: number = 0;
   lastAbilityTime: number = 0;

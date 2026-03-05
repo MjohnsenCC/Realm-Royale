@@ -89,8 +89,11 @@ import {
   getScaledAbilityStats,
   determineBagRarity,
   LOOT_DAMAGE_THRESHOLD,
+  isAuthenticatedJoin,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
+import { validateSessionToken } from "../auth/session";
+import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
 import * as fs from "fs";
 import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
@@ -141,6 +144,7 @@ export class GameRoom extends Room<GameState> {
   private tickCount = 0;
   private filterFlip = false;
   private globalTick = 0;
+  private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
@@ -504,10 +508,14 @@ export class GameRoom extends Room<GameState> {
           if (!player.unlimitedOrbs) {
             this.setOrbCount(player, orbType, this.getOrbCount(player, orbType) - 1);
           }
-          updateSchemaFromData(targetSchema, result.item);
-          // Recalc stats if equipped item was modified
+          // Replace the entire schema in the array (not in-place update)
+          // so Colyseus sends a clean change to the client
+          const newSchema = itemDataToSchema(result.item);
           if (data.location === "equipment") {
+            player.equipment[data.slotIndex] = newSchema;
             recalcPlayerStats(player);
+          } else {
+            player.inventory[data.slotIndex] = newSchema;
           }
         }
       }
@@ -529,42 +537,107 @@ export class GameRoom extends Room<GameState> {
       TICK_INTERVAL
     );
 
+    // Auto-save authenticated players every 60 seconds
+    this.autoSaveInterval = setInterval(() => this.autoSaveAll(), 60_000);
+
     console.log("GameRoom created");
   }
 
-  onJoin(client: Client, options: Record<string, unknown>) {
+  async onJoin(client: Client, options: Record<string, unknown>) {
     const player = new Player();
     player.id = client.sessionId;
-    player.name =
-      (typeof options?.name === "string" ? options.name : "Player") || "Player";
 
+    if (isAuthenticatedJoin(options)) {
+      // --- Authenticated player: load character from DB ---
+      const payload = validateSessionToken(options.authToken as string);
+      if (!payload) {
+        throw new Error("Invalid auth token");
+      }
+
+      const character = await getCharacter(options.characterId as string, payload.accountId);
+      if (!character) {
+        throw new Error("Character not found");
+      }
+
+      player.accountId = payload.accountId;
+      player.characterId = character.id;
+      player.name = character.name;
+      player.level = character.level;
+      player.xp = character.xp;
+
+      // Restore equipment
+      for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+        if (character.equipment[i]) {
+          updateSchemaFromData(player.equipment[i]!, character.equipment[i]);
+        }
+      }
+
+      // Restore inventory
+      for (let i = 0; i < INVENTORY_SIZE; i++) {
+        if (character.inventory[i]) {
+          updateSchemaFromData(player.inventory[i]!, character.inventory[i]);
+        }
+      }
+
+      // Restore consumables
+      player.healthPots = character.consumables.healthPots;
+      player.manaPots = character.consumables.manaPots;
+      player.portalGems = character.consumables.portalGems;
+
+      // Restore crafting orbs
+      player.orbBlank = character.orbs.blank;
+      player.orbEmber = character.orbs.ember;
+      player.orbShard = character.orbs.shard;
+      player.orbChaos = character.orbs.chaos;
+      player.orbFlux = character.orbs.flux;
+      player.orbVoid = character.orbs.void;
+      player.orbPrism = character.orbs.prism;
+      player.orbForge = character.orbs.forge;
+    } else {
+      // --- Guest player: ephemeral session (current behavior) ---
+      player.name =
+        (typeof options?.name === "string" ? options.name : "Player") || "Player";
+      player.level = 1;
+      player.xp = 0;
+
+      // Default equipment: T1 items with random locked stat tiers
+      updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false));
+      updateSchemaFromData(player.equipment[ItemCategory.Ability]!, generateItemInstance(ItemCategory.Ability, 0, 1, false));
+      updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, 0, 1, false));
+      updateSchemaFromData(player.equipment[ItemCategory.Ring]!, generateItemInstance(ItemCategory.Ring, 0, 1, false));
+
+      // Starting consumables
+      player.healthPots = 3;
+      player.manaPots = 3;
+      player.portalGems = 5;
+    }
+
+    // Common: always spawn at nexus
     player.zone = "nexus";
     player.x = this.nexusMap.spawnRoom.centerX + (Math.random() - 0.5) * 80;
     player.y = this.nexusMap.spawnRoom.centerY + (Math.random() - 0.5) * 80;
-    player.level = 1;
-    player.xp = 0;
     player.alive = true;
-
-    // Default equipment: T1 items with random locked stat tiers (no pre-rolled open stats)
-    updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false));
-    updateSchemaFromData(player.equipment[ItemCategory.Ability]!, generateItemInstance(ItemCategory.Ability, 0, 1, false));
-    updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, 0, 1, false));
-    updateSchemaFromData(player.equipment[ItemCategory.Ring]!, generateItemInstance(ItemCategory.Ring, 0, 1, false));
-
-    // Starting consumables
-    player.healthPots = 3;
-    player.manaPots = 3;
-    player.portalGems = 5;
 
     recalcPlayerStats(player);
     player.hp = player.maxHp;
     player.mana = player.maxMana;
 
     this.state.players.set(client.sessionId, player);
-    console.log(`${client.sessionId} joined as "${player.name}"`);
+    console.log(`${client.sessionId} joined as "${player.name}" (${player.characterId ? "auth" : "guest"})`);
   }
 
-  onLeave(client: Client, _consented: boolean) {
+  async onLeave(client: Client, _consented: boolean) {
+    const player = this.state.players.get(client.sessionId);
+
+    // Save authenticated player's character before removing
+    if (player?.characterId) {
+      try {
+        await this.savePlayerCharacter(player);
+      } catch (err) {
+        console.error(`Failed to save character on leave: ${player.characterId}`, err);
+      }
+    }
+
     this.state.players.delete(client.sessionId);
     this.removePlayerProjectiles(client.sessionId);
 
@@ -579,8 +652,79 @@ export class GameRoom extends Room<GameState> {
     }
   }
 
-  onDispose() {
+  async onDispose() {
+    if (this.autoSaveInterval) {
+      clearInterval(this.autoSaveInterval);
+    }
+
+    // Final save for any remaining authenticated players
+    const promises: Promise<void>[] = [];
+    this.state.players.forEach((player) => {
+      if (player.characterId) {
+        promises.push(
+          this.savePlayerCharacter(player).catch((err) => {
+            console.error(`Dispose save failed for ${player.characterId}:`, err);
+          })
+        );
+      }
+    });
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
+
     console.log("GameRoom disposed");
+  }
+
+  private async autoSaveAll(): Promise<void> {
+    const promises: Promise<void>[] = [];
+    this.state.players.forEach((player) => {
+      if (player.characterId) {
+        promises.push(
+          this.savePlayerCharacter(player).catch((err) => {
+            console.error(`Auto-save failed for ${player.characterId}:`, err);
+          })
+        );
+      }
+    });
+    if (promises.length > 0) {
+      await Promise.all(promises);
+    }
+  }
+
+  private async savePlayerCharacter(player: Player): Promise<void> {
+    const equipment: ItemInstanceData[] = [];
+    for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+      equipment.push(schemaToItemData(player.equipment[i]!));
+    }
+
+    const inventory: ItemInstanceData[] = [];
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      inventory.push(schemaToItemData(player.inventory[i]!));
+    }
+
+    const data: CharacterSaveData = {
+      level: player.level,
+      xp: player.xp,
+      equipment,
+      inventory,
+      consumables: {
+        healthPots: player.healthPots,
+        manaPots: player.manaPots,
+        portalGems: player.portalGems,
+      },
+      orbs: {
+        blank: player.orbBlank,
+        ember: player.orbEmber,
+        shard: player.orbShard,
+        chaos: player.orbChaos,
+        flux: player.orbFlux,
+        void: player.orbVoid,
+        prism: player.orbPrism,
+        forge: player.orbForge,
+      },
+    };
+
+    await saveCharacter(player.characterId, data);
   }
 
   private spawnNexusTestPortals(): void {
