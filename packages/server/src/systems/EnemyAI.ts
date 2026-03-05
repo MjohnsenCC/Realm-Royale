@@ -31,7 +31,8 @@ export class EnemyAI {
     state: GameState,
     shootingSystem: ShootingPatternSystem,
     dungeonMaps?: Map<string, DungeonMapData>,
-    getModifiedDef?: (baseDef: EnemyDefinition, zone: string) => EnemyDefinition
+    getModifiedDef?: (baseDef: EnemyDefinition, zone: string) => EnemyDefinition,
+    currentTick: number = 0
   ): void {
     const dt = deltaTime / 1000;
 
@@ -41,6 +42,9 @@ export class EnemyAI {
 
       // Performance: skip AI for enemies far from all players
       if (!this.isNearAnyPlayer(enemy, state, AI_UPDATE_RANGE)) return;
+
+      const prevX = enemy.x;
+      const prevY = enemy.y;
 
       let def = ENEMY_DEFS[enemy.enemyType];
       if (!def) return;
@@ -90,6 +94,11 @@ export class EnemyAI {
       // Apply HP regeneration
       if (enemy.hpRegenRate > 0 && enemy.hp < enemy.maxHp) {
         enemy.hp = Math.min(enemy.maxHp, enemy.hp + enemy.hpRegenRate * dt);
+      }
+
+      // Track whether this enemy moved this tick (for filter-refresh optimization)
+      if (enemy.x !== prevX || enemy.y !== prevY) {
+        enemy.lastMovedTick = currentTick;
       }
     });
   }
@@ -163,16 +172,22 @@ export class EnemyAI {
 
     // Validate target — must be alive and in same zone
     if (!target || !target.alive || target.zone !== enemy.zone) {
-      enemy.aiState = EnemyAIState.Returning;
+      enemy.spawnX = enemy.x;
+      enemy.spawnY = enemy.y;
+      enemy.aiState = EnemyAIState.Idle;
       enemy.targetPlayerId = "";
+      this.pickNewIdleTarget(enemy, def, mapData);
       return;
     }
 
     // Drop aggro if target is outside deaggro range (10% beyond aggro range)
     const distToTarget = distanceBetween(enemy.x, enemy.y, target.x, target.y);
     if (distToTarget > def.aggroRange * 1.1) {
-      enemy.aiState = EnemyAIState.Returning;
+      enemy.spawnX = enemy.x;
+      enemy.spawnY = enemy.y;
+      enemy.aiState = EnemyAIState.Idle;
       enemy.targetPlayerId = "";
+      this.pickNewIdleTarget(enemy, def, mapData);
       return;
     }
 
@@ -198,8 +213,11 @@ export class EnemyAI {
       enemy.spawnY
     );
     if (distFromSpawn > def.leashRange) {
-      enemy.aiState = EnemyAIState.Returning;
+      enemy.spawnX = enemy.x;
+      enemy.spawnY = enemy.y;
+      enemy.aiState = EnemyAIState.Idle;
       enemy.targetPlayerId = "";
+      this.pickNewIdleTarget(enemy, def, mapData);
       return;
     }
 

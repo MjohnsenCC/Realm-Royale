@@ -5,12 +5,14 @@ const BAG_COLORS: Record<number, number> = {
   [BagRarity.Green]: 0x44aa44,
   [BagRarity.Red]: 0xcc3333,
   [BagRarity.Black]: 0x222222,
+  [BagRarity.Orange]: 0xff8800,
 };
 
 const BAG_OUTLINE_COLORS: Record<number, number> = {
   [BagRarity.Green]: 0x66cc66,
   [BagRarity.Red]: 0xff5555,
   [BagRarity.Black]: 0xffffff,
+  [BagRarity.Orange]: 0xffaa44,
 };
 
 export class LootBagSprite {

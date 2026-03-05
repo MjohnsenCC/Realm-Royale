@@ -44,4 +44,10 @@ export class Enemy extends Schema {
   // Pack (cluster) tracking (server-only)
   packLeaderId: string = ""; // minions track their leader's id
   isPackLeader: boolean = false;
+
+  // Movement tracking for filter-refresh optimization (server-only)
+  lastMovedTick: number = 0;
+
+  // Damage tracking per player (server-only) — playerId → total damage dealt
+  damageMap: Map<string, number> = new Map();
 }

@@ -1,4 +1,4 @@
-import { INTERPOLATION_DELAY } from "@rotmg-lite/shared";
+import { INTERPOLATION_DELAY, TICK_INTERVAL } from "@rotmg-lite/shared";
 
 export interface Snapshot {
   timestamp: number;
@@ -24,6 +24,15 @@ export class SnapshotBuffer {
   }
 
   push(x: number, y: number, timestamp: number = performance.now()): void {
+    // Jitter compensation: if two updates arrive too close together (network
+    // burst), space them at TICK_INTERVAL apart so interpolation stays smooth.
+    if (this.buffer.length > 0) {
+      const lastTs = this.buffer[this.buffer.length - 1].timestamp;
+      const minGap = TICK_INTERVAL * 0.6; // 30ms at 20Hz
+      if (timestamp - lastTs < minGap) {
+        timestamp = lastTs + TICK_INTERVAL;
+      }
+    }
     this.buffer.push({ timestamp, x, y });
     if (this.buffer.length > this.maxSize) {
       this.buffer.shift();
@@ -36,6 +45,11 @@ export class SnapshotBuffer {
     const renderTime = currentTime - this.renderDelay;
 
     if (this.buffer.length < 2) return null;
+
+    // Prune snapshots that are fully behind renderTime (keep the one just before)
+    while (this.buffer.length > 2 && this.buffer[1].timestamp < renderTime) {
+      this.buffer.shift();
+    }
 
     // Find two snapshots that straddle renderTime
     for (let i = 0; i < this.buffer.length - 1; i++) {
@@ -52,7 +66,8 @@ export class SnapshotBuffer {
       }
     }
 
-    // If renderTime is past all snapshots, extrapolate from last two (capped)
+    // If renderTime is past all snapshots, extrapolate from last two with
+    // exponential velocity decay to prevent overshoot on direction changes.
     const last = this.buffer[this.buffer.length - 1];
     const prev = this.buffer[this.buffer.length - 2];
     if (renderTime > last.timestamp) {
@@ -62,9 +77,13 @@ export class SnapshotBuffer {
       if (range > 0) {
         const vx = (last.x - prev.x) / range;
         const vy = (last.y - prev.y) / range;
+        // Integrate velocity with exponential decay: v(t) = v0 * e^(-t/tau)
+        // Position offset = v0 * tau * (1 - e^(-t/tau))
+        const tau = 150; // decay time constant (ms)
+        const factor = tau * (1 - Math.exp(-elapsed / tau));
         return {
-          x: last.x + vx * elapsed,
-          y: last.y + vy * elapsed,
+          x: last.x + vx * factor,
+          y: last.y + vy * factor,
         };
       }
     }

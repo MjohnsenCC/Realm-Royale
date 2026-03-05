@@ -15,4 +15,5 @@ export class LootBag extends Schema {
   // Server-only (not synced)
   createdAt: number = 0;
   zone: string = "";
+  ownerId: string = ""; // empty = shared bag, set = solo bag for this player
 }

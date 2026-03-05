@@ -19,6 +19,7 @@ export const PROJECTILE_SPEED = 500; // pixels per second
 export const PROJECTILE_RANGE = 400; // max travel distance
 export const PROJECTILE_DAMAGE = 20;
 export const PROJECTILE_RADIUS = 5;
+export const HITBOX_PADDING = 7; // extra px added to enemy radius for player projectile hit detection
 
 // Spawning
 export const MIN_SPAWN_DISTANCE = 300; // min px from any player
@@ -89,6 +90,9 @@ export const BAG_SIZE = 8;
 export const BAG_PICKUP_RADIUS = 40; // px — how close to interact with a bag
 export const BAG_LIFETIME = 60000; // ms — bags despawn after 60s
 export const BAG_RADIUS = 12; // visual/collision radius
+
+// Loot eligibility: must deal at least 5% of enemy max HP
+export const LOOT_DAMAGE_THRESHOLD = 0.05;
 
 // Equipment
 export const EQUIPMENT_SLOTS = 4; // weapon, ability, armor, ring

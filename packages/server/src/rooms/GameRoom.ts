@@ -87,6 +87,8 @@ import {
   applyCraftingOrb,
   getScaledWeaponStats,
   getScaledAbilityStats,
+  determineBagRarity,
+  LOOT_DAMAGE_THRESHOLD,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import * as fs from "fs";
@@ -138,6 +140,7 @@ export class GameRoom extends Room<GameState> {
   private nexusMap: DungeonMapData = generateNexusMap();
   private tickCount = 0;
   private filterFlip = false;
+  private globalTick = 0;
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
@@ -298,6 +301,9 @@ export class GameRoom extends Room<GameState> {
 
         const bag = this.state.lootBags.get(data.bagId);
         if (!bag) return;
+
+        // Solo bag: only the owner can pick up
+        if (bag.ownerId && bag.ownerId !== client.sessionId) return;
 
         if (distanceBetween(player.x, player.y, bag.x, bag.y) > BAG_PICKUP_RADIUS) return;
 
@@ -743,6 +749,9 @@ export class GameRoom extends Room<GameState> {
   }
 
   private gameLoop(deltaTime: number): void {
+    this.globalTick++;
+    const tickNow = Date.now();
+
     // 1. Process player movement and shooting
     this.state.players.forEach((player) => {
       if (!player.alive) return;
@@ -756,7 +765,7 @@ export class GameRoom extends Room<GameState> {
       if (inputCount > 0) {
         player.pendingInputs.sort((a, b) => a.seq - b.seq);
 
-        const now = Date.now();
+        const now = tickNow;
         let effectiveSpeed = player.cachedSpeed;
         if (player.speedBoostUntil > 0 && now < player.speedBoostUntil) {
           effectiveSpeed = player.cachedSpeed + player.speedBoostAmount;
@@ -829,7 +838,7 @@ export class GameRoom extends Room<GameState> {
 
       // Handle shooting
       if (player.inputShooting) {
-        const now = Date.now();
+        const now = tickNow;
         if (now - player.lastShootTime >= player.cachedShootCooldown) {
           player.lastShootTime = now;
 
@@ -877,7 +886,7 @@ export class GameRoom extends Room<GameState> {
 
       // Handle ability (Space key)
       if (player.inputUseAbility) {
-        const now = Date.now();
+        const now = tickNow;
         const abilitySchema = player.equipment[ItemCategory.Ability];
         if (abilitySchema && abilitySchema.baseItemId >= 0) {
           // Get ability stats based on UT or tiered
@@ -956,11 +965,12 @@ export class GameRoom extends Room<GameState> {
       this.state,
       this.shootingSystem,
       dungeonMaps,
-      (baseDef, zone) => this.dungeonSystem.getModifiedEnemyDef(baseDef, zone)
+      (baseDef, zone) => this.dungeonSystem.getModifiedEnemyDef(baseDef, zone),
+      this.globalTick
     );
 
     // 2b. The Architect minion spawning (scales across 3 phases)
-    const now = Date.now();
+    const now = tickNow;
     this.state.enemies.forEach((enemy) => {
       if (
         enemy.enemyType === EnemyType.TheArchitect &&
@@ -1031,10 +1041,16 @@ export class GameRoom extends Room<GameState> {
           this.spawnSystem.onEnemyKilled(event.biome, event.enemyX!, event.enemyY!, event.enemyId, zone);
 
           if (event.enemyX !== undefined && event.enemyY !== undefined) {
-            const bagRarity = rollBagDrop(event.biome);
-            if (bagRarity >= 0) {
-              const lootItems = rollBagLoot(bagRarity, event.biome);
-              this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, zone);
+            // Per-player loot: each eligible player gets an independent roll
+            const eligiblePlayers = this.getEligiblePlayers(event.damageMap, event.enemyMaxHp);
+            for (const playerId of eligiblePlayers) {
+              const dropRarity = rollBagDrop(event.biome);
+              if (dropRarity >= 0) {
+                const lootItems = rollBagLoot(dropRarity, event.biome);
+                const bagRarity = determineBagRarity(lootItems);
+                const isSolo = bagRarity !== BagRarity.Green;
+                this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, zone, isSolo ? playerId : "");
+              }
             }
 
             // Roll for dungeon portal spawn (only specific Godlands enemies)
@@ -1063,7 +1079,7 @@ export class GameRoom extends Room<GameState> {
           }
 
           if (event.isBoss && event.enemyX !== undefined && event.enemyY !== undefined) {
-            // Boss killed: guaranteed good loot + exit portal
+            // Boss killed: per-player loot + exit portal
             const dungeonType = getDungeonTypeFromZone(zone);
             if (dungeonType !== undefined) {
               const dungeonStats = this.dungeonSystem.getDungeonStats(zone);
@@ -1073,30 +1089,38 @@ export class GameRoom extends Room<GameState> {
               const boostedBlackChance = dungeonStats
                 ? Math.min(0.8, baseBlackChance + dungeonStats.lootRarityBoost * 0.005)
                 : baseBlackChance;
-              const bossLoot = rollBossLootWithRarity(dungeonType, boostedBlackChance);
 
-              // Apply quantity boost: add extra items to non-black bags
-              if (dungeonStats && dungeonStats.lootQuantityBoost > 0 && bossLoot.bagRarity !== BagRarity.Black) {
-                const extraItems = Math.min(4, Math.floor(dungeonStats.lootQuantityBoost / 25));
-                const categories = [ItemCategory.Weapon, ItemCategory.Ability, ItemCategory.Armor, ItemCategory.Ring];
-                for (let i = 0; i < extraItems; i++) {
-                  const category = categories[Math.floor(Math.random() * categories.length)];
-                  const tier = Math.random() < 0.5 ? 5 : 6;
-                  let subtype = 0;
-                  if (category === ItemCategory.Weapon) {
-                    subtype = Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+              // Roll loot independently for each eligible player
+              const eligiblePlayers = this.getEligiblePlayers(event.damageMap, event.enemyMaxHp);
+              for (const playerId of eligiblePlayers) {
+                const bossLoot = rollBossLootWithRarity(dungeonType, boostedBlackChance);
+
+                // Apply quantity boost: add extra items to non-black bags
+                const bagRarity = determineBagRarity(bossLoot.items);
+                if (dungeonStats && dungeonStats.lootQuantityBoost > 0 && bagRarity !== BagRarity.Black) {
+                  const extraItems = Math.min(4, Math.floor(dungeonStats.lootQuantityBoost / 25));
+                  const categories = [ItemCategory.Weapon, ItemCategory.Ability, ItemCategory.Armor, ItemCategory.Ring];
+                  for (let i = 0; i < extraItems; i++) {
+                    const category = categories[Math.floor(Math.random() * categories.length)];
+                    const tier = Math.random() < 0.5 ? 5 : 6;
+                    let subtype = 0;
+                    if (category === ItemCategory.Weapon) {
+                      subtype = Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
+                    }
+                    bossLoot.items.push(generateItemInstance(category, subtype, tier));
                   }
-                  bossLoot.items.push(generateItemInstance(category, subtype, tier));
                 }
-              }
 
-              this.spawnLootBag(
-                event.enemyX,
-                event.enemyY,
-                bossLoot.bagRarity,
-                bossLoot.items,
-                zone
-              );
+                const isSolo = bagRarity !== BagRarity.Green;
+                this.spawnLootBag(
+                  event.enemyX,
+                  event.enemyY,
+                  bagRarity,
+                  bossLoot.items,
+                  zone,
+                  isSolo ? playerId : ""
+                );
+              }
 
               // Spawn exit portal at boss room center
               const dungeonMap = this.dungeonSystem.getDungeonMap(zone);
@@ -1208,6 +1232,8 @@ export class GameRoom extends Room<GameState> {
       let closestDist = BAG_PICKUP_RADIUS + 1;
       this.state.lootBags.forEach((bag) => {
         if (bag.zone !== player.zone) return;
+        // Solo bag: only the owner can interact
+        if (bag.ownerId && bag.ownerId !== player.id) return;
         const dist = distanceBetween(player.x, player.y, bag.x, bag.y);
         if (dist <= BAG_PICKUP_RADIUS && dist < closestDist) {
           closestDist = dist;
@@ -1238,7 +1264,11 @@ export class GameRoom extends Room<GameState> {
       this.filterFlip = !this.filterFlip;
       const nudge = this.filterFlip ? 0.001 : -0.001;
       this.state.enemies.forEach((enemy) => {
-        enemy.x += nudge;
+        // Only nudge enemies that haven't moved recently — actively moving
+        // enemies already trigger onChange naturally from AI position updates
+        if (this.globalTick - enemy.lastMovedTick >= FILTER_REFRESH_INTERVAL) {
+          enemy.x += nudge;
+        }
       });
       this.state.lootBags.forEach((bag) => {
         bag.x += nudge;
@@ -1254,7 +1284,8 @@ export class GameRoom extends Room<GameState> {
     y: number,
     bagRarity: number,
     items: ItemInstanceData[],
-    zone: string = "hostile:1"
+    zone: string = "hostile:1",
+    ownerId: string = ""
   ): void {
     const bag = new LootBag();
     bag.id = generateId("bag");
@@ -1263,6 +1294,7 @@ export class GameRoom extends Room<GameState> {
     bag.bagRarity = bagRarity;
     bag.createdAt = Date.now();
     bag.zone = zone;
+    bag.ownerId = ownerId;
 
     for (let i = 0; i < BAG_SIZE; i++) {
       const bagItem = new LootBagItem();
@@ -1273,5 +1305,18 @@ export class GameRoom extends Room<GameState> {
     }
 
     this.state.lootBags.set(bag.id, bag);
+  }
+
+  /** Get player IDs who dealt at least 5% of the enemy's max HP. */
+  private getEligiblePlayers(damageMap?: Map<string, number>, enemyMaxHp?: number): string[] {
+    if (!damageMap || !enemyMaxHp || enemyMaxHp <= 0) return [];
+    const threshold = enemyMaxHp * LOOT_DAMAGE_THRESHOLD;
+    const eligible: string[] = [];
+    damageMap.forEach((damage, playerId) => {
+      if (damage >= threshold) {
+        eligible.push(playerId);
+      }
+    });
+    return eligible;
   }
 }

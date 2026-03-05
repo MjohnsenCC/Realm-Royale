@@ -5,6 +5,7 @@ import {
   EntityType,
   PLAYER_RADIUS,
   XP_SHARE_RADIUS,
+  HITBOX_PADDING,
   ENEMY_DEFS,
   TILE_SIZE,
   getDifficultyAt,
@@ -32,6 +33,8 @@ export interface CombatEvent {
   enemyZone?: string;
   isBoss?: boolean;
   enemyId?: string;
+  damageMap?: Map<string, number>;
+  enemyMaxHp?: number;
 }
 
 export class CombatSystem {
@@ -39,7 +42,7 @@ export class CombatSystem {
   private enemyGrid = new SpatialGrid<Enemy>(200);
 
   update(deltaTime: number, state: GameState, dungeonMaps?: Map<string, DungeonMapData>): CombatEvent[] {
-    this.events = [];
+    this.events.length = 0;
     const dt = deltaTime / 1000;
 
     // Rebuild spatial grid for enemies
@@ -109,11 +112,14 @@ export class CombatSystem {
 
           const def = ENEMY_DEFS[enemy.enemyType];
           const enemyRadius = def ? def.radius : 14;
-          if (circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, enemyRadius)) {
+          if (circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, enemyRadius + HITBOX_PADDING)) {
             const effectiveDamage = enemy.damageResist > 0
               ? Math.round(proj.damage * (1 - enemy.damageResist / 100))
               : proj.damage;
             enemy.hp -= effectiveDamage;
+
+            // Track damage per player for loot eligibility
+            enemy.damageMap.set(proj.ownerId, (enemy.damageMap.get(proj.ownerId) || 0) + effectiveDamage);
 
             // Wake sleeping boss on first hit
             if (enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
@@ -176,6 +182,8 @@ export class CombatSystem {
                 enemyZone: enemy.zone,
                 isBoss: enemy.isBoss,
                 enemyId: enemy.id,
+                damageMap: new Map(enemy.damageMap),
+                enemyMaxHp: enemy.maxHp,
               });
 
               state.enemies.delete(enemy.id);
@@ -211,9 +219,8 @@ export class CombatSystem {
       }
     });
 
-    // Remove hit/expired projectiles
-    const uniqueRemovals = [...new Set(projectilesToRemove)];
-    for (const id of uniqueRemovals) {
+    // Remove hit/expired projectiles (Map.delete on missing key is a no-op)
+    for (const id of projectilesToRemove) {
       state.projectiles.delete(id);
     }
 

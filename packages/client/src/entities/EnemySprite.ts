@@ -144,7 +144,7 @@ export class EnemySprite {
 
   showPredictedDamage(damage: number): void {
     const startY = -this.radius - 10;
-    const text = this.scene.add.text(this.x, this.y + startY, `-${damage}`, {
+    const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(damage)}`, {
       fontFamily: "monospace",
       fontSize: "14px",
       fontStyle: "bold",
@@ -188,7 +188,7 @@ export class EnemySprite {
         if (remainder > 0) {
           // Show only the unpredicted portion (e.g. damage from other players)
           const startY = -this.radius - 10;
-          const text = this.scene.add.text(this.x, this.y + startY, `-${remainder}`, {
+          const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(remainder)}`, {
             fontFamily: "monospace",
             fontSize: "14px",
             fontStyle: "bold",
@@ -201,7 +201,7 @@ export class EnemySprite {
       } else {
         // No prediction pending — show normally
         const startY = -this.radius - 10;
-        const text = this.scene.add.text(this.x, this.y + startY, `-${serverDamage}`, {
+        const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(serverDamage)}`, {
           fontFamily: "monospace",
           fontSize: "14px",
           fontStyle: "bold",
@@ -252,7 +252,6 @@ export class EnemySprite {
       }
     }
 
-    this.drawBody();
   }
 
   setVisible(visible: boolean): void {

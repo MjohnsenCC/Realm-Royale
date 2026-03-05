@@ -307,6 +307,7 @@ export const BagRarity = {
   Green: 0,
   Red: 1,
   Black: 2,
+  Orange: 3,
 } as const;
 export type BagRarity = (typeof BagRarity)[keyof typeof BagRarity];
 

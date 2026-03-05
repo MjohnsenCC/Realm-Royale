@@ -24,18 +24,21 @@ const BAG_HEADER_COLORS: Record<number, string> = {
   [BagRarity.Green]: "#44aa44",
   [BagRarity.Red]: "#cc3333",
   [BagRarity.Black]: "#cccccc",
+  [BagRarity.Orange]: "#ff8800",
 };
 
 const BAG_HEADER_NAMES: Record<number, string> = {
   [BagRarity.Green]: "Green Bag",
   [BagRarity.Red]: "Red Bag",
   [BagRarity.Black]: "Black Bag",
+  [BagRarity.Orange]: "Orange Bag",
 };
 
 const BAG_BORDER_COLORS: Record<number, number> = {
   [BagRarity.Green]: 0x44aa44,
   [BagRarity.Red]: 0xcc3333,
   [BagRarity.Black]: 0xaaaaaa,
+  [BagRarity.Orange]: 0xff8800,
 };
 
 export class LootBagUI {

@@ -61,11 +61,12 @@ export class ProjectileSprite {
   }
 
   updateFromServer(x: number, y: number): void {
-    // Snap to server position to stay accurate for hit detection
     this.serverX = x;
     this.serverY = y;
-    this.x = x;
-    this.y = y;
+    // Blend toward server position instead of snapping to avoid visible
+    // backward jumps when client extrapolation overshoots slightly.
+    this.x += (x - this.x) * 0.5;
+    this.y += (y - this.y) * 0.5;
   }
 
   update(delta: number): void {

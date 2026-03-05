@@ -63,6 +63,7 @@ import {
   ITEM_DEFS,
   circlesOverlap,
   ENEMY_DEFS,
+  HITBOX_PADDING,
   isEmptyItem,
   createEmptyItemInstance,
 } from "@rotmg-lite/shared";
@@ -222,6 +223,7 @@ export class GameScene extends Phaser.Scene {
   private predictedProjectiles: Array<{
     sprite: ProjectileSprite;
     angle: number;
+    projType: number;
     startX: number;
     startY: number;
     maxRange: number;
@@ -1508,42 +1510,69 @@ export class GameScene extends Phaser.Scene {
 
     // Projectiles
     state.projectiles.onAdd((proj, id) => {
-      let sprite: ProjectileSprite;
-
-      // Match server projectile to a predicted one by ownerType + angle.
-      // This avoids needing to sync ownerId to all clients.
-      // Threshold is generous (0.5 rad ≈ 29°) because the predicted projectile
-      // uses the current-frame aim angle while the server uses the aim angle
-      // from the last received input (up to 50ms stale at 20Hz tick rate).
-      const ANGLE_THRESHOLD = 0.5;
-      let matchIdx = -1;
+      // --- Local player projectile matching ---
+      // Match by FIFO order + projType (not angle) using synced ownerId.
+      // Angle-based matching breaks when the player rotates quickly because
+      // the server uses the aimAngle from the last input in the batch, which
+      // can differ significantly from the angle used for the client prediction.
       if (
         (proj.ownerType as number) === EntityType.Player &&
-        this.predictedProjectiles.length > 0
+        (proj.ownerId as string) === this.network.getSessionId()
       ) {
+        const pt = (proj.projType as number) ?? 0;
+        let matchIdx = -1;
         for (let i = 0; i < this.predictedProjectiles.length; i++) {
           const p = this.predictedProjectiles[i];
           if (p.serverProjectileId) continue; // already matched
-          const angleDiff = Math.abs(p.angle - (proj.angle as number));
-          if (angleDiff < ANGLE_THRESHOLD) {
-            matchIdx = i;
-            break;
-          }
+          if (p.projType !== pt) continue;
+          matchIdx = i;
+          break;
         }
+
+        if (matchIdx >= 0) {
+          // Confirm the predicted sprite so it stays alive (no 500ms timeout).
+          this.predictedProjectiles[matchIdx].confirmed = true;
+          this.predictedProjectiles[matchIdx].serverProjectileId = id;
+          return;
+        }
+
+        // No prediction yet — clock drift caused server to fire first.
+        // Create a retroactive prediction linked to this server projectile.
+        const projSprite = new ProjectileSprite(
+          this,
+          proj.x as number,
+          proj.y as number,
+          EntityType.Player,
+          proj.angle as number,
+          proj.speed as number,
+          pt
+        );
+        this.predictedProjectiles.push({
+          sprite: projSprite,
+          angle: proj.angle as number,
+          projType: pt,
+          startX: proj.x as number,
+          startY: proj.y as number,
+          maxRange: 9999, // server removal handles cleanup via serverProjectileId
+          createdAt: performance.now(),
+          confirmed: true,
+          serverProjectileId: id,
+          collisionRadius: 0, // server handles hit detection
+          damage: 0,
+          piercing: false,
+          hitEnemies: new Set(),
+        });
+        // Re-sync local timer to prevent continued drift
+        if (pt === ProjectileType.QuiverShot) {
+          this.lastLocalAbilityTime = performance.now();
+        } else {
+          this.lastLocalShootTime = performance.now();
+        }
+        return;
       }
 
-      if (matchIdx >= 0) {
-        // Local player's projectile — mark the predicted sprite as confirmed
-        // so it stays alive (no 500ms safety timeout). We skip creating a
-        // server-tracked sprite entirely; the player only sees the smooth,
-        // client-predicted projectile with no server corrections/jitter.
-        this.predictedProjectiles[matchIdx].confirmed = true;
-        this.predictedProjectiles[matchIdx].serverProjectileId = id;
-        return; // nothing to add to projectileSprites
-      }
-
-      // Enemy or other-player projectile — render from server state
-      sprite = new ProjectileSprite(
+      // --- Enemy or other-player projectile — render from server state ---
+      const sprite = new ProjectileSprite(
         this,
         proj.x as number,
         proj.y as number,
@@ -1726,7 +1755,7 @@ export class GameScene extends Phaser.Scene {
     const shootingJustStarted = shooting && !this.lastSentShooting;
     const abilityJustStarted = useAbility && !this.lastSentUseAbility;
 
-    if (shootingJustStarted || abilityJustStarted) {
+    if ((shootingJustStarted || abilityJustStarted) && this.inputSendTimer < TICK_INTERVAL) {
       this.inputSequence++;
       const sendDt = Math.min(this.accumulatedDt, TICK_INTERVAL);
       this.accumulatedDt = Math.max(0, this.accumulatedDt - sendDt);
@@ -1803,6 +1832,7 @@ export class GameScene extends Phaser.Scene {
               this.predictedProjectiles.push({
                 sprite: projSprite,
                 angle,
+                projType: isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow,
                 startX: localSprite.displayX,
                 startY: localSprite.displayY,
                 maxRange: stats.weaponRange,
@@ -1849,6 +1879,7 @@ export class GameScene extends Phaser.Scene {
               this.predictedProjectiles.push({
                 sprite: projSprite,
                 angle: aimAngle,
+                projType: ProjectileType.QuiverShot,
                 startX: localSprite.displayX,
                 startY: localSprite.displayY,
                 maxRange: as.range,
@@ -1916,9 +1947,11 @@ export class GameScene extends Phaser.Scene {
     }
 
     // Throttled input send — at server tick rate (~20Hz).
-    // Uses `while` so multiple ticks fire per frame at low fps (e.g. 10fps).
+    // Cap at 2 sends per frame to prevent flooding during frame drops.
     this.inputSendTimer += delta;
-    while (this.inputSendTimer >= TICK_INTERVAL) {
+    let inputsSentThisFrame = 0;
+    while (this.inputSendTimer >= TICK_INTERVAL && inputsSentThisFrame < 2) {
+      inputsSentThisFrame++;
       this.inputSendTimer -= TICK_INTERVAL;
       const hasChanged =
         mx !== this.lastSentMX ||
@@ -1966,6 +1999,10 @@ export class GameScene extends Phaser.Scene {
         this.accumulatedDt = 0;
       }
     }
+    // Clamp timer to prevent unbounded accumulation after frame drops
+    if (this.inputSendTimer > TICK_INTERVAL * 2) {
+      this.inputSendTimer = TICK_INTERVAL;
+    }
 
     // Update all sprites
     this.playerSprites.forEach((sprite) => sprite.update(delta));
@@ -1984,7 +2021,7 @@ export class GameScene extends Phaser.Scene {
         if (hitSomething) return;
         if (pp.hitEnemies.has(enemyId)) return;
         const enemyRadius = enemy.getRadius();
-        if (circlesOverlap(pp.sprite.x, pp.sprite.y, pp.collisionRadius, enemy.x, enemy.y, enemyRadius)) {
+        if (circlesOverlap(pp.sprite.x, pp.sprite.y, pp.collisionRadius, enemy.x, enemy.y, enemyRadius + HITBOX_PADDING)) {
           enemy.showPredictedDamage(pp.damage);
           pp.hitEnemies.add(enemyId);
           if (!pp.piercing) {

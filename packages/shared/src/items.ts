@@ -936,3 +936,37 @@ export function rollBossLootWithRarity(
   // Fallback: crafting orb only
   return { bagRarity: BagRarity.Green, items: [rollRandomOrb()] };
 }
+
+/**
+ * Determine bag rarity from item contents.
+ * Priority: UT → Black, T8+ equipment → Red, only orbs → Orange, else Green.
+ */
+export function determineBagRarity(items: ItemInstanceData[]): number {
+  let hasUT = false;
+  let hasHighTier = false;
+  let allCraftingOrbs = true;
+
+  for (const item of items) {
+    if (item.baseItemId === -1) continue;
+    const category = getItemCategory(item.baseItemId);
+    const tier = getItemTier(item.baseItemId);
+
+    if (category === ItemCategory.CraftingOrb) {
+      // Crafting orbs don't affect hasHighTier/hasUT
+      continue;
+    }
+
+    allCraftingOrbs = false;
+
+    if (tier === ItemTier.UT) {
+      hasUT = true;
+    } else if (tier >= 8) {
+      hasHighTier = true;
+    }
+  }
+
+  if (hasUT) return BagRarity.Black;
+  if (hasHighTier) return BagRarity.Red;
+  if (allCraftingOrbs) return BagRarity.Orange;
+  return BagRarity.Green;
+}

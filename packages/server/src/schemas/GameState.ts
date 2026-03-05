@@ -53,6 +53,8 @@ export class GameState extends Schema {
     const player = this.players.get(client.sessionId);
     if (!player || !player.alive) return false;
     if (player.zone !== value.zone) return false;
+    // Solo bag: only visible to the owner
+    if (value.ownerId && value.ownerId !== client.sessionId) return false;
     const dx = player.x - value.x;
     const dy = player.y - value.y;
     return dx * dx + dy * dy <= ENEMY_SYNC_RADIUS_SQ;

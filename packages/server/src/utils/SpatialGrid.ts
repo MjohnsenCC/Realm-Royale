@@ -6,13 +6,22 @@
 export class SpatialGrid<T extends { x: number; y: number }> {
   private cells = new Map<string, T[]>();
   private cellSize: number;
+  private clearCount = 0;
 
   constructor(cellSize: number = 200) {
     this.cellSize = cellSize;
   }
 
   clear(): void {
-    this.cells.clear();
+    this.clearCount++;
+    if (this.clearCount >= 100) {
+      // Full cleanup periodically to prune stale cell keys
+      this.clearCount = 0;
+      this.cells.clear();
+    } else {
+      // Reuse existing arrays to reduce GC pressure
+      this.cells.forEach((arr) => { arr.length = 0; });
+    }
   }
 
   insert(entity: T): void {
