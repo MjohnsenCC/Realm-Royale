@@ -51,9 +51,9 @@ import {
   getItemCategory,
   getItemSubtype,
   ITEM_DEFS,
-  rollBagDrop,
-  rollBagLoot,
-  rollBossLootWithRarity,
+  getLootTable,
+  rollLootTable,
+  rollBossLootTable,
   isDungeonZone,
   DUNGEON_TO_ZONE,
   isHostileZone,
@@ -1185,12 +1185,12 @@ export class GameRoom extends Room<GameState> {
           this.spawnSystem.onEnemyKilled(event.biome, event.enemyX!, event.enemyY!, event.enemyId, zone);
 
           if (event.enemyX !== undefined && event.enemyY !== undefined) {
-            // Per-player loot: each eligible player gets an independent roll
+            // Per-player loot: each eligible player gets independent rolls
             const eligiblePlayers = this.getEligiblePlayers(event.damageMap, event.enemyMaxHp);
             for (const playerId of eligiblePlayers) {
-              const dropRarity = rollBagDrop(event.biome);
-              if (dropRarity >= 0) {
-                const lootItems = rollBagLoot(dropRarity, event.biome);
+              const lootTable = getLootTable(event.enemyType!);
+              const lootItems = rollLootTable(lootTable);
+              if (lootItems.length > 0) {
                 const bagRarity = determineBagRarity(lootItems);
                 const isSolo = bagRarity !== BagRarity.Green;
                 this.spawnLootBag(event.enemyX, event.enemyY, bagRarity, lootItems, zone, isSolo ? playerId : "");
@@ -1237,10 +1237,10 @@ export class GameRoom extends Room<GameState> {
               // Roll loot independently for each eligible player
               const eligiblePlayers = this.getEligiblePlayers(event.damageMap, event.enemyMaxHp);
               for (const playerId of eligiblePlayers) {
-                const bossLoot = rollBossLootWithRarity(dungeonType, boostedBlackChance);
+                const lootItems = rollBossLootTable(dungeonType, boostedBlackChance);
 
                 // Apply quantity boost: add extra items to non-black bags
-                const bagRarity = determineBagRarity(bossLoot.items);
+                const bagRarity = determineBagRarity(lootItems);
                 if (dungeonStats && dungeonStats.lootQuantityBoost > 0 && bagRarity !== BagRarity.Black) {
                   const extraItems = Math.min(4, Math.floor(dungeonStats.lootQuantityBoost / 25));
                   const categories = [ItemCategory.Weapon, ItemCategory.Ability, ItemCategory.Armor, ItemCategory.Ring];
@@ -1251,19 +1251,22 @@ export class GameRoom extends Room<GameState> {
                     if (category === ItemCategory.Weapon) {
                       subtype = Math.random() < 0.5 ? WeaponSubtype.Sword : WeaponSubtype.Bow;
                     }
-                    bossLoot.items.push(generateItemInstance(category, subtype, tier));
+                    lootItems.push(generateItemInstance(category, subtype, tier));
                   }
                 }
 
-                const isSolo = bagRarity !== BagRarity.Green;
-                this.spawnLootBag(
-                  event.enemyX,
-                  event.enemyY,
-                  bagRarity,
-                  bossLoot.items,
-                  zone,
-                  isSolo ? playerId : ""
-                );
+                if (lootItems.length > 0) {
+                  const finalBagRarity = determineBagRarity(lootItems);
+                  const isSolo = finalBagRarity !== BagRarity.Green;
+                  this.spawnLootBag(
+                    event.enemyX,
+                    event.enemyY,
+                    finalBagRarity,
+                    lootItems,
+                    zone,
+                    isSolo ? playerId : ""
+                  );
+                }
               }
 
               // Spawn exit portal at boss room center

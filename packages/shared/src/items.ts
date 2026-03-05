@@ -5,7 +5,7 @@ import {
   AbilitySubtype,
   BagRarity,
   DungeonType,
-  DifficultyZone,
+  EnemyType,
   CraftingOrbType,
 } from "./types";
 import {
@@ -19,6 +19,37 @@ import {
   OrbRarity,
   ORB_DEFINITIONS,
 } from "./itemStats";
+
+// --- Loot Table Types ---
+
+export interface TierGroupItem {
+  category: number;
+  subtype: number;
+  tierMin: number;
+  tierMax: number;
+}
+
+export interface IndependentDropEntry {
+  type: "independent";
+  dropChance: number;
+  itemId?: number;
+  orbRarityWeighted?: boolean;
+  category?: number;
+  subtype?: number;
+  tier?: number;
+}
+
+export interface TierGroupDropEntry {
+  type: "tierGroup";
+  dropChance: number;
+  items: TierGroupItem[];
+}
+
+export type LootTableEntry = IndependentDropEntry | TierGroupDropEntry;
+
+export interface LootTable {
+  entries: LootTableEntry[];
+}
 
 // --- Item ID Encoding: category * 1000 + subtype * 100 + tier ---
 
@@ -730,48 +761,7 @@ export function generateOrbInstance(orbType: number): ItemInstanceData {
   };
 }
 
-// --- Drop chance per difficulty zone ---
-
-export const BAG_DROP_CHANCES: Record<
-  number,
-  { green: number; red: number; black: number }
-> = {
-  [DifficultyZone.Shore]: { green: 0, red: 0, black: 0 },
-  [DifficultyZone.Lowlands]: { green: 0.125, red: 0, black: 0 },
-  [DifficultyZone.Midlands]: { green: 0.125, red: 0, black: 0 },
-  [DifficultyZone.Highlands]: { green: 0.125, red: 0, black: 0 },
-  [DifficultyZone.Godlands]: { green: 0, red: 0.075, black: 0 },
-};
-
-// --- Loot generation ---
-
-/**
- * Roll which bag rarity (if any) drops from an enemy in the given biome.
- * Returns -1 if no bag drops.
- */
-export function rollBagDrop(biome: number): number {
-  const chances = BAG_DROP_CHANCES[biome];
-  if (!chances) return -1;
-
-  const roll = Math.random();
-  if (roll < chances.black) return BagRarity.Black;
-  if (roll < chances.black + chances.red) return BagRarity.Red;
-  if (roll < chances.black + chances.red + chances.green) return BagRarity.Green;
-  return -1;
-}
-
-/** Difficulty zone -> tier ranges per bag rarity.
- * Green bags: T1-T7 items. Red bags: T8-T12 items. Black bags: UTs only (dungeons). */
-const ZONE_TIER_RANGES: Record<
-  number,
-  { green: [number, number]; red: [number, number] }
-> = {
-  [DifficultyZone.Shore]: { green: [1, 1], red: [1, 1] },
-  [DifficultyZone.Lowlands]: { green: [2, 3], red: [2, 3] },
-  [DifficultyZone.Midlands]: { green: [4, 5], red: [4, 5] },
-  [DifficultyZone.Highlands]: { green: [6, 7], red: [6, 7] },
-  [DifficultyZone.Godlands]: { green: [8, 9], red: [8, 9] },
-};
+// --- Loot Tables ---
 
 /** All UT item IDs (tier 13). UTs only drop from Void dungeon. */
 const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
@@ -780,7 +770,6 @@ const UT_ITEM_IDS: number[] = Object.keys(ITEM_DEFS)
 
 /** Roll a random crafting orb instance using the rarity weight system. */
 function rollRandomOrb(): ItemInstanceData {
-  // Weight toward common orbs: Common 50%, Uncommon 30%, Rare 15%, VeryRare 5%
   const roll = Math.random();
   let rarity: number;
   if (roll < 0.50) rarity = OrbRarity.Common;
@@ -792,149 +781,348 @@ function rollRandomOrb(): ItemInstanceData {
   return generateOrbInstance(pickRandom(orbTypes));
 }
 
-/** Roll item count for a bag. Mostly 1, sometimes more if lucky. */
-function rollBagItemCount(): number {
-  const roll = Math.random();
-  if (roll < 0.75) return 1;
-  if (roll < 0.95) return 2;
-  return 3;
+/** Equipment tier group: one roll picks a random Weapon/Ability/Armor/Ring. */
+function makeEquipmentTierGroup(
+  dropChance: number,
+  tierMin: number,
+  tierMax: number
+): TierGroupDropEntry {
+  return {
+    type: "tierGroup",
+    dropChance,
+    items: [
+      { category: ItemCategory.Weapon, subtype: WeaponSubtype.Bow, tierMin, tierMax },
+      { category: ItemCategory.Ability, subtype: 0, tierMin, tierMax },
+      { category: ItemCategory.Armor, subtype: 0, tierMin, tierMax },
+      { category: ItemCategory.Ring, subtype: 0, tierMin, tierMax },
+    ],
+  };
+}
+
+/** Standard consumable entries for Lowlands+. */
+const CONSUMABLE_ENTRIES: LootTableEntry[] = [
+  { type: "independent", dropChance: 0.02, itemId: makeItemId(4, 0, 1) }, // Health Potion
+  { type: "independent", dropChance: 0.02, itemId: makeItemId(4, 1, 1) }, // Mana Potion
+  { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 2, 1) }, // Portal Gem
+];
+
+/** Reduced consumable entries for minions/spawned adds. */
+const MINION_CONSUMABLE_ENTRIES: LootTableEntry[] = [
+  { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 0, 1) }, // Health Potion
+  { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 1, 1) }, // Mana Potion
+  { type: "independent", dropChance: 0.005, itemId: makeItemId(4, 2, 1) }, // Portal Gem
+];
+
+/** Boss loot tables by dungeon type. */
+export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
+  [DungeonType.InfernalPit]: {
+    entries: [
+      { type: "independent", dropChance: 1.0, orbRarityWeighted: true },
+      makeEquipmentTierGroup(0.25, 10, 10),
+    ],
+  },
+  [DungeonType.VoidSanctum]: {
+    entries: [
+      { type: "independent", dropChance: 1.0, orbRarityWeighted: true },
+      // Each UT rolled independently (base 1.25% each = ~5% total for at least one)
+      ...UT_ITEM_IDS.map(
+        (id): IndependentDropEntry => ({
+          type: "independent",
+          dropChance: 0.05 / Math.max(1, UT_ITEM_IDS.length),
+          itemId: id,
+        })
+      ),
+      makeEquipmentTierGroup(0.15, 11, 12),
+    ],
+  },
+};
+
+/** Per-enemy loot tables. Every enemy has its own entry. */
+export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
+  // ===== SHORE (Tier 1) — no drops =====
+  [EnemyType.HermitCrab]: { entries: [] },
+  [EnemyType.Frog]: { entries: [] },
+  [EnemyType.Sandpiper]: { entries: [] },
+  [EnemyType.Jellyfish]: { entries: [] },
+  [EnemyType.CoconutCrab]: { entries: [] },
+
+  // ===== LOWLANDS (Tier 2) — 12.5% tier 2-3 equipment + consumables =====
+  [EnemyType.Wolf]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.Rattlesnake]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BogLurker]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SwampToad]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.ThornBush]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DesertScorpion]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BriarBeast]: { // Pack leader — full drops
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BriarImp]: { // Pack minion — reduced drops
+    entries: [makeEquipmentTierGroup(0.04, 2, 3), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // ===== MIDLANDS (Tier 3) — 12.5% tier 4-5 equipment + consumables =====
+  [EnemyType.ForestGuardian]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DustDevil]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.JungleStalker]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.StoneGolem]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.VenomSpitter]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SandWraith]: {
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BroodMother]: { // Pack leader — full drops
+    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.Broodling]: { // Pack minion — reduced drops
+    entries: [makeEquipmentTierGroup(0.04, 4, 5), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // ===== HIGHLANDS (Tier 4) — 12.5% tier 6-7 equipment + consumables =====
+  [EnemyType.FrostWarden]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.CliffDrake]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.StormElemental]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.IceWraith]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.ThunderHawk]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.MountainTroll]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.FrostMatriarch]: { // Pack leader — full drops
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.FrostSprite]: { // Pack minion — reduced drops
+    entries: [makeEquipmentTierGroup(0.04, 6, 7), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // ===== GODLANDS (Tier 5) — 7.5% tier 8-9 equipment, 3.75% orb + consumables =====
+  [EnemyType.FallenSeraph]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.VoidWalker]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.AncientTitan]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.AbyssalEye]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.ChaosSpawn]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.DoomPriest]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+
+  // ===== DUNGEON: The Infernal Pit — Godlands-level drops =====
+  [EnemyType.InfernalHound]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.MagmaSerpent]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.CinderWraith]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+
+  // ===== DUNGEON: The Void Sanctum — Godlands-level drops =====
+  [EnemyType.VoidAcolyte]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.ShadowWeaver]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.AbyssalSentry]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 8, 9),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.VoidMinion]: { // Spawned add — reduced drops
+    entries: [makeEquipmentTierGroup(0.02, 8, 9), ...MINION_CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.VoidSwitch]: { entries: [] }, // Destructible object — no drops
+};
+
+/** Resolve the loot table for an enemy by type. */
+export function getLootTable(enemyType: number): LootTable {
+  return ENEMY_LOOT_TABLES[enemyType] ?? { entries: [] };
+}
+
+/** Get boss loot table by dungeon type. */
+export function getBossLootTable(dungeonType: number): LootTable {
+  return BOSS_LOOT_TABLES[dungeonType] ?? { entries: [] };
+}
+
+// --- Loot Roll Functions ---
+
+/** Resolve an independent drop entry into an item. */
+function resolveIndependentDrop(
+  entry: IndependentDropEntry
+): ItemInstanceData | null {
+  if (entry.orbRarityWeighted) {
+    return rollRandomOrb();
+  }
+  if (entry.itemId !== undefined) {
+    const category = getItemCategory(entry.itemId);
+    const tier = getItemTier(entry.itemId);
+    if (tier === ItemTier.UT) {
+      return generateUTItemInstance(entry.itemId);
+    }
+    if (category === ItemCategory.Consumable) {
+      return generateConsumableInstance(entry.itemId);
+    }
+    return generateItemInstance(
+      category,
+      getItemSubtype(entry.itemId),
+      tier
+    );
+  }
+  if (entry.category !== undefined && entry.tier !== undefined) {
+    return generateItemInstance(
+      entry.category,
+      entry.subtype ?? 0,
+      entry.tier
+    );
+  }
+  return null;
+}
+
+/** Resolve a tier group entry: pick one random item from the pool. */
+function resolveTierGroupDrop(
+  entry: TierGroupDropEntry
+): ItemInstanceData | null {
+  if (entry.items.length === 0) return null;
+  const picked = pickRandom(entry.items);
+  const tier =
+    picked.tierMin +
+    Math.floor(Math.random() * (picked.tierMax - picked.tierMin + 1));
+  return generateItemInstance(picked.category, picked.subtype, tier);
 }
 
 /**
- * Generate item instances for a loot bag of the given rarity in the given biome.
- * Green bags contain T1-T7 items. Red bags contain T8-T12 items.
- * Black bags are not used in overworld (UTs only from Void dungeon).
+ * Roll a loot table: each entry is rolled independently.
+ * Returns all items that dropped (empty array = no drop).
  */
-export function rollBagLoot(bagRarity: number, biome: number): ItemInstanceData[] {
-  const tierRanges = ZONE_TIER_RANGES[biome];
-  if (!tierRanges) return [];
-
-  let tierRange: [number, number];
-
-  switch (bagRarity) {
-    case BagRarity.Green:
-      tierRange = tierRanges.green;
-      break;
-    case BagRarity.Red:
-      tierRange = tierRanges.red;
-      break;
-    default:
-      return [];
-  }
-
-  const itemCount = rollBagItemCount();
-  const categories = [
-    ItemCategory.Weapon,
-    ItemCategory.Ability,
-    ItemCategory.Armor,
-    ItemCategory.Ring,
-  ];
-
+export function rollLootTable(table: LootTable): ItemInstanceData[] {
   const items: ItemInstanceData[] = [];
-  for (let i = 0; i < itemCount; i++) {
-    const category = pickRandom(categories);
-    const tier =
-      tierRange[0] +
-      Math.floor(Math.random() * (tierRange[1] - tierRange[0] + 1));
-
-    let subtype = 0;
-    if (category === ItemCategory.Weapon) {
-      subtype = WeaponSubtype.Bow; // Only bows drop for now
-    }
-
-    items.push(generateItemInstance(category, subtype, tier));
+  for (const entry of table.entries) {
+    if (Math.random() >= entry.dropChance) continue;
+    const item =
+      entry.type === "independent"
+        ? resolveIndependentDrop(entry)
+        : resolveTierGroupDrop(entry);
+    if (item) items.push(item);
   }
-
-  // Consumable drops (Lowlands and above)
-  if (biome >= DifficultyZone.Lowlands && Math.random() < 0.4) {
-    const roll = Math.random();
-    if (roll < 0.4) items.push(generateConsumableInstance(makeItemId(4, 0, 1)));
-    else if (roll < 0.8) items.push(generateConsumableInstance(makeItemId(4, 1, 1)));
-    else items.push(generateConsumableInstance(makeItemId(4, 2, 1)));
-  }
-
-  // Godlands bags have 50% chance of containing a crafting orb
-  if (biome === DifficultyZone.Godlands && Math.random() < 0.5) {
-    items.push(rollRandomOrb());
-  }
-
   return items;
 }
 
 /**
- * Roll loot for a boss kill.
+ * Roll boss loot with a custom UT chance (for dungeon rarity boosts).
+ * Distributes utTotalChance across all UT entries in the table.
  */
-export function rollBossLoot(dungeonType: number): {
-  bagRarity: number;
-  items: ItemInstanceData[];
-} {
-  return rollBossLootWithRarity(dungeonType, 0.05);
-}
-
-/**
- * Roll boss loot with a custom black bag chance (for dungeon rarity boosts).
- * Infernal boss: always 1 crafting orb, 25% chance of T10 items (red bag).
- * Void boss: always 1 crafting orb, 5% black bag (UT), 15% red bag (T11-T12).
- * UTs only drop from Void dungeon.
- */
-export function rollBossLootWithRarity(
+export function rollBossLootTable(
   dungeonType: number,
-  blackBagChance: number
-): { bagRarity: number; items: ItemInstanceData[] } {
-  const categories = [
-    ItemCategory.Weapon,
-    ItemCategory.Ability,
-    ItemCategory.Armor,
-    ItemCategory.Ring,
-  ];
+  utTotalChance: number = 0.05
+): ItemInstanceData[] {
+  const baseTable = getBossLootTable(dungeonType);
 
-  // Infernal Pit: always 1 crafting orb, 25% chance of T10 items
-  if (dungeonType === DungeonType.InfernalPit) {
-    const items: ItemInstanceData[] = [rollRandomOrb()];
-    if (Math.random() < 0.25) {
-      const itemCount = rollBagItemCount();
-      for (let i = 0; i < itemCount; i++) {
-        const category = pickRandom(categories);
-        let subtype = 0;
-        if (category === ItemCategory.Weapon) {
-          subtype = WeaponSubtype.Bow;
-        }
-        items.push(generateItemInstance(category, subtype, 10));
-      }
-      return { bagRarity: BagRarity.Red, items };
-    }
-    return { bagRarity: BagRarity.Green, items };
-  }
+  const utEntries = baseTable.entries.filter(
+    (e) =>
+      e.type === "independent" &&
+      e.itemId !== undefined &&
+      getItemTier(e.itemId) === ItemTier.UT
+  );
+  const utCount = utEntries.length;
+  const perUtChance = utCount > 0 ? utTotalChance / utCount : 0;
 
-  // Void Sanctum: always 1 crafting orb, 5% black bag (UT), 15% red bag (T11-T12)
-  if (dungeonType === DungeonType.VoidSanctum) {
-    const items: ItemInstanceData[] = [rollRandomOrb()];
-    const roll = Math.random();
-    if (roll < blackBagChance) {
-      // Black bag: UT item
-      items.push(generateUTItemInstance(pickRandom(UT_ITEM_IDS)));
-      return { bagRarity: BagRarity.Black, items };
+  const modifiedEntries = baseTable.entries.map((entry) => {
+    if (
+      entry.type === "independent" &&
+      entry.itemId !== undefined &&
+      getItemTier(entry.itemId) === ItemTier.UT
+    ) {
+      return { ...entry, dropChance: Math.min(1.0, perUtChance) };
     }
-    if (roll < blackBagChance + 0.15) {
-      // Red bag: T11-T12 items
-      const itemCount = rollBagItemCount();
-      for (let i = 0; i < itemCount; i++) {
-        const category = pickRandom(categories);
-        const tier = Math.random() < 0.5 ? 11 : 12;
-        let subtype = 0;
-        if (category === ItemCategory.Weapon) {
-          subtype = WeaponSubtype.Bow;
-        }
-        items.push(generateItemInstance(category, subtype, tier));
-      }
-      return { bagRarity: BagRarity.Red, items };
-    }
-    // Just the crafting orb
-    return { bagRarity: BagRarity.Green, items };
-  }
+    return entry;
+  });
 
-  // Fallback: crafting orb only
-  return { bagRarity: BagRarity.Green, items: [rollRandomOrb()] };
+  return rollLootTable({ entries: modifiedEntries });
 }
 
 /**
