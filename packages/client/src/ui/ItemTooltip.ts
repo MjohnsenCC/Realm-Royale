@@ -312,7 +312,15 @@ export class ItemTooltip {
         const sRoll = item.openStats[i + 2];
         const val = getStatValue(sType, sTier, sRoll);
         const name = STAT_NAMES[sType] ?? "???";
-        const suffix = (sType === StatType.AttackSpeed || sType === StatType.PhysicalDamageReduction || sType === StatType.MagicDamageReduction) ? "%" : "";
+        const suffix = (
+          sType === StatType.AttackSpeed ||
+          sType === StatType.PhysicalDamageReduction ||
+          sType === StatType.MagicDamageReduction ||
+          sType === StatType.ReducedAbilityCooldown ||
+          sType === StatType.IncreasedProjectileSpeed ||
+          sType === StatType.CriticalStrikeChance ||
+          sType === StatType.CriticalStrikeMultiplier
+        ) ? "%" : "";
         if (shiftHeld) {
           const [min, max] = getStatRange(sType, sTier);
           openLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)})${suffix} ${name}`);
@@ -320,7 +328,8 @@ export class ItemTooltip {
           openLines.push(`+${formatStatValue(val)}${suffix} ${name}`);
         }
         openTiers.push(sTier);
-        openForgeProtected.push(item.forgeProtectedSlot === Math.floor(i / 3));
+        const slotIdx = Math.floor(i / 3);
+        openForgeProtected.push(item.forgeProtectedSlot === slotIdx || item.forgeProtectedSlot2 === slotIdx);
       }
     }
 

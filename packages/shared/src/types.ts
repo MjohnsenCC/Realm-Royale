@@ -237,6 +237,11 @@ export const StatType = {
   Mana: 6,
   PhysicalDamageReduction: 7,
   MagicDamageReduction: 8,
+  AbilityDamage: 9,
+  ReducedAbilityCooldown: 10,
+  IncreasedProjectileSpeed: 11,
+  CriticalStrikeChance: 12,
+  CriticalStrikeMultiplier: 13,
 } as const;
 export type StatType = (typeof StatType)[keyof typeof StatType];
 
@@ -251,6 +256,7 @@ export const CraftingOrbType = {
   Prism: 6,
   Forge: 7,
   Calibrate: 8,
+  Divine: 9,
 } as const;
 export type CraftingOrbType = (typeof CraftingOrbType)[keyof typeof CraftingOrbType];
 

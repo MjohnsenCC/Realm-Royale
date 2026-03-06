@@ -126,6 +126,10 @@ function recalcPlayerStats(player: Player): void {
   player.cachedWeaponProjSize = stats.weaponProjSize;
   player.cachedPhysDmgReduce = stats.physDmgReduce;
   player.cachedMagicDmgReduce = stats.magicDmgReduce;
+  player.cachedAbilityDamageBonus = stats.abilityDamageBonus;
+  player.cachedAbilityCooldownReduction = stats.abilityCooldownReduction;
+  player.cachedCritChance = stats.critChance;
+  player.cachedCritMult = stats.critMultiplier;
 
   if (player.maxHp > oldMaxHp) {
     player.hp = Math.min(player.hp + (player.maxHp - oldMaxHp), player.maxHp);
@@ -641,7 +645,7 @@ export class GameRoom extends Room<GameState> {
         if (!player || !player.alive) return;
 
         const orbType = data.orbType;
-        if (orbType < 0 || orbType > 8) return;
+        if (orbType < 0 || orbType > 9) return;
         if (this.getOrbCount(player, orbType) <= 0) return;
 
         // Get target item
@@ -677,7 +681,7 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.ToggleUnlimitedOrbs, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      for (let i = 0; i <= 8; i++) this.setOrbCount(player, i, 999);
+      for (let i = 0; i <= 9; i++) this.setOrbCount(player, i, 999);
     });
 
     // Spawn permanent test portals in nexus (bottom area)
@@ -746,6 +750,7 @@ export class GameRoom extends Room<GameState> {
       player.orbPrism = character.orbs.prism;
       player.orbForge = character.orbs.forge;
       player.orbCalibrate = character.orbs.calibrate ?? 0;
+      player.orbDivine = character.orbs.divine ?? 0;
     } else {
       // --- Guest player: ephemeral session (current behavior) ---
       player.name =
@@ -875,6 +880,7 @@ export class GameRoom extends Room<GameState> {
         prism: player.orbPrism,
         forge: player.orbForge,
         calibrate: player.orbCalibrate,
+        divine: player.orbDivine,
       },
     };
 
@@ -960,6 +966,7 @@ export class GameRoom extends Room<GameState> {
       case CraftingOrbType.Prism: return player.orbPrism;
       case CraftingOrbType.Forge: return player.orbForge;
       case CraftingOrbType.Calibrate: return player.orbCalibrate;
+      case CraftingOrbType.Divine: return player.orbDivine;
       default: return 0;
     }
   }
@@ -976,6 +983,7 @@ export class GameRoom extends Room<GameState> {
       case CraftingOrbType.Prism: player.orbPrism = val; break;
       case CraftingOrbType.Forge: player.orbForge = val; break;
       case CraftingOrbType.Calibrate: player.orbCalibrate = val; break;
+      case CraftingOrbType.Divine: player.orbDivine = val; break;
     }
   }
 
@@ -1144,42 +1152,49 @@ export class GameRoom extends Room<GameState> {
 
           const weaponSchema = player.equipment[ItemCategory.Weapon];
           const hasWeapon = weaponSchema && weaponSchema.baseItemId >= 0;
-          const isSword = hasWeapon && getItemSubtype(weaponSchema.baseItemId) === WeaponSubtype.Sword;
 
-          // Multi-projectile and spread only for UT weapons (e.g. Doom Blade)
-          let projectileCount = 1;
-          let spreadAngle = 0;
-          if (hasWeapon && weaponSchema.isUT) {
-            const weaponDef = ITEM_DEFS[weaponSchema.baseItemId];
-            projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
-            spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
-          }
+          if (hasWeapon) {
+            const isSword = getItemSubtype(weaponSchema.baseItemId) === WeaponSubtype.Sword;
 
-          for (let p = 0; p < projectileCount; p++) {
-            let angle = player.aimAngle;
-            if (projectileCount > 1 && spreadAngle > 0) {
-              const startAngle = player.aimAngle - spreadAngle / 2;
-              angle = startAngle + (spreadAngle / (projectileCount - 1)) * p;
+            // Multi-projectile and spread only for UT weapons (e.g. Doom Blade)
+            let projectileCount = 1;
+            let spreadAngle = 0;
+            if (weaponSchema.isUT) {
+              const weaponDef = ITEM_DEFS[weaponSchema.baseItemId];
+              projectileCount = weaponDef?.weaponStats?.projectileCount ?? 1;
+              spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
             }
 
-            const proj = new Projectile();
-            proj.id = generateId("pproj");
-            proj.x = player.x;
-            proj.y = player.y;
-            proj.angle = angle;
-            proj.ownerType = EntityType.Player;
-            proj.ownerId = player.id;
-            proj.speed = player.cachedWeaponProjSpeed;
-            proj.damage = player.cachedDamage;
-            proj.startX = player.x;
-            proj.startY = player.y;
-            proj.maxRange = player.cachedWeaponRange;
-            proj.collisionRadius = player.cachedWeaponProjSize;
-            proj.projType = isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow;
-            proj.piercing = false;
-            proj.zone = player.zone;
+            for (let p = 0; p < projectileCount; p++) {
+              let angle = player.aimAngle;
+              if (projectileCount > 1 && spreadAngle > 0) {
+                const startAngle = player.aimAngle - spreadAngle / 2;
+                angle = startAngle + (spreadAngle / (projectileCount - 1)) * p;
+              }
 
-            this.state.projectiles.set(proj.id, proj);
+              const proj = new Projectile();
+              proj.id = generateId("pproj");
+              proj.x = player.x;
+              proj.y = player.y;
+              proj.angle = angle;
+              proj.ownerType = EntityType.Player;
+              proj.ownerId = player.id;
+              proj.speed = player.cachedWeaponProjSpeed;
+              let weaponDmg = player.cachedDamage;
+              if (player.cachedCritChance > 0 && Math.random() * 100 < player.cachedCritChance) {
+                weaponDmg = Math.round(weaponDmg * (2 + player.cachedCritMult / 100));
+              }
+              proj.damage = weaponDmg;
+              proj.startX = player.x;
+              proj.startY = player.y;
+              proj.maxRange = player.cachedWeaponRange;
+              proj.collisionRadius = player.cachedWeaponProjSize;
+              proj.projType = isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow;
+              proj.piercing = false;
+              proj.zone = player.zone;
+
+              this.state.projectiles.set(proj.id, proj);
+            }
           }
         }
       }
@@ -1220,7 +1235,13 @@ export class GameRoom extends Room<GameState> {
             abilityPiercing = scaled.piercing;
           }
 
-          if (now - player.lastAbilityTime >= abilityCooldown) {
+          // Apply ability damage bonus and cooldown reduction from open stats
+          abilityDamage += player.cachedAbilityDamageBonus;
+          const effectiveAbilityCooldown = player.cachedAbilityCooldownReduction > 0
+            ? Math.round(abilityCooldown * (1 - player.cachedAbilityCooldownReduction / 100))
+            : abilityCooldown;
+
+          if (now - player.lastAbilityTime >= effectiveAbilityCooldown) {
             if (player.mana >= abilityManaCost) {
               player.mana -= abilityManaCost;
               player.lastAbilityTime = now;

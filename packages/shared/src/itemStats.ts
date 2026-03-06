@@ -20,6 +20,7 @@ export interface ItemInstanceData {
   lockedStat2Roll: number; // 0-100 percentile within tier range
   openStats: number[]; // packed triples: [type, tier, roll, type, tier, roll, ...]
   forgeProtectedSlot: number; // index into openStats triples (0-4), -1 if none
+  forgeProtectedSlot2: number; // second protected slot for Divine Forge, -1 if none
 }
 
 // --- Constants ---
@@ -61,11 +62,16 @@ export const OPEN_STAT_POOL: Record<number, number[]> = {
     StatType.AttackDamage,
     StatType.AttackSpeed,
     StatType.MovementSpeed,
+    StatType.IncreasedProjectileSpeed,
+    StatType.CriticalStrikeChance,
+    StatType.CriticalStrikeMultiplier,
   ],
   [ItemCategory.Ability]: [
+    StatType.AbilityDamage,
     StatType.AttackDamage,
     StatType.AttackSpeed,
     StatType.MovementSpeed,
+    StatType.ReducedAbilityCooldown,
   ],
   [ItemCategory.Armor]: [
     StatType.Health,
@@ -101,6 +107,11 @@ export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]
   [StatType.Mana]:          { 1: [15, 40],   2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260], 6: [260, 340] },
   [StatType.PhysicalDamageReduction]: { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [3, 16], 5: [3, 20], 6: [3, 25] },
   [StatType.MagicDamageReduction]:    { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [3, 16], 5: [3, 20], 6: [3, 25] },
+  [StatType.AbilityDamage]:            { 1: [2, 5],   2: [6, 14],  3: [15, 24], 4: [25, 34], 5: [35, 44], 6: [45, 55] },
+  [StatType.ReducedAbilityCooldown]:   { 1: [1, 3],   2: [3, 7],   3: [7, 12],  4: [12, 18], 5: [18, 24], 6: [24, 30] },
+  [StatType.IncreasedProjectileSpeed]: { 1: [3, 6],   2: [6, 12],  3: [12, 20], 4: [20, 30], 5: [30, 40], 6: [40, 50] },
+  [StatType.CriticalStrikeChance]:     { 1: [1, 3],   2: [3, 7],   3: [7, 12],  4: [12, 18], 5: [18, 24], 6: [24, 30] },
+  [StatType.CriticalStrikeMultiplier]: { 1: [3, 6],   2: [6, 12],  3: [12, 20], 4: [20, 30], 5: [30, 40], 6: [40, 50] },
 };
 
 // Separate locked stat range table for stats that scale differently as locked stats
@@ -205,6 +216,11 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.Mana]: "Mana",
   [StatType.PhysicalDamageReduction]: "Phys Dmg Reduction",
   [StatType.MagicDamageReduction]: "Magic Dmg Reduction",
+  [StatType.AbilityDamage]: "Ability Power",
+  [StatType.ReducedAbilityCooldown]: "Reduced Ability Cooldown",
+  [StatType.IncreasedProjectileSpeed]: "Increased Projectile Speed",
+  [StatType.CriticalStrikeChance]: "Critical Strike Chance",
+  [StatType.CriticalStrikeMultiplier]: "Critical Strike Multiplier",
 };
 
 // --- Crafting Orb Definitions ---
@@ -287,6 +303,13 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     description: "Re-rolls the value of one open stat within its tier range.",
     rarity: OrbRarity.Uncommon,
     color: 0x66ff88,
+  },
+  [CraftingOrbType.Divine]: {
+    type: CraftingOrbType.Divine,
+    name: "Divine Forge Orb",
+    description: "Protects two random stats from the next orb.",
+    rarity: OrbRarity.VeryRare,
+    color: 0xffd700,
   },
 };
 
@@ -474,6 +497,7 @@ export function createEmptyItemInstance(): ItemInstanceData {
     lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
+    forgeProtectedSlot2: -1,
   };
 }
 

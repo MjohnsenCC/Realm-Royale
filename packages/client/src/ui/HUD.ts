@@ -332,6 +332,7 @@ export class HUD {
             lockedStat2Roll: 0,
             openStats: [],
             forgeProtectedSlot: -1,
+            forgeProtectedSlot2: -1,
           };
           this.dragManager.onSlotPointerDown(
             { type: "consumable", slotIndex: i },

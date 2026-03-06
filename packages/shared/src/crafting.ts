@@ -42,13 +42,30 @@ function getPool(item: ItemInstanceData): number[] {
   return OPEN_STAT_POOL[category] ?? [];
 }
 
-/** Roll a random stat from the pool at a random tier. Returns [type, tier, roll]. */
-function rollRandomStat(item: ItemInstanceData): [number, number, number] {
+/** Get stat types already present on an item's open stats. */
+function getExistingStatTypes(item: ItemInstanceData): Set<number> {
+  const types = new Set<number>();
+  for (let i = 0; i < item.openStats.length; i += 3) {
+    types.add(item.openStats[i]);
+  }
+  return types;
+}
+
+/** Roll a random stat from the pool at a random tier, excluding stat types in the exclude set.
+ *  Returns [type, tier, roll] or null if no valid stat types remain. */
+function rollRandomStat(item: ItemInstanceData, exclude?: Set<number>): [number, number, number] | null {
   const pool = getPool(item);
-  const statType = pickRandom(pool);
+  const available = exclude ? pool.filter(t => !exclude.has(t)) : pool;
+  if (available.length === 0) return null;
+  const statType = pickRandom(available);
   const statTier = rollOpenStatTier(item.instanceTier);
   const statRoll = rollStatRoll();
   return [statType, statTier, statRoll];
+}
+
+/** Check if a stat slot is forge-protected (by either slot). */
+function isProtectedSlot(item: ItemInstanceData, slotIdx: number): boolean {
+  return slotIdx === item.forgeProtectedSlot || slotIdx === item.forgeProtectedSlot2;
 }
 
 /** Get indices of open stats that are NOT forge-protected. */
@@ -56,7 +73,7 @@ function getUnprotectedIndices(item: ItemInstanceData): number[] {
   const count = getOpenStatCount(item);
   const indices: number[] = [];
   for (let i = 0; i < count; i++) {
-    if (i !== item.forgeProtectedSlot) {
+    if (!isProtectedSlot(item, i)) {
       indices.push(i);
     }
   }
@@ -66,6 +83,7 @@ function getUnprotectedIndices(item: ItemInstanceData): number[] {
 /** Consume forge protection after an orb is applied. */
 function consumeForgeProtection(item: ItemInstanceData): void {
   item.forgeProtectedSlot = -1;
+  item.forgeProtectedSlot2 = -1;
 }
 
 // --- Orb Implementations ---
@@ -82,17 +100,25 @@ export function applyBlankOrb(item: ItemInstanceData): CraftingResult {
   }
 
   const result = cloneItem(item);
-  if (result.forgeProtectedSlot >= 0) {
-    // Preserve the forge-protected stat, clear the rest
-    const pIdx = result.forgeProtectedSlot * 3;
-    if (pIdx + 2 < result.openStats.length) {
-      const protectedStat = result.openStats.slice(pIdx, pIdx + 3);
-      result.openStats = protectedStat;
-      consumeForgeProtection(result);
-    } else {
-      result.openStats = [];
-      consumeForgeProtection(result);
+  const hasProtection = result.forgeProtectedSlot >= 0 || result.forgeProtectedSlot2 >= 0;
+  if (hasProtection) {
+    // Preserve all forge-protected stats, clear the rest
+    const kept: number[] = [];
+    const openCount = getOpenStatCount(result);
+    // Collect protected slots in order
+    const protectedSlots: number[] = [];
+    if (result.forgeProtectedSlot >= 0 && result.forgeProtectedSlot < openCount) {
+      protectedSlots.push(result.forgeProtectedSlot);
     }
+    if (result.forgeProtectedSlot2 >= 0 && result.forgeProtectedSlot2 < openCount) {
+      protectedSlots.push(result.forgeProtectedSlot2);
+    }
+    protectedSlots.sort((a, b) => a - b);
+    for (const idx of protectedSlots) {
+      kept.push(result.openStats[idx * 3], result.openStats[idx * 3 + 1], result.openStats[idx * 3 + 2]);
+    }
+    result.openStats = kept;
+    consumeForgeProtection(result);
   } else {
     result.openStats = [];
   }
@@ -112,9 +138,13 @@ export function applyEmberOrb(item: ItemInstanceData): CraftingResult {
   }
 
   const result = cloneItem(item);
+  const usedTypes = getExistingStatTypes(result);
   for (let i = 0; i < emptyCount; i++) {
-    const [statType, statTier, statRoll] = rollRandomStat(result);
+    const rolled = rollRandomStat(result, usedTypes);
+    if (!rolled) break;
+    const [statType, statTier, statRoll] = rolled;
     result.openStats.push(statType, statTier, statRoll);
+    usedTypes.add(statType);
   }
   consumeForgeProtection(result);
   return { success: true, item: result };
@@ -132,7 +162,12 @@ export function applyShardOrb(item: ItemInstanceData): CraftingResult {
   }
 
   const result = cloneItem(item);
-  const [statType, statTier, statRoll] = rollRandomStat(result);
+  const usedTypes = getExistingStatTypes(result);
+  const rolled = rollRandomStat(result, usedTypes);
+  if (!rolled) {
+    return { success: false, item, message: "No unique stat types available." };
+  }
+  const [statType, statTier, statRoll] = rolled;
   result.openStats.push(statType, statTier, statRoll);
   consumeForgeProtection(result);
   return { success: true, item: result };
@@ -148,14 +183,27 @@ export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   const newStats: number[] = [];
+  const usedTypes = new Set<number>();
+  const openCount = getOpenStatCount(item);
+
+  // Reserve types of all forge-protected stats first
+  if (item.forgeProtectedSlot >= 0 && item.forgeProtectedSlot < openCount) {
+    usedTypes.add(item.openStats[item.forgeProtectedSlot * 3]);
+  }
+  if (item.forgeProtectedSlot2 >= 0 && item.forgeProtectedSlot2 < openCount) {
+    usedTypes.add(item.openStats[item.forgeProtectedSlot2 * 3]);
+  }
 
   for (let i = 0; i < MAX_OPEN_STATS; i++) {
-    if (i === item.forgeProtectedSlot && i < getOpenStatCount(item)) {
+    if (isProtectedSlot(item, i) && i < openCount) {
       // Preserve protected stat
       newStats.push(item.openStats[i * 3], item.openStats[i * 3 + 1], item.openStats[i * 3 + 2]);
     } else {
-      const [statType, statTier, statRoll] = rollRandomStat(result);
+      const rolled = rollRandomStat(result, usedTypes);
+      if (!rolled) break;
+      const [statType, statTier, statRoll] = rolled;
       newStats.push(statType, statTier, statRoll);
+      usedTypes.add(statType);
     }
   }
 
@@ -179,7 +227,14 @@ export function applyFluxOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   const targetIdx = pickRandom(unprotected);
-  const [statType, statTier, statRoll] = rollRandomStat(result);
+  // Exclude all existing stat types except the one being rerolled
+  const usedTypes = getExistingStatTypes(result);
+  usedTypes.delete(result.openStats[targetIdx * 3]);
+  const rolled = rollRandomStat(result, usedTypes);
+  if (!rolled) {
+    return { success: false, item, message: "No unique stat types available." };
+  }
+  const [statType, statTier, statRoll] = rolled;
   result.openStats[targetIdx * 3] = statType;
   result.openStats[targetIdx * 3 + 1] = statTier;
   result.openStats[targetIdx * 3 + 2] = statRoll;
@@ -206,9 +261,12 @@ export function applyVoidOrb(item: ItemInstanceData): CraftingResult {
   // Remove the stat triple at targetIdx
   result.openStats.splice(targetIdx * 3, 3);
 
-  // Adjust forge protected slot index if needed
+  // Adjust forge protected slot indices if needed
   if (result.forgeProtectedSlot > targetIdx) {
     result.forgeProtectedSlot--;
+  }
+  if (result.forgeProtectedSlot2 > targetIdx) {
+    result.forgeProtectedSlot2--;
   }
 
   consumeForgeProtection(result);
@@ -240,6 +298,7 @@ export function applyPrismOrb(item: ItemInstanceData): CraftingResult {
 
 /**
  * Forge Orb: Protects one random open stat from the next orb.
+ * Can be used repeatedly to re-roll which stat is protected.
  */
 export function applyForgeOrb(
   item: ItemInstanceData,
@@ -252,14 +311,38 @@ export function applyForgeOrb(
     return { success: false, item, message: "No stats to protect." };
   }
 
-  if (item.forgeProtectedSlot >= 0) {
-    return { success: false, item, message: "A stat is already protected." };
+  const result = cloneItem(item);
+  const indices: number[] = [];
+  for (let i = 0; i < openCount; i++) indices.push(i);
+  result.forgeProtectedSlot = pickRandom(indices);
+  result.forgeProtectedSlot2 = -1; // Regular forge only protects one stat
+  return { success: true, item: result };
+}
+
+/**
+ * Divine Forge Orb: Protects two random different open stats from the next orb.
+ * Can be used repeatedly to re-roll which stats are protected.
+ */
+export function applyDivineForgeOrb(
+  item: ItemInstanceData,
+): CraftingResult {
+  const error = validateCraftTarget(item);
+  if (error) return { success: false, item, message: error };
+
+  const openCount = getOpenStatCount(item);
+  if (openCount < 2) {
+    return { success: false, item, message: "Need at least 2 stats to protect." };
   }
 
   const result = cloneItem(item);
   const indices: number[] = [];
   for (let i = 0; i < openCount; i++) indices.push(i);
-  result.forgeProtectedSlot = pickRandom(indices);
+  // Pick first slot
+  const firstIdx = Math.floor(Math.random() * indices.length);
+  result.forgeProtectedSlot = indices[firstIdx];
+  indices.splice(firstIdx, 1);
+  // Pick second slot (guaranteed different)
+  result.forgeProtectedSlot2 = pickRandom(indices);
   return { success: true, item: result };
 }
 
@@ -298,6 +381,7 @@ export function applyCraftingOrb(
     case 6: return applyPrismOrb(item);
     case 7: return applyForgeOrb(item);
     case 8: return applyCalibrateOrb(item);
+    case 9: return applyDivineForgeOrb(item);
     default: return { success: false, item, message: "Unknown orb type." };
   }
 }

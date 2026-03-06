@@ -419,7 +419,8 @@ export class DragManager {
       const bagItems = this.lootBagUI.getItems();
       const bagItem = bagItems[source.slotIndex];
       if (bagItem) {
-        const dropSlot = inv[target.slotIndex]?.baseItemId < 0 ? target.slotIndex : inv.findIndex(item => item.baseItemId < 0);
+        const targetSlot = target.slotIndex;
+        const dropSlot = targetSlot !== undefined && inv[targetSlot]?.baseItemId < 0 ? targetSlot : inv.findIndex(item => item.baseItemId < 0);
         if (dropSlot !== -1) {
           inv[dropSlot] = { ...bagItem };
           this.inventoryUI.redrawSlots();

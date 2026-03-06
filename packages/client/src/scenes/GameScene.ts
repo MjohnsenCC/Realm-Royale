@@ -1762,7 +1762,7 @@ export class GameScene extends Phaser.Scene {
 
       // Only shoot if not clicking on UI panels and not dragging items
       const pointer = this.input.activePointer;
-      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible() || this.statsPanel.isVisible();
+      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
       const isDragging = this.hud.dragManager.isDragging();
       shooting = pointer.isDown && !overUI && !isDragging;
     }
@@ -2661,11 +2661,12 @@ function readItemSchema(schema: SchemaInstance): ItemInstanceData {
     lockedStat2Roll: (schema.lockedStat2Roll as number) ?? 0,
     openStats,
     forgeProtectedSlot: (schema.forgeProtectedSlot as number) ?? -1,
+    forgeProtectedSlot2: (schema.forgeProtectedSlot2 as number) ?? -1,
   };
 }
 
 function readOrbCounts(player: SchemaInstance): number[] {
-  const counts = new Array(9).fill(0);
+  const counts = new Array(10).fill(0);
   counts[0] = (player.orbBlank as number) ?? 0;
   counts[1] = (player.orbEmber as number) ?? 0;
   counts[2] = (player.orbShard as number) ?? 0;
@@ -2675,6 +2676,7 @@ function readOrbCounts(player: SchemaInstance): number[] {
   counts[6] = (player.orbPrism as number) ?? 0;
   counts[7] = (player.orbForge as number) ?? 0;
   counts[8] = (player.orbCalibrate as number) ?? 0;
+  counts[9] = (player.orbDivine as number) ?? 0;
   return counts;
 }
 

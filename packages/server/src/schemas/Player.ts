@@ -50,6 +50,7 @@ export class Player extends Schema {
   @type("uint16") orbPrism: number = 0;
   @type("uint16") orbForge: number = 0;
   @type("uint16") orbCalibrate: number = 0;
+  @type("uint16") orbDivine: number = 0;
 
   // Synced: last hit info for client damage indicators
   @type("uint8") lastHitDamageType: number = 0; // 0=Physical, 1=Magic
@@ -89,6 +90,10 @@ export class Player extends Schema {
   cachedWeaponProjSize: number = 5;
   cachedPhysDmgReduce: number = 0;
   cachedMagicDmgReduce: number = 0;
+  cachedAbilityDamageBonus: number = 0;
+  cachedAbilityCooldownReduction: number = 0;
+  cachedCritChance: number = 0;
+  cachedCritMult: number = 0;
 
   // Speed boost from UT ability (server-only)
   speedBoostUntil: number = 0;

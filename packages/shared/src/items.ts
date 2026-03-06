@@ -716,6 +716,7 @@ export function generateItemInstance(
     lockedStat2Roll: rollStatRoll(),
     openStats: prerollOpenStats ? rollInitialOpenStats(category, tier) : [],
     forgeProtectedSlot: -1,
+    forgeProtectedSlot2: -1,
   };
 }
 
@@ -733,6 +734,7 @@ export function generateUTItemInstance(baseItemId: number): ItemInstanceData {
     lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
+    forgeProtectedSlot2: -1,
   };
 }
 
@@ -750,6 +752,7 @@ export function generateConsumableInstance(baseItemId: number): ItemInstanceData
     lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
+    forgeProtectedSlot2: -1,
   };
 }
 
@@ -767,6 +770,7 @@ export function generateOrbInstance(orbType: number): ItemInstanceData {
     lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
+    forgeProtectedSlot2: -1,
   };
 }
 
@@ -833,6 +837,7 @@ export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
   [DungeonType.VoidSanctum]: {
     entries: [
       { type: "independent", dropChance: 1.0, orbRarityWeighted: true },
+      { type: "independent", dropChance: 0.35, itemId: makeItemId(ItemCategory.CraftingOrb, CraftingOrbType.Divine, 1) },
       // Each UT rolled independently (base 1.25% each = ~5% total for at least one)
       ...UT_ITEM_IDS.map(
         (id): IndependentDropEntry => ({
@@ -1055,6 +1060,9 @@ function resolveIndependentDrop(
     }
     if (category === ItemCategory.Consumable) {
       return generateConsumableInstance(entry.itemId);
+    }
+    if (category === ItemCategory.CraftingOrb) {
+      return generateOrbInstance(getItemSubtype(entry.itemId));
     }
     return generateItemInstance(
       category,

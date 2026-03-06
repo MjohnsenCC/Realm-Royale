@@ -26,9 +26,11 @@ const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility"
   { label: "Attack Speed", section: "offensive" },
   { label: "Weapon Range", section: "offensive" },
   { label: "Projectile Speed", section: "offensive" },
+  { label: "Crit Chance", section: "offensive" },
+  { label: "Crit Multiplier", section: "offensive" },
   { label: "Ability DPS", section: "offensive" },
   { label: "Sustained Ability DPS", section: "offensive" },
-  { label: "Ability Damage", section: "offensive" },
+  { label: "Ability Power", section: "offensive" },
   { label: "Ability Cooldown", section: "offensive" },
   { label: "Ability Mana Cost", section: "offensive" },
   { label: "Max Health", section: "defensive" },
@@ -108,7 +110,7 @@ export class StatsPanel {
     this.panelWidth = Math.round(260 * S);
 
     // Calculate full content height
-    const offensiveRows = 11;
+    const offensiveRows = 13;
     const defensiveRows = 6;
     const utilityRows = 2;
     const totalRows = offensiveRows + defensiveRows + utilityRows;
@@ -423,24 +425,32 @@ export class StatsPanel {
       }
     }
 
-    // DPS calculations
-    const weaponDPS = fullStats.damage / (fullStats.shootCooldown / 1000);
+    // DPS calculations (factor in crit for weapon, ability damage bonus + cooldown reduction for ability)
+    const critMultiplier = fullStats.critChance > 0
+      ? 1 + (fullStats.critChance / 100) * (1 + fullStats.critMultiplier / 100)
+      : 1;
+    const weaponDPS = (fullStats.damage / (fullStats.shootCooldown / 1000)) * critMultiplier;
+
+    const effectiveAbilityDmg = abilityDmg + fullStats.abilityDamageBonus;
+    const displayAbilityCooldown = fullStats.abilityCooldownReduction > 0
+      ? Math.round(abilityCooldown * (1 - fullStats.abilityCooldownReduction / 100))
+      : abilityCooldown;
 
     let rawAbilityDPS = 0;
     let sustainedAbilityDPS = 0;
-    if (hasAbility && abilityCooldown > 0) {
-      rawAbilityDPS = abilityDmg / (abilityCooldown / 1000);
+    if (hasAbility && displayAbilityCooldown > 0) {
+      rawAbilityDPS = effectiveAbilityDmg / (displayAbilityCooldown / 1000);
 
       if (abilityManaCost <= 0) {
         sustainedAbilityDPS = rawAbilityDPS;
       } else if (abilityManaCost > fullStats.maxMana) {
         sustainedAbilityDPS = 0;
       } else {
-        const castsPerSecFromCooldown = 1000 / abilityCooldown;
+        const castsPerSecFromCooldown = 1000 / displayAbilityCooldown;
         const castsPerSecFromMana =
           fullStats.manaRegen > 0 ? fullStats.manaRegen / abilityManaCost : 0;
         const sustainedCastsPerSec = Math.min(castsPerSecFromCooldown, castsPerSecFromMana);
-        sustainedAbilityDPS = abilityDmg * sustainedCastsPerSec;
+        sustainedAbilityDPS = effectiveAbilityDmg * sustainedCastsPerSec;
       }
     }
 
@@ -473,36 +483,43 @@ export class StatsPanel {
     this.setStatRow(4, String(fullStats.weaponRange));
     // Row 5: Projectile Speed
     this.setStatRow(5, String(fullStats.weaponProjSpeed));
-    // Row 6: Ability DPS (raw, cooldown-based)
-    this.setStatRow(6, hasAbility ? rawAbilityDPS.toFixed(1) : "N/A");
-    // Row 7: Sustained Ability DPS (mana-limited)
+    // Row 6: Crit Chance
+    this.setStatRow(6, fullStats.critChance > 0 ? Math.round(fullStats.critChance) + "%" : "0%", fullStats.critChance, undefined, "%");
+    // Row 7: Crit Multiplier
+    this.setStatRow(7, fullStats.critMultiplier > 0 ? "+" + Math.round(fullStats.critMultiplier) + "%" : "0%", fullStats.critMultiplier, undefined, "%");
+    // Row 8: Ability DPS (raw, cooldown-based)
+    this.setStatRow(8, hasAbility ? rawAbilityDPS.toFixed(1) : "N/A");
+    // Row 9: Sustained Ability DPS (mana-limited)
     if (hasAbility && sustainedAbilityDPS < rawAbilityDPS - 0.1) {
-      this.setStatRow(7, sustainedAbilityDPS.toFixed(1), undefined, "#ff8866");
+      this.setStatRow(9, sustainedAbilityDPS.toFixed(1), undefined, "#ff8866");
     } else {
-      this.setStatRow(7, hasAbility ? sustainedAbilityDPS.toFixed(1) : "N/A");
+      this.setStatRow(9, hasAbility ? sustainedAbilityDPS.toFixed(1) : "N/A");
     }
-    // Row 8: Ability Damage
-    this.setStatRow(8, hasAbility ? String(abilityDmg) : "N/A");
-    // Row 9: Ability Cooldown
-    this.setStatRow(9, hasAbility ? (abilityCooldown / 1000).toFixed(2) + "s" : "N/A");
-    // Row 10: Ability Mana Cost
-    this.setStatRow(10, hasAbility ? String(abilityManaCost) : "N/A");
-    // Row 11: Max Health
-    this.setStatRow(11, String(Math.round(fullStats.maxHp)), hpBonus);
-    // Row 12: Health Regen
-    this.setStatRow(12, Math.round(fullStats.hpRegen) + "/s", hpRegenBonus);
-    // Row 13: Max Mana
-    this.setStatRow(13, String(Math.round(fullStats.maxMana)), manaBonus);
-    // Row 14: Mana Regen
-    this.setStatRow(14, Math.round(fullStats.manaRegen) + "/s", manaRegenBonus);
-    // Row 15: Physical Damage Reduction
-    this.setStatRow(15, Math.round(fullStats.physDmgReduce) + "%", fullStats.physDmgReduce, undefined, "%");
-    // Row 16: Magic Damage Reduction
-    this.setStatRow(16, Math.round(fullStats.magicDmgReduce) + "%", fullStats.magicDmgReduce, undefined, "%");
-    // Row 17: Movement Speed
-    this.setStatRow(17, String(Math.round(fullStats.speed)), speedBonus);
-    // Row 18: Level
-    this.setStatRow(18, String(level));
+    // Row 10: Ability Power
+    this.setStatRow(10, hasAbility ? String(abilityDmg + fullStats.abilityDamageBonus) : "N/A", hasAbility ? fullStats.abilityDamageBonus : undefined);
+    // Row 11: Ability Cooldown
+    const effectiveAbilityCooldown = fullStats.abilityCooldownReduction > 0
+      ? Math.round(abilityCooldown * (1 - fullStats.abilityCooldownReduction / 100))
+      : abilityCooldown;
+    this.setStatRow(11, hasAbility ? (effectiveAbilityCooldown / 1000).toFixed(2) + "s" : "N/A");
+    // Row 12: Ability Mana Cost
+    this.setStatRow(12, hasAbility ? String(abilityManaCost) : "N/A");
+    // Row 13: Max Health
+    this.setStatRow(13, String(Math.round(fullStats.maxHp)), hpBonus);
+    // Row 14: Health Regen
+    this.setStatRow(14, Math.round(fullStats.hpRegen) + "/s", hpRegenBonus);
+    // Row 15: Max Mana
+    this.setStatRow(15, String(Math.round(fullStats.maxMana)), manaBonus);
+    // Row 16: Mana Regen
+    this.setStatRow(16, Math.round(fullStats.manaRegen) + "/s", manaRegenBonus);
+    // Row 17: Physical Damage Reduction
+    this.setStatRow(17, Math.round(fullStats.physDmgReduce) + "%", fullStats.physDmgReduce, undefined, "%");
+    // Row 18: Magic Damage Reduction
+    this.setStatRow(18, Math.round(fullStats.magicDmgReduce) + "%", fullStats.magicDmgReduce, undefined, "%");
+    // Row 19: Movement Speed
+    this.setStatRow(19, String(Math.round(fullStats.speed)), speedBonus);
+    // Row 20: Level
+    this.setStatRow(20, String(level));
   }
 
   private setStatRow(

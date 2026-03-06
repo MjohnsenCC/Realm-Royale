@@ -30,6 +30,7 @@ const ORB_KEYS = [
   CraftingOrbType.Prism,
   CraftingOrbType.Forge,
   CraftingOrbType.Calibrate,
+  CraftingOrbType.Divine,
 ] as const;
 
 // Orb slot grid: 1 column (vertical strip on right side)
@@ -78,7 +79,7 @@ export class CraftingUI {
   private currentItem: ItemInstanceData | null = null;
   private currentLocation: "inventory" | "equipment" = "equipment";
   private currentSlotIndex = -1;
-  private orbCounts = new Array(9).fill(0);
+  private orbCounts = new Array(10).fill(0);
 
   // Callbacks
   private onCloseCallback: (() => void) | null = null;
@@ -632,7 +633,8 @@ export class CraftingUI {
       const sTier = item.openStats[i + 1];
       const sRoll = item.openStats[i + 2];
       const val = getStatValue(sType, sTier, sRoll);
-      const forgeProtected = item.forgeProtectedSlot === Math.floor(i / 3);
+      const slotIdx = Math.floor(i / 3);
+      const forgeProtected = item.forgeProtectedSlot === slotIdx || item.forgeProtectedSlot2 === slotIdx;
       const suffix = (sType === StatType.AttackSpeed || sType === StatType.PhysicalDamageReduction || sType === StatType.MagicDamageReduction) ? "%" : "";
       const [min, max] = getStatRange(sType, sTier);
       openEntries.push({ text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)})${suffix} ${STAT_NAMES[sType] ?? "???"}`, tier: sTier, forgeProtected });

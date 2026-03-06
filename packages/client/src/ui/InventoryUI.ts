@@ -294,7 +294,8 @@ export class InventoryUI {
           this.currentInventory[i].lockedStat1Tier !== newItem.lockedStat1Tier ||
           this.currentInventory[i].lockedStat2Tier !== newItem.lockedStat2Tier ||
           !openStatsEqual(this.currentInventory[i].openStats, newItem.openStats) ||
-          this.currentInventory[i].forgeProtectedSlot !== newItem.forgeProtectedSlot) {
+          this.currentInventory[i].forgeProtectedSlot !== newItem.forgeProtectedSlot ||
+          this.currentInventory[i].forgeProtectedSlot2 !== newItem.forgeProtectedSlot2) {
         this.currentInventory[i] = newItem;
         changed = true;
       }
@@ -314,7 +315,8 @@ export class InventoryUI {
           this.currentEquipment[i].lockedStat1Tier !== newItem.lockedStat1Tier ||
           this.currentEquipment[i].lockedStat2Tier !== newItem.lockedStat2Tier ||
           !openStatsEqual(this.currentEquipment[i].openStats, newItem.openStats) ||
-          this.currentEquipment[i].forgeProtectedSlot !== newItem.forgeProtectedSlot) {
+          this.currentEquipment[i].forgeProtectedSlot !== newItem.forgeProtectedSlot ||
+          this.currentEquipment[i].forgeProtectedSlot2 !== newItem.forgeProtectedSlot2) {
         this.currentEquipment[i] = newItem;
         changed = true;
       }

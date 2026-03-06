@@ -72,6 +72,11 @@ function accumulateItemBonuses(
     projSpeed: number;
     physDmgReduce: number;
     magicDmgReduce: number;
+    abilityDamage: number;
+    abilityCooldownReduction: number;
+    projSpeedPercent: number;
+    critChance: number;
+    critMultiplier: number;
   }
 ): void {
   if (isEmptyItem(item) || item.isUT) return;
@@ -98,6 +103,11 @@ function addStatBonus(
     projSpeed: number;
     physDmgReduce: number;
     magicDmgReduce: number;
+    abilityDamage: number;
+    abilityCooldownReduction: number;
+    projSpeedPercent: number;
+    critChance: number;
+    critMultiplier: number;
   },
   statType: number,
   statTier: number,
@@ -134,6 +144,21 @@ function addStatBonus(
     case StatType.MagicDamageReduction:
       bonuses.magicDmgReduce += value;
       break;
+    case StatType.AbilityDamage:
+      bonuses.abilityDamage += value;
+      break;
+    case StatType.ReducedAbilityCooldown:
+      bonuses.abilityCooldownReduction += value;
+      break;
+    case StatType.IncreasedProjectileSpeed:
+      bonuses.projSpeedPercent += value;
+      break;
+    case StatType.CriticalStrikeChance:
+      bonuses.critChance += value;
+      break;
+    case StatType.CriticalStrikeMultiplier:
+      bonuses.critMultiplier += value;
+      break;
   }
 }
 
@@ -154,6 +179,10 @@ export function computePlayerStats(
   weaponProjSize: number;
   physDmgReduce: number;
   magicDmgReduce: number;
+  abilityDamageBonus: number;
+  abilityCooldownReduction: number;
+  critChance: number;
+  critMultiplier: number;
 } {
   const base = getStatsForLevel(level);
   const bonuses = {
@@ -167,6 +196,11 @@ export function computePlayerStats(
     projSpeed: 0,
     physDmgReduce: 0,
     magicDmgReduce: 0,
+    abilityDamage: 0,
+    abilityCooldownReduction: 0,
+    projSpeedPercent: 0,
+    critChance: 0,
+    critMultiplier: 0,
   };
 
   // Default weapon stats (fallback if no weapon)
@@ -246,10 +280,14 @@ export function computePlayerStats(
     maxMana: manaBase + bonuses.maxMana,
     manaRegen: manaRegenBase + bonuses.manaRegen,
     weaponRange,
-    weaponProjSpeed: weaponProjSpeed + bonuses.projSpeed,
+    weaponProjSpeed: Math.round((weaponProjSpeed + bonuses.projSpeed) * (1 + bonuses.projSpeedPercent / 100)),
     weaponProjSize,
     physDmgReduce: Math.min(bonuses.physDmgReduce, 75),
     magicDmgReduce: Math.min(bonuses.magicDmgReduce, 75),
+    abilityDamageBonus: bonuses.abilityDamage,
+    abilityCooldownReduction: bonuses.abilityCooldownReduction,
+    critChance: bonuses.critChance,
+    critMultiplier: bonuses.critMultiplier,
   };
 }
 
