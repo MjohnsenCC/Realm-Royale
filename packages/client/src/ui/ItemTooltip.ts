@@ -235,7 +235,8 @@ export class ItemTooltip {
       const manaTier = shiftHeld && item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
       lockedLines.push(`Damage: ${as.damage}${dmgTier}`);
       lockedLines.push(`Mana Cost: ${as.manaCost}${manaTier}`);
-      // Range and piercing are hidden (shift only)
+      // Range, cooldown, and piercing are hidden (shift only)
+      hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);
       hiddenLines.push(`Range: ${as.range}`);
       if (as.piercing) hiddenLines.push(`Piercing: Yes`);
     } else {
@@ -374,6 +375,7 @@ export class ItemTooltip {
     } else if (def.abilityStats) {
       statsLines.push(`Damage: ${def.abilityStats.damage}`);
       statsLines.push(`Mana Cost: ${def.abilityStats.manaCost}`);
+      statsLines.push(`Cooldown: ${(def.abilityStats.cooldown / 1000).toFixed(2)}s`);
       statsLines.push(`Range: ${def.abilityStats.range}`);
       if (def.abilityStats.piercing) statsLines.push(`Piercing: Yes`);
       if (def.abilityStats.speedBoostAmount) {

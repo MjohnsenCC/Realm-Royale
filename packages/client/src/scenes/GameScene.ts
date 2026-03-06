@@ -7,6 +7,7 @@ import { ProjectileSprite } from "../entities/ProjectileSprite";
 import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
 import { CraftingUI } from "../ui/CraftingUI";
+import { StatsPanel } from "../ui/StatsPanel";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { getUIScale } from "../ui/UIScale";
 import {
@@ -121,6 +122,7 @@ export class GameScene extends Phaser.Scene {
     SPACE: Phaser.Input.Keyboard.Key;
     SHIFT: Phaser.Input.Keyboard.Key;
     U: Phaser.Input.Keyboard.Key;
+    P: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -152,6 +154,7 @@ export class GameScene extends Phaser.Scene {
   // Dungeon tooltip (shows stats when near a portal)
   private dungeonTooltip!: DungeonTooltip;
   private craftingUI!: CraftingUI;
+  private statsPanel!: StatsPanel;
   private nearCraftingTable: boolean = false;
 
   // Q key cooldown to prevent spam
@@ -289,6 +292,7 @@ export class GameScene extends Phaser.Scene {
         SPACE: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SPACE),
         SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
         U: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U),
+        P: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P),
       };
     }
 
@@ -307,6 +311,10 @@ export class GameScene extends Phaser.Scene {
     this.craftingUI = new CraftingUI(this);
     this.craftingUI.setRoom(room);
     this.hud.dragManager.setCraftingUI(this.craftingUI);
+
+    // Create stats panel
+    this.statsPanel = new StatsPanel(this);
+    this.hud.setStatsButtonCallback(() => this.toggleStatsPanel());
 
     // Create dungeon tooltip (shows portal stats above minimap)
     this.dungeonTooltip = new DungeonTooltip(this);
@@ -1714,6 +1722,11 @@ export class GameScene extends Phaser.Scene {
         if (Phaser.Input.Keyboard.JustDown(this.keys.U) && this.craftingUI.isVisible()) {
           this.craftingUI.giveTestOrbs();
         }
+
+        // P key — toggle stats panel
+        if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
+          this.toggleStatsPanel();
+        }
       }
 
       // Calculate aim angle
@@ -1736,7 +1749,7 @@ export class GameScene extends Phaser.Scene {
 
       // Only shoot if not clicking on UI panels and not dragging items
       const pointer = this.input.activePointer;
-      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
+      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible() || this.statsPanel.isVisible();
       const isDragging = this.hud.dragManager.isDragging();
       shooting = pointer.isDown && !overUI && !isDragging;
     }
@@ -2112,6 +2125,11 @@ export class GameScene extends Phaser.Scene {
         (localPlayer.portalGems as number) ?? 0
       );
 
+      // Update stats panel if visible
+      if (this.statsPanel.isVisible()) {
+        this.statsPanel.update(currentLevel, this.hud.inventoryUI.getEquipment());
+      }
+
       // XP gain floating text
       if (currentXp > this.lastKnownXp && this.lastKnownXp > 0 && localSprite) {
         const gained = currentXp - this.lastKnownXp;
@@ -2180,6 +2198,7 @@ export class GameScene extends Phaser.Scene {
     this.pressEText?.destroy();
     this.dungeonTooltip?.hide();
     this.craftingUI?.hide();
+    this.statsPanel?.hide();
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.inputSendTimer = 0;
@@ -2490,8 +2509,25 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Close stats panel if open (mutual exclusion)
+    if (this.statsPanel.isVisible()) {
+      this.statsPanel.hide();
+    }
+
     const orbCounts = readOrbCounts(localPlayer);
     this.craftingUI.show(orbCounts);
+  }
+
+  private toggleStatsPanel(): void {
+    if (this.statsPanel.isVisible()) {
+      this.statsPanel.hide();
+    } else {
+      // Close crafting UI if open (mutual exclusion)
+      if (this.craftingUI.isVisible()) {
+        this.craftingUI.hide();
+      }
+      this.statsPanel.show();
+    }
   }
 
   private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {

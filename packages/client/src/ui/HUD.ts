@@ -121,6 +121,12 @@ export class HUD {
   lootBagUI: LootBagUI;
   dragManager: DragManager;
 
+  // Stats button
+  private statsButton: Phaser.GameObjects.Graphics;
+  private statsButtonZone: Phaser.GameObjects.Zone;
+  private statsButtonText: Phaser.GameObjects.Text;
+  private onStatsButtonClick: (() => void) | null = null;
+
   // Section origins (stored for bar drawing)
   private barsX: number;
   private barsY: number;
@@ -167,7 +173,7 @@ export class HUD {
 
     // Section origins
     this.barsX = this.panelX + innerPad;
-    this.barsY = this.panelY + innerPad + Math.round((maxH - barsH) / 2);
+    this.barsY = this.panelY + innerPad;
 
     const eqX = this.barsX + barsW + sectionGap;
     const eqY = this.panelY + innerPad;
@@ -250,7 +256,7 @@ export class HUD {
     // --- Q hint (below zone text) ---
     const hintY = 15 + Math.round(23 * S);
     this.qHintText = scene.add
-      .text(screenW / 2, hintY, "Q: Nexus  |  SPACE: Ability  |  E: Portal  |  F: HP Pot  |  G: MP Pot", {
+      .text(screenW / 2, hintY, "Q: Nexus  |  SPACE: Ability  |  E: Portal  |  F: HP Pot  |  G: MP Pot  |  P: Stats", {
         fontSize: hintFontSize,
         color: "#888888",
         fontFamily: "monospace",
@@ -456,6 +462,45 @@ export class HUD {
     this.drawHealthBar(100, 100, 0);
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
+
+    // --- Stats button (below bars, filling remaining space) ---
+    const statsBtnGap = Math.round(2 * S);
+    const statsBtnY = this.barsY + barsH + statsBtnGap;
+    const statsBtnH = (this.panelY + innerPad + maxH) - statsBtnY;
+    const statsBtnW = this.barWidth;
+    const statsBtnX = this.barsX;
+
+    this.statsButton = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.statsButton.fillStyle(0x333344, 0.7);
+    this.statsButton.fillRoundedRect(statsBtnX, statsBtnY, statsBtnW, statsBtnH, 3);
+    this.statsButton.lineStyle(1, 0x555566, 0.8);
+    this.statsButton.strokeRoundedRect(statsBtnX, statsBtnY, statsBtnW, statsBtnH, 3);
+
+    this.statsButtonText = scene.add
+      .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "[P] Stats", {
+        fontSize: `${Math.round(10 * S)}px`,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5, 0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
+
+    this.statsButtonZone = scene.add
+      .zone(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, statsBtnW, statsBtnH)
+      .setScrollFactor(0)
+      .setDepth(104)
+      .setInteractive({ useHandCursor: true });
+
+    this.statsButtonZone.on("pointerover", () => {
+      this.statsButtonText.setColor("#44ffaa");
+    });
+    this.statsButtonZone.on("pointerout", () => {
+      this.statsButtonText.setColor("#aaaaaa");
+    });
+    this.statsButtonZone.on("pointerdown", () => {
+      if (this.onStatsButtonClick) this.onStatsButtonClick();
+    });
   }
 
   private drawHealthBar(hp: number, maxHp: number, hpRegen: number): void {
@@ -694,6 +739,10 @@ export class HUD {
       w: size,
       h: size,
     }));
+  }
+
+  setStatsButtonCallback(cb: () => void): void {
+    this.onStatsButtonClick = cb;
   }
 
   setPortalGemCallback(cb: (worldX: number, worldY: number) => void): void {
