@@ -302,7 +302,7 @@ export class GameRoom extends Room<GameState> {
     // Listen for item pickup from loot bag
     this.onMessage(
       ClientMessage.PickupItem,
-      (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number }) => {
+      (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number; targetSlot?: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
 
@@ -332,10 +332,14 @@ export class GameRoom extends Room<GameState> {
         // All items go to inventory (player drags to inventory)
         else {
           let emptySlot = -1;
-          for (let i = 0; i < player.inventory.length; i++) {
-            if (player.inventory[i]!.baseItemId === -1) {
-              emptySlot = i;
-              break;
+          if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length && player.inventory[data.targetSlot]!.baseItemId === -1) {
+            emptySlot = data.targetSlot;
+          } else {
+            for (let i = 0; i < player.inventory.length; i++) {
+              if (player.inventory[i]!.baseItemId === -1) {
+                emptySlot = i;
+                break;
+              }
             }
           }
           if (emptySlot === -1) return;
@@ -552,7 +556,7 @@ export class GameRoom extends Room<GameState> {
     // Listen for move consumable from dedicated slot to inventory
     this.onMessage(
       ClientMessage.MoveConsumableToInventory,
-      (client, data: { consumableSlot: number }) => {
+      (client, data: { consumableSlot: number; targetSlot?: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
 
@@ -561,12 +565,16 @@ export class GameRoom extends Room<GameState> {
         const count = this.getConsumableCount(player, slot);
         if (count <= 0) return;
 
-        // Find empty inventory slot
+        // Find empty inventory slot, preferring the target slot
         let emptyInvSlot = -1;
-        for (let i = 0; i < player.inventory.length; i++) {
-          if (player.inventory[i]!.baseItemId === -1) {
-            emptyInvSlot = i;
-            break;
+        if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length && player.inventory[data.targetSlot]!.baseItemId === -1) {
+          emptyInvSlot = data.targetSlot;
+        } else {
+          for (let i = 0; i < player.inventory.length; i++) {
+            if (player.inventory[i]!.baseItemId === -1) {
+              emptyInvSlot = i;
+              break;
+            }
           }
         }
         if (emptyInvSlot === -1) return;
@@ -626,13 +634,13 @@ export class GameRoom extends Room<GameState> {
     // Listen for crafting orb use
     this.onMessage(
       ClientMessage.UseCraftingOrb,
-      (client, data: { orbType: number; location: "inventory" | "equipment"; slotIndex: number; forgeSlotIndex?: number }) => {
+      (client, data: { orbType: number; location: "inventory" | "equipment"; slotIndex: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
 
         const orbType = data.orbType;
         if (orbType < 0 || orbType > 7) return;
-        if (!player.unlimitedOrbs && this.getOrbCount(player, orbType) <= 0) return;
+        if (this.getOrbCount(player, orbType) <= 0) return;
 
         // Get target item
         let targetSchema: ItemInstance | undefined;
@@ -646,12 +654,10 @@ export class GameRoom extends Room<GameState> {
         if (!targetSchema || targetSchema.baseItemId === -1) return;
 
         const itemData = schemaToItemData(targetSchema);
-        const result = applyCraftingOrb(orbType, itemData, data.forgeSlotIndex);
+        const result = applyCraftingOrb(orbType, itemData);
 
         if (result.success) {
-          if (!player.unlimitedOrbs) {
-            this.setOrbCount(player, orbType, this.getOrbCount(player, orbType) - 1);
-          }
+          this.setOrbCount(player, orbType, this.getOrbCount(player, orbType) - 1);
           // Replace the entire schema in the array (not in-place update)
           // so Colyseus sends a clean change to the client
           const newSchema = itemDataToSchema(result.item);
@@ -665,11 +671,11 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
-    // TESTING: Toggle unlimited crafting orbs
+    // TESTING: Give 999 of each crafting orb
     this.onMessage(ClientMessage.ToggleUnlimitedOrbs, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      player.unlimitedOrbs = !player.unlimitedOrbs;
+      for (let i = 0; i <= 7; i++) this.setOrbCount(player, i, 999);
     });
 
     // Spawn permanent test portals in nexus (bottom area)
@@ -954,7 +960,7 @@ export class GameRoom extends Room<GameState> {
   }
 
   private setOrbCount(player: Player, orbType: number, count: number): void {
-    const val = Math.max(0, Math.min(99, count));
+    const val = Math.max(0, Math.min(999, count));
     switch (orbType) {
       case CraftingOrbType.Blank: player.orbBlank = val; break;
       case CraftingOrbType.Ember: player.orbEmber = val; break;

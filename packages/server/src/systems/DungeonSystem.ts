@@ -37,6 +37,7 @@ export class DungeonSystem {
 
   // Switch mechanic tracking (VoidSanctum)
   private switchesRemaining = new Map<string, number>();
+  private bossSpawnedZones = new Set<string>();
   private bossWakeTimers = new Map<string, number>(); // zone -> wake timestamp
 
   /**
@@ -447,7 +448,10 @@ export class DungeonSystem {
    * Spawns boss when all switches are destroyed.
    */
   onSwitchDestroyed(zone: string, state: GameState): number {
-    const remaining = Math.max(0, (this.switchesRemaining.get(zone) ?? 0) - 1);
+    const current = this.switchesRemaining.get(zone) ?? 0;
+    if (current <= 0) return 0;
+
+    const remaining = current - 1;
     this.switchesRemaining.set(zone, remaining);
 
     if (remaining <= 0) {
@@ -473,6 +477,9 @@ export class DungeonSystem {
   }
 
   private spawnBossAfterSwitches(zone: string, state: GameState): void {
+    if (this.bossSpawnedZones.has(zone)) return;
+    this.bossSpawnedZones.add(zone);
+
     const mapData = this.activeDungeonMaps.get(zone);
     if (!mapData) return;
 
@@ -597,6 +604,7 @@ export class DungeonSystem {
       this.activeDungeonMaps.delete(zone);
       this.activeDungeonStats.delete(zone);
       this.switchesRemaining.delete(zone);
+      this.bossSpawnedZones.delete(zone);
       this.bossWakeTimers.delete(zone);
 
       const enemiesToRemove: string[] = [];

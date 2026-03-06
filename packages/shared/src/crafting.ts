@@ -76,6 +76,10 @@ export function applyBlankOrb(item: ItemInstanceData): CraftingResult {
   const error = validateCraftTarget(item);
   if (error) return { success: false, item, message: error };
 
+  if (item.openStats.length === 0) {
+    return { success: false, item, message: "Item has no open stats to clear." };
+  }
+
   const result = cloneItem(item);
   result.openStats = [];
   consumeForgeProtection(result);
@@ -220,18 +224,17 @@ export function applyPrismOrb(item: ItemInstanceData): CraftingResult {
 }
 
 /**
- * Forge Orb: Protects one player-chosen stat from the next orb.
- * @param slotIndex - The open stat slot index (0-4) to protect.
+ * Forge Orb: Protects one random open stat from the next orb.
  */
 export function applyForgeOrb(
   item: ItemInstanceData,
-  slotIndex: number
 ): CraftingResult {
   const error = validateCraftTarget(item);
   if (error) return { success: false, item, message: error };
 
-  if (slotIndex < 0 || slotIndex >= getOpenStatCount(item)) {
-    return { success: false, item, message: "Invalid slot to protect." };
+  const openCount = getOpenStatCount(item);
+  if (openCount === 0) {
+    return { success: false, item, message: "No stats to protect." };
   }
 
   if (item.forgeProtectedSlot >= 0) {
@@ -239,15 +242,16 @@ export function applyForgeOrb(
   }
 
   const result = cloneItem(item);
-  result.forgeProtectedSlot = slotIndex;
+  const indices: number[] = [];
+  for (let i = 0; i < openCount; i++) indices.push(i);
+  result.forgeProtectedSlot = pickRandom(indices);
   return { success: true, item: result };
 }
 
-/** Map of orb type to apply function (except Forge which needs extra param). */
+/** Map of orb type to apply function. */
 export function applyCraftingOrb(
   orbType: number,
   item: ItemInstanceData,
-  forgeSlotIndex?: number
 ): CraftingResult {
   switch (orbType) {
     case 0: return applyBlankOrb(item);
@@ -257,7 +261,7 @@ export function applyCraftingOrb(
     case 4: return applyFluxOrb(item);
     case 5: return applyVoidOrb(item);
     case 6: return applyPrismOrb(item);
-    case 7: return applyForgeOrb(item, forgeSlotIndex ?? -1);
+    case 7: return applyForgeOrb(item);
     default: return { success: false, item, message: "Unknown orb type." };
   }
 }

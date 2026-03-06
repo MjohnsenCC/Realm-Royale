@@ -1118,16 +1118,15 @@ export class HUD {
     const ring = this.scene.add.graphics().setDepth(149);
     let radius = 10;
     let alpha = 1;
-    const expandTimer = this.scene.time.addEvent({
+    this.scene.time.addEvent({
       delay: 16,
-      repeat: 30,
+      repeat: 32,
       callback: () => {
         ring.clear();
         radius += 3;
         alpha -= 0.032;
         if (alpha <= 0) {
           ring.destroy();
-          expandTimer.destroy();
           return;
         }
         ring.lineStyle(2, 0xffdd44, alpha);

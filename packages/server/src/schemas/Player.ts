@@ -41,14 +41,14 @@ export class Player extends Schema {
   @type("int8") portalGems: number = 0;
 
   // Crafting orb counters
-  @type("int8") orbBlank: number = 0;
-  @type("int8") orbEmber: number = 0;
-  @type("int8") orbShard: number = 0;
-  @type("int8") orbChaos: number = 0;
-  @type("int8") orbFlux: number = 0;
-  @type("int8") orbVoid: number = 0;
-  @type("int8") orbPrism: number = 0;
-  @type("int8") orbForge: number = 0;
+  @type("uint16") orbBlank: number = 0;
+  @type("uint16") orbEmber: number = 0;
+  @type("uint16") orbShard: number = 0;
+  @type("uint16") orbChaos: number = 0;
+  @type("uint16") orbFlux: number = 0;
+  @type("uint16") orbVoid: number = 0;
+  @type("uint16") orbPrism: number = 0;
+  @type("uint16") orbForge: number = 0;
 
   // Server-only: persistence tracking (not synced)
   accountId: string = "";
@@ -93,9 +93,6 @@ export class Player extends Schema {
   dungeonReturnX: number = 0;
   dungeonReturnY: number = 0;
   dungeonReturnZone: string = "";
-
-  // Server-only: testing flag for unlimited crafting orbs
-  unlimitedOrbs: boolean = false;
 
   // Server-only: invulnerable during zone loading transition or portal gem
   invulnerable: boolean = false;

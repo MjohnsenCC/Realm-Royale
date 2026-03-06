@@ -1710,9 +1710,9 @@ export class GameScene extends Phaser.Scene {
           this.manaPotCooldown = 500;
         }
 
-        // U key — TESTING: toggle unlimited crafting orbs
+        // U key — TESTING: give 999 of each crafting orb
         if (Phaser.Input.Keyboard.JustDown(this.keys.U) && this.craftingUI.isVisible()) {
-          this.craftingUI.toggleUnlimitedOrbs();
+          this.craftingUI.giveTestOrbs();
         }
       }
 

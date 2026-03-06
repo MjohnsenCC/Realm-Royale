@@ -419,9 +419,9 @@ export class DragManager {
       const bagItems = this.lootBagUI.getItems();
       const bagItem = bagItems[source.slotIndex];
       if (bagItem) {
-        const emptySlot = inv.findIndex(item => item.baseItemId < 0);
-        if (emptySlot !== -1) {
-          inv[emptySlot] = { ...bagItem };
+        const dropSlot = inv[target.slotIndex]?.baseItemId < 0 ? target.slotIndex : inv.findIndex(item => item.baseItemId < 0);
+        if (dropSlot !== -1) {
+          inv[dropSlot] = { ...bagItem };
           this.inventoryUI.redrawSlots();
         }
         bagItems[source.slotIndex] = createEmptyItemInstance();
@@ -431,6 +431,7 @@ export class DragManager {
       this.room.send(ClientMessage.PickupItem, {
         bagId: (source as { type: "bag"; bagId: string; slotIndex: number }).bagId,
         slotIndex: source.slotIndex,
+        targetSlot: target.slotIndex,
       });
     } else if (source.type === "bag" && target.type === "consumable") {
       // Bag directly to consumable slot
@@ -542,6 +543,7 @@ export class DragManager {
       // Move one consumable from slot to inventory
       this.room.send(ClientMessage.MoveConsumableToInventory, {
         consumableSlot: source.slotIndex,
+        targetSlot: target.slotIndex,
       });
     } else if (source.type === "consumable" && target.type === "ground") {
       // Drop one consumable on ground

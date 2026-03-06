@@ -423,7 +423,7 @@ export class ItemTooltip {
     this.drawBgAndPosition(totalHeight, getSlotBorderColor(def.tier), screenX, screenY);
   }
 
-  private showCraftingOrb(orbType: number, screenX: number, screenY: number): void {
+  showCraftingOrb(orbType: number, screenX: number, screenY: number): void {
     const orbDef = ORB_DEFINITIONS[orbType];
     if (!orbDef) {
       this.hide();

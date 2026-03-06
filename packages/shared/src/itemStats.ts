@@ -200,7 +200,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
   [CraftingOrbType.Blank]: {
     type: CraftingOrbType.Blank,
     name: "Blank Orb",
-    description: "Clears all open stats. Safe reset.",
+    description: "Clears all open stats.",
     rarity: OrbRarity.Common,
     color: 0xdddddd,
   },
@@ -221,7 +221,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
   [CraftingOrbType.Chaos]: {
     type: CraftingOrbType.Chaos,
     name: "Chaos Orb",
-    description: "Rerolls ALL open stats completely. High risk.",
+    description: "Rerolls all open stats.",
     rarity: OrbRarity.VeryRare,
     color: 0xff2244,
   },
@@ -249,7 +249,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
   [CraftingOrbType.Forge]: {
     type: CraftingOrbType.Forge,
     name: "Forge Orb",
-    description: "Protects one chosen stat from the next orb.",
+    description: "Protects a random stat from the next orb.",
     rarity: OrbRarity.VeryRare,
     color: 0xffaa00,
   },

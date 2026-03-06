@@ -10,6 +10,9 @@ import {
   getItemSubtype,
   getItemColor,
   ItemCategory,
+  getCategoryName,
+  getScaledWeaponStats,
+  getScaledAbilityStats,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
@@ -44,16 +47,24 @@ export class CraftingUI {
   private itemSlotGraphics: Phaser.GameObjects.Graphics;
   private placeholderText: Phaser.GameObjects.Text;
   private itemNameText: Phaser.GameObjects.Text;
-  private statsText: Phaser.GameObjects.Text;
+  private tierText: Phaser.GameObjects.Text;
+  private dividerAboveLockedText: Phaser.GameObjects.Text;
+  private lockedStatsText: Phaser.GameObjects.Text;
+  private dividerBelowLockedText: Phaser.GameObjects.Text;
+  private openStatsText: Phaser.GameObjects.Text;
 
   // Orb slots (standalone for proper input handling)
   private orbSlotGraphics: Phaser.GameObjects.Graphics;
   private orbZones: Phaser.GameObjects.Zone[] = [];
-  private orbNameTexts: Phaser.GameObjects.Text[] = [];
   private orbCountTexts: Phaser.GameObjects.Text[] = [];
 
-  // Message
-  private messageText: Phaser.GameObjects.Text;
+  // Separator between item info and orbs
+  private separatorGraphics: Phaser.GameObjects.Graphics;
+
+  // Static orb info panel (shown to the side when hovering an orb)
+  private orbInfoBg: Phaser.GameObjects.Graphics;
+  private orbInfoNameText: Phaser.GameObjects.Text;
+  private orbInfoDescText: Phaser.GameObjects.Text;
 
   // State
   private visible = false;
@@ -62,11 +73,6 @@ export class CraftingUI {
   private currentLocation: "inventory" | "equipment" = "equipment";
   private currentSlotIndex = -1;
   private orbCounts = new Array(8).fill(0);
-  private unlimitedOrbs = false;
-
-  // Forge
-  private forgeSelecting = false;
-  private forgeSlotButtons: Phaser.GameObjects.Text[] = [];
 
   // Callbacks
   private onCloseCallback: (() => void) | null = null;
@@ -93,10 +99,10 @@ export class CraftingUI {
     this.scene = scene;
     this.S = getUIScale();
     const S = this.S;
-    const pad = Math.round(10 * S);
+    const pad = Math.round(12 * S);
 
-    this.panelWidth = Math.round(280 * S);
-    this.panelHeight = Math.round(380 * S);
+    this.panelWidth = Math.round(260 * S);
+    this.panelHeight = Math.round(340 * S);
 
     const screenW = scene.scale.width;
     const screenH = scene.scale.height;
@@ -104,10 +110,10 @@ export class CraftingUI {
     this.py = Math.round(screenH / 2 - this.panelHeight / 2);
 
     const titleFontSize = `${Math.round(13 * S)}px`;
-    const nameFontSize = `${Math.round(11 * S)}px`;
-    const statsFontSize = `${Math.round(9 * S)}px`;
+    const nameFontSize = `${Math.round(12 * S)}px`;
+    const tierFontSize = `${Math.round(10 * S)}px`;
+    const statsFontSize = `${Math.round(10 * S)}px`;
     const smallFontSize = `${Math.round(8 * S)}px`;
-    const msgFontSize = `${Math.round(9 * S)}px`;
 
     // --- Panel container (non-interactive visuals only) ---
     this.panelContainer = scene.add.container(0, 0).setScrollFactor(0).setDepth(250).setVisible(false);
@@ -118,23 +124,27 @@ export class CraftingUI {
     this.itemSlotGraphics = scene.add.graphics();
     this.panelContainer.add(this.itemSlotGraphics);
 
+    this.separatorGraphics = scene.add.graphics();
+    this.panelContainer.add(this.separatorGraphics);
+
     this.orbSlotGraphics = scene.add.graphics();
     this.panelContainer.add(this.orbSlotGraphics);
 
     // --- Title ---
     this.titleText = scene.add
-      .text(this.px + pad, this.py + pad, "Crafting", {
+      .text(this.px + this.panelWidth / 2, this.py + pad, "Crafting", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily: "monospace",
         fontStyle: "bold",
       })
+      .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(251);
 
-    // INF toggle label (top-right)
+    // Dev tool hint label (top-right)
     this.unlimitedOrbsText = scene.add
-      .text(this.px + this.panelWidth - pad, this.py + pad, "[INF OFF] (U)", {
+      .text(this.px + this.panelWidth - pad, this.py + pad, "+999 (U)", {
         fontSize: smallFontSize,
         color: "#555555",
         fontFamily: "monospace",
@@ -147,7 +157,7 @@ export class CraftingUI {
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText = scene.add
       .text(this.px + this.panelWidth / 2, placeholderY, "Drag an item here to craft", {
-        fontSize: statsFontSize,
+        fontSize: `${Math.round(9 * S)}px`,
         color: "#666688",
         fontFamily: "monospace",
         fontStyle: "italic",
@@ -157,44 +167,141 @@ export class CraftingUI {
       .setDepth(251);
 
     // --- Central item slot ---
-    this.itemSlotSize = Math.round(48 * S);
+    this.itemSlotSize = Math.round(44 * S);
     this.itemSlotCx = this.px + Math.round(this.panelWidth / 2);
     this.itemSlotCy = placeholderY + Math.round(14 * S) + Math.round(this.itemSlotSize / 2);
+
+    const cx = this.px + this.panelWidth / 2;
+    const wrapWidth = this.panelWidth - pad * 2;
 
     // Item name (below slot)
     const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(6 * S);
     this.itemNameText = scene.add
-      .text(this.px + this.panelWidth / 2, nameY, "", {
+      .text(cx, nameY, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
+        fontStyle: "bold",
         align: "center",
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(251)
-      .setWordWrapWidth(this.panelWidth - pad * 2);
+      .setWordWrapWidth(wrapWidth);
 
-    // Stats (below item name)
-    const statsY = nameY + Math.round(18 * S);
-    this.statsText = scene.add
-      .text(this.px + pad, statsY, "", {
+    // Tier label (below name)
+    const tierY = nameY + Math.round(16 * S);
+    this.tierText = scene.add
+      .text(cx, tierY, "", {
+        fontSize: tierFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(251);
+
+    // Divider above locked stats
+    this.dividerAboveLockedText = scene.add
+      .text(cx, 0, "", {
         fontSize: statsFontSize,
-        color: "#aaffaa",
+        color: "#444466",
+        fontFamily: "monospace",
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(251);
+
+    // Locked stats
+    this.lockedStatsText = scene.add
+      .text(cx, 0, "", {
+        fontSize: statsFontSize,
+        color: "#8a7a6a",
         fontFamily: "monospace",
         lineSpacing: 2,
+        align: "center",
       })
+      .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(251)
-      .setWordWrapWidth(this.panelWidth - pad * 2);
+      .setWordWrapWidth(wrapWidth);
 
-    // --- Orb slots (4 cols x 2 rows) ---
-    this.orbSlotW = Math.round(56 * S);
-    this.orbSlotH = Math.round(42 * S);
-    this.orbGapX = Math.round(5 * S);
-    this.orbGapY = Math.round(5 * S);
-    this.orbStartX = this.px + pad;
-    this.orbStartY = this.py + Math.round(230 * S);
+    // Divider below locked stats
+    this.dividerBelowLockedText = scene.add
+      .text(cx, 0, "", {
+        fontSize: statsFontSize,
+        color: "#444466",
+        fontFamily: "monospace",
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(251);
+
+    // Open stats
+    this.openStatsText = scene.add
+      .text(cx, 0, "", {
+        fontSize: statsFontSize,
+        color: "#88ccff",
+        fontFamily: "monospace",
+        lineSpacing: 2,
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(251)
+      .setWordWrapWidth(wrapWidth);
+
+    // --- Static orb info panel (positioned to the right of the crafting panel) ---
+    const orbInfoWidth = Math.round(160 * S);
+    const orbInfoPad = Math.round(8 * S);
+
+    this.orbInfoBg = scene.add.graphics().setScrollFactor(0).setDepth(260).setVisible(false);
+
+    this.orbInfoNameText = scene.add
+      .text(0, 0, "", {
+        fontSize: `${Math.round(11 * S)}px`,
+        color: "#ffffff",
+        fontFamily: "monospace",
+        fontStyle: "bold",
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(261)
+      .setVisible(false)
+      .setWordWrapWidth(orbInfoWidth - orbInfoPad * 2);
+
+    this.orbInfoDescText = scene.add
+      .text(0, 0, "", {
+        fontSize: `${Math.round(9 * S)}px`,
+        color: "#888899",
+        fontFamily: "monospace",
+        fontStyle: "italic",
+        align: "center",
+      })
+      .setOrigin(0.5, 0)
+      .setScrollFactor(0)
+      .setDepth(261)
+      .setVisible(false)
+      .setWordWrapWidth(orbInfoWidth - orbInfoPad * 2);
+
+    // --- Orb slots (4 cols x 2 rows, anchored to bottom of panel) ---
+    this.orbSlotW = Math.round(50 * S);
+    this.orbSlotH = Math.round(36 * S);
+    this.orbGapX = Math.round(6 * S);
+    this.orbGapY = Math.round(6 * S);
+
+    // Center the orb grid horizontally
+    const totalGridW = ORB_COLS * this.orbSlotW + (ORB_COLS - 1) * this.orbGapX;
+    this.orbStartX = this.px + Math.round((this.panelWidth - totalGridW) / 2);
+
+    // Anchor to bottom of panel
+    const orbRows = Math.ceil(ORB_KEYS.length / ORB_COLS);
+    const totalGridH = orbRows * this.orbSlotH + (orbRows - 1) * this.orbGapY;
+    this.orbStartY = this.py + this.panelHeight - pad - totalGridH;
 
     for (let i = 0; i < ORB_KEYS.length; i++) {
       const col = i % ORB_COLS;
@@ -202,8 +309,6 @@ export class CraftingUI {
       const sx = this.orbStartX + col * (this.orbSlotW + this.orbGapX);
       const sy = this.orbStartY + row * (this.orbSlotH + this.orbGapY);
       const orbType = ORB_KEYS[i];
-      const orbDef = ORB_DEFINITIONS[orbType];
-      const colorStr = `#${orbDef.color.toString(16).padStart(6, "0")}`;
 
       // Interactive zone (standalone, NOT in container)
       const zone = scene.add
@@ -213,46 +318,23 @@ export class CraftingUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerdown", () => this.onOrbClick(orbType));
+      zone.on("pointerover", () => this.showOrbInfo(orbType));
+      zone.on("pointerout", () => this.hideOrbInfo());
 
       this.orbZones.push(zone);
 
-      // Orb name text (standalone)
-      const nameText = scene.add
-        .text(sx + this.orbSlotW / 2, sy + this.orbSlotH - Math.round(6 * S), orbDef.name, {
-          fontSize: smallFontSize,
-          color: colorStr,
-          fontFamily: "monospace",
-        })
-        .setOrigin(0.5, 1)
-        .setScrollFactor(0)
-        .setDepth(251);
-      this.orbNameTexts.push(nameText);
-
-      // Count text (standalone)
+      // Count text (bottom-right corner)
       const countText = scene.add
-        .text(sx + this.orbSlotW - Math.round(3 * S), sy + Math.round(3 * S), "x0", {
+        .text(sx + this.orbSlotW - Math.round(2 * S), sy + this.orbSlotH - Math.round(2 * S), "x0", {
           fontSize: smallFontSize,
           color: "#888888",
           fontFamily: "monospace",
         })
-        .setOrigin(1, 0)
+        .setOrigin(1, 1)
         .setScrollFactor(0)
         .setDepth(251);
       this.orbCountTexts.push(countText);
     }
-
-    // --- Message text ---
-    const msgY = this.py + this.panelHeight - Math.round(22 * S);
-    this.messageText = scene.add
-      .text(this.px + pad, msgY, "", {
-        fontSize: msgFontSize,
-        color: "#ffaa44",
-        fontFamily: "monospace",
-        fontStyle: "italic",
-      })
-      .setScrollFactor(0)
-      .setDepth(251)
-      .setWordWrapWidth(this.panelWidth - pad * 2);
 
     // Start hidden
     this.setAllVisible(false);
@@ -271,9 +353,6 @@ export class CraftingUI {
     this.currentLocation = "equipment";
     this.currentSlotIndex = -1;
     this.orbCounts = [...orbCounts];
-    this.forgeSelecting = false;
-    this.clearForgeSlotButtons();
-    this.messageText.setText("");
     this.visible = true;
     this.setAllVisible(true);
     this.redraw();
@@ -281,10 +360,9 @@ export class CraftingUI {
 
   hide(): void {
     this.visible = false;
-    this.forgeSelecting = false;
-    this.clearForgeSlotButtons();
     this.currentItem = null;
     this.currentSlotIndex = -1;
+    this.hideOrbInfo();
     this.setAllVisible(false);
     if (this.onCloseCallback) this.onCloseCallback();
   }
@@ -303,26 +381,14 @@ export class CraftingUI {
 
   selectItem(item: ItemInstanceData, location: "inventory" | "equipment", slotIndex: number): void {
     if (item.baseItemId < 0) return;
-    if (item.isUT) {
-      this.showMessage("Cannot craft UT items.");
-      return;
-    }
+    if (item.isUT) return;
     const category = getItemCategory(item.baseItemId);
-    if (category === ItemCategory.Consumable) {
-      this.showMessage("Cannot craft consumables.");
-      return;
-    }
-    if (category === ItemCategory.CraftingOrb) {
-      this.showMessage("Cannot craft orbs.");
-      return;
-    }
+    if (category === ItemCategory.Consumable) return;
+    if (category === ItemCategory.CraftingOrb) return;
 
     this.currentItem = item;
     this.currentLocation = location;
     this.currentSlotIndex = slotIndex;
-    this.forgeSelecting = false;
-    this.clearForgeSlotButtons();
-    this.messageText.setText("");
     this.redraw();
   }
 
@@ -340,7 +406,6 @@ export class CraftingUI {
     if (!this.visible) return;
     const slotX = this.itemSlotCx - this.itemSlotSize / 2;
     const slotY = this.itemSlotCy - this.itemSlotSize / 2;
-    // Redraw item slot with highlight border
     this.itemSlotGraphics.clear();
     this.itemSlotGraphics.fillStyle(0x222233, 0.6);
     this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
@@ -357,8 +422,6 @@ export class CraftingUI {
     if (item.baseItemId < 0) {
       this.currentItem = null;
       this.currentSlotIndex = -1;
-      this.forgeSelecting = false;
-      this.clearForgeSlotButtons();
       this.redraw();
       return;
     }
@@ -366,14 +429,9 @@ export class CraftingUI {
     this.redraw();
   }
 
-  toggleUnlimitedOrbs(): void {
+  giveTestOrbs(): void {
     if (!this.room) return;
-    this.unlimitedOrbs = !this.unlimitedOrbs;
     this.room.send(ClientMessage.ToggleUnlimitedOrbs);
-    this.unlimitedOrbsText.setText(this.unlimitedOrbs ? "[INF ON] (U)" : "[INF OFF] (U)");
-    this.unlimitedOrbsText.setColor(this.unlimitedOrbs ? "#44ff44" : "#555555");
-    this.redrawOrbCounts();
-    this.showMessage(this.unlimitedOrbs ? "Unlimited orbs enabled." : "Unlimited orbs disabled.");
   }
 
   // ---- Visibility management ----
@@ -384,8 +442,11 @@ export class CraftingUI {
     this.unlimitedOrbsText.setVisible(v);
     this.placeholderText.setVisible(v);
     this.itemNameText.setVisible(v);
-    this.statsText.setVisible(v);
-    this.messageText.setVisible(v);
+    this.tierText.setVisible(v);
+    this.dividerAboveLockedText.setVisible(v);
+    this.lockedStatsText.setVisible(v);
+    this.dividerBelowLockedText.setVisible(v);
+    this.openStatsText.setVisible(v);
 
     for (const zone of this.orbZones) {
       zone.setVisible(v);
@@ -395,8 +456,9 @@ export class CraftingUI {
         zone.disableInteractive();
       }
     }
-    for (const t of this.orbNameTexts) t.setVisible(v);
     for (const t of this.orbCountTexts) t.setVisible(v);
+
+    if (!v) this.hideOrbInfo();
   }
 
   // ---- Drawing ----
@@ -404,15 +466,28 @@ export class CraftingUI {
   private redraw(): void {
     this.drawPanel();
     this.drawItemSlot();
+    this.drawSeparator();
     this.drawOrbSlots();
   }
 
   private drawPanel(): void {
     this.panelBg.clear();
     this.panelBg.fillStyle(0x111122, 0.95);
-    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 6);
+    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
     this.panelBg.lineStyle(2, 0x6666aa, 0.8);
-    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 6);
+    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
+  }
+
+  private drawSeparator(): void {
+    this.separatorGraphics.clear();
+    const S = this.S;
+    const pad = Math.round(12 * S);
+    const sepY = this.orbStartY - Math.round(8 * S);
+    this.separatorGraphics.lineStyle(1, 0x444466, 0.6);
+    this.separatorGraphics.lineBetween(
+      this.px + pad, sepY,
+      this.px + this.panelWidth - pad, sepY
+    );
   }
 
   private drawItemSlot(): void {
@@ -424,15 +499,20 @@ export class CraftingUI {
       this.placeholderText.setVisible(true);
       this.itemSlotGraphics.fillStyle(0x222233, 0.6);
       this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
-      this.itemSlotGraphics.lineStyle(2, 0x333344, 1);
+      this.itemSlotGraphics.lineStyle(1, 0x333344, 1);
       this.itemSlotGraphics.strokeRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
       this.itemNameText.setText("");
-      this.statsText.setText("");
+      this.tierText.setText("");
+      this.dividerAboveLockedText.setText("");
+      this.lockedStatsText.setText("");
+      this.dividerBelowLockedText.setText("");
+      this.openStatsText.setText("");
       return;
     }
 
     this.placeholderText.setVisible(false);
     const item = this.currentItem;
+    const S = this.S;
 
     // Slot background with tier border
     const tier = item.isUT ? 13 : item.instanceTier;
@@ -451,28 +531,77 @@ export class CraftingUI {
     // Item name
     this.itemNameText.setText(getItemInstanceName(item));
 
-    // Stats
-    const lines: string[] = [];
-    if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-      const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier);
-      lines.push(`[L] +${fmtVal(val)} ${STAT_NAMES[item.lockedStat1Type] ?? "???"} (T${item.lockedStat1Tier})`);
+    // Tier label
+    this.tierText.setText(`T${item.instanceTier} ${getCategoryName(category)}`);
+
+    // === Build locked stats per category (matching tooltip logic) ===
+    const lockedLines: string[] = [];
+
+    if (category === ItemCategory.Weapon) {
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const dmgTier = item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
+      const frTier = item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
+      lockedLines.push(`Damage: ${ws.damage}${dmgTier}`);
+      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s${frTier}`);
+    } else if (category === ItemCategory.Ability) {
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const dmgTier = item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
+      const manaTier = item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
+      lockedLines.push(`Damage: ${as.damage}${dmgTier}`);
+      lockedLines.push(`Mana Cost: ${as.manaCost}${manaTier}`);
+    } else {
+      // Armor and Ring: use rolled locked stat bonuses
+      if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
+        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier, true);
+        const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
+        lockedLines.push(`+${fmtVal(val)} ${name} (T${item.lockedStat1Tier})`);
+      }
+      if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
+        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier, true);
+        const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
+        lockedLines.push(`+${fmtVal(val)} ${name} (T${item.lockedStat2Tier})`);
+      }
     }
-    if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-      const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier);
-      lines.push(`[L] +${fmtVal(val)} ${STAT_NAMES[item.lockedStat2Type] ?? "???"} (T${item.lockedStat2Tier})`);
+
+    // === Layout stats vertically ===
+    let currentY = this.tierText.y + this.tierText.height + Math.round(4 * S);
+
+    // Divider above locked stats
+    if (lockedLines.length > 0) {
+      this.dividerAboveLockedText.setText("────────────");
+      this.dividerAboveLockedText.setY(currentY);
+      currentY += this.dividerAboveLockedText.height + 2;
+    } else {
+      this.dividerAboveLockedText.setText("");
     }
-    const openCount = Math.floor(item.openStats.length / 2);
+
+    // Locked stats
+    this.lockedStatsText.setText(lockedLines.join("\n"));
+    this.lockedStatsText.setY(currentY);
+    if (lockedLines.length > 0) {
+      currentY += this.lockedStatsText.height + 2;
+    }
+
+    // Divider below locked stats
+    if (lockedLines.length > 0) {
+      this.dividerBelowLockedText.setText("────────────");
+      this.dividerBelowLockedText.setY(currentY);
+      currentY += this.dividerBelowLockedText.height + 2;
+    } else {
+      this.dividerBelowLockedText.setText("");
+    }
+
+    // === Open stats (no empty placeholders) ===
+    const openLines: string[] = [];
     for (let i = 0; i < item.openStats.length; i += 2) {
       const sType = item.openStats[i];
       const sTier = item.openStats[i + 1];
       const val = getStatValue(sType, sTier, item.instanceTier);
       const forge = item.forgeProtectedSlot === Math.floor(i / 2) ? " [P]" : "";
-      lines.push(`+${fmtVal(val)} ${STAT_NAMES[sType] ?? "???"} (T${sTier})${forge}`);
+      openLines.push(`+${fmtVal(val)} ${STAT_NAMES[sType] ?? "???"} (T${sTier})${forge}`);
     }
-    for (let i = 0; i < 5 - openCount; i++) {
-      lines.push("--- Empty ---");
-    }
-    this.statsText.setText(lines.join("\n"));
+    this.openStatsText.setText(openLines.length > 0 ? openLines.join("\n") : "No open stats");
+    this.openStatsText.setY(currentY);
   }
 
   private drawOrbSlots(): void {
@@ -486,21 +615,21 @@ export class CraftingUI {
       const orbType = ORB_KEYS[i];
       const orbDef = ORB_DEFINITIONS[orbType];
       const count = this.orbCounts[orbType] ?? 0;
-      const available = this.unlimitedOrbs || count > 0;
+      const available = count > 0;
 
       // Slot background
-      this.orbSlotGraphics.fillStyle(available ? 0x222244 : 0x191924, 0.8);
-      this.orbSlotGraphics.fillRect(sx, sy, this.orbSlotW, this.orbSlotH);
+      this.orbSlotGraphics.fillStyle(0x222233, 0.6);
+      this.orbSlotGraphics.fillRoundedRect(sx, sy, this.orbSlotW, this.orbSlotH, 4);
 
-      // Slot border (orb color when available, dim otherwise)
-      this.orbSlotGraphics.lineStyle(1, available ? orbDef.color : 0x333344, available ? 0.8 : 0.4);
-      this.orbSlotGraphics.strokeRect(sx, sy, this.orbSlotW, this.orbSlotH);
+      // Slot border (always the same neutral color)
+      this.orbSlotGraphics.lineStyle(1, 0x333344, 1);
+      this.orbSlotGraphics.strokeRoundedRect(sx, sy, this.orbSlotW, this.orbSlotH, 4);
 
-      // Orb circle icon in upper portion of slot
+      // Orb circle icon centered in slot (always shown with orb color, dimmed if count is 0)
       const iconCx = sx + this.orbSlotW / 2;
-      const iconCy = sy + this.orbSlotH * 0.35;
-      const iconR = Math.round(6 * this.S);
-      this.orbSlotGraphics.fillStyle(available ? orbDef.color : 0x333344, available ? 0.9 : 0.4);
+      const iconCy = sy + this.orbSlotH / 2;
+      const iconR = Math.round(8 * this.S);
+      this.orbSlotGraphics.fillStyle(orbDef.color, available ? 0.9 : 0.35);
       this.orbSlotGraphics.fillCircle(iconCx, iconCy, iconR);
       this.orbSlotGraphics.lineStyle(1, 0xffffff, available ? 0.3 : 0.1);
       this.orbSlotGraphics.strokeCircle(iconCx, iconCy, iconR);
@@ -509,9 +638,6 @@ export class CraftingUI {
         this.orbSlotGraphics.fillStyle(0xffffff, 0.25);
         this.orbSlotGraphics.fillCircle(iconCx - iconR * 0.25, iconCy - iconR * 0.3, iconR * 0.3);
       }
-
-      // Update name text alpha
-      this.orbNameTexts[i].setAlpha(available ? 1 : 0.35);
     }
 
     this.redrawOrbCounts();
@@ -520,104 +646,77 @@ export class CraftingUI {
   private redrawOrbCounts(): void {
     for (let i = 0; i < ORB_KEYS.length; i++) {
       const count = this.orbCounts[ORB_KEYS[i]] ?? 0;
-      if (this.unlimitedOrbs) {
-        this.orbCountTexts[i].setText("INF");
-        this.orbCountTexts[i].setColor("#44ff44");
-      } else {
-        this.orbCountTexts[i].setText(`x${count}`);
-        this.orbCountTexts[i].setColor(count > 0 ? "#ffffff" : "#444444");
-      }
+      this.orbCountTexts[i].setText(`x${count}`);
+      this.orbCountTexts[i].setColor(count > 0 ? "#ffffff" : "#444444");
     }
+  }
+
+  // ---- Orb info (static side panel) ----
+
+  private showOrbInfo(orbType: number): void {
+    const orbDef = ORB_DEFINITIONS[orbType];
+    if (!orbDef) return;
+
+    const S = this.S;
+    const infoPad = Math.round(8 * S);
+    const infoWidth = Math.round(160 * S);
+    const gap = Math.round(6 * S);
+
+    // Set text content
+    const colorStr = `#${orbDef.color.toString(16).padStart(6, "0")}`;
+    this.orbInfoNameText.setColor(colorStr);
+    this.orbInfoNameText.setText(orbDef.name);
+    this.orbInfoDescText.setText(orbDef.description);
+
+    // Calculate height
+    const nameH = this.orbInfoNameText.height;
+    const descH = this.orbInfoDescText.height;
+    const infoHeight = infoPad + nameH + Math.round(4 * S) + descH + infoPad;
+
+    // Position to the right of the crafting panel; flip left if no room
+    const screenW = this.scene.scale.width;
+    let infoX = this.px + this.panelWidth + gap;
+    if (infoX + infoWidth > screenW - 4) {
+      infoX = this.px - infoWidth - gap;
+    }
+    // Vertically align with the orb grid area
+    const infoY = this.orbStartY;
+
+    // Draw background
+    this.orbInfoBg.clear();
+    this.orbInfoBg.fillStyle(0x111122, 0.95);
+    this.orbInfoBg.fillRoundedRect(infoX, infoY, infoWidth, infoHeight, 6);
+    this.orbInfoBg.lineStyle(1, 0x6666aa, 0.6);
+    this.orbInfoBg.strokeRoundedRect(infoX, infoY, infoWidth, infoHeight, 6);
+    this.orbInfoBg.setVisible(true);
+
+    // Position text
+    const cx = infoX + infoWidth / 2;
+    this.orbInfoNameText.setPosition(cx, infoY + infoPad);
+    this.orbInfoNameText.setVisible(true);
+
+    this.orbInfoDescText.setPosition(cx, infoY + infoPad + nameH + Math.round(4 * S));
+    this.orbInfoDescText.setVisible(true);
+  }
+
+  private hideOrbInfo(): void {
+    this.orbInfoBg.setVisible(false);
+    this.orbInfoNameText.setVisible(false);
+    this.orbInfoDescText.setVisible(false);
   }
 
   // ---- Orb interaction ----
 
   private onOrbClick(orbType: number): void {
-    if (!this.room || !this.currentItem || this.currentSlotIndex < 0) {
-      if (!this.currentItem) this.showMessage("Select an item first.");
-      return;
-    }
-    if (!this.unlimitedOrbs) {
-      const count = this.orbCounts[orbType] ?? 0;
-      if (count <= 0) {
-        this.showMessage("No orbs of this type.");
-        return;
-      }
-    }
-
-    if (orbType === CraftingOrbType.Forge) {
-      this.startForgeSelection();
-      return;
-    }
+    if (!this.room || !this.currentItem || this.currentSlotIndex < 0) return;
+    const count = this.orbCounts[orbType] ?? 0;
+    if (count <= 0) return;
 
     this.room.send(ClientMessage.UseCraftingOrb, {
       orbType,
       location: this.currentLocation,
       slotIndex: this.currentSlotIndex,
     });
-    this.showMessage("Applying orb...");
-  }
-
-  private startForgeSelection(): void {
-    if (!this.currentItem) return;
-    const openCount = Math.floor(this.currentItem.openStats.length / 2);
-    if (openCount === 0) {
-      this.showMessage("No stats to protect.");
-      return;
-    }
-
-    this.forgeSelecting = true;
-    this.showMessage("Click a stat to protect:");
-    this.clearForgeSlotButtons();
-
-    const S = this.S;
-    const pad = Math.round(10 * S);
-    const btnFontSize = `${Math.round(9 * S)}px`;
-
-    for (let i = 0; i < openCount; i++) {
-      const sType = this.currentItem.openStats[i * 2];
-      const sTier = this.currentItem.openStats[i * 2 + 1];
-      const name = STAT_NAMES[sType] ?? "???";
-
-      const btnY = this.py + this.panelHeight - Math.round((50 + (openCount - i) * 16) * S);
-      const btn = this.scene.add
-        .text(this.px + pad + Math.round(10 * S), btnY, `> ${name} T${sTier}`, {
-          fontSize: btnFontSize,
-          color: "#ffaa00",
-          fontFamily: "monospace",
-        })
-        .setScrollFactor(0)
-        .setDepth(253)
-        .setInteractive({ useHandCursor: true });
-
-      btn.on("pointerdown", () => {
-        if (!this.room) return;
-        this.room.send(ClientMessage.UseCraftingOrb, {
-          orbType: CraftingOrbType.Forge,
-          location: this.currentLocation,
-          slotIndex: this.currentSlotIndex,
-          forgeSlotIndex: i,
-        });
-        this.forgeSelecting = false;
-        this.clearForgeSlotButtons();
-        this.showMessage("Forge protection applied!");
-      });
-      btn.on("pointerover", () => btn.setColor("#ffcc44"));
-      btn.on("pointerout", () => btn.setColor("#ffaa00"));
-
-      this.forgeSlotButtons.push(btn);
-    }
-  }
-
-  private clearForgeSlotButtons(): void {
-    for (const btn of this.forgeSlotButtons) {
-      btn.destroy();
-    }
-    this.forgeSlotButtons = [];
-  }
-
-  private showMessage(msg: string): void {
-    this.messageText.setText(msg);
   }
 }
 
