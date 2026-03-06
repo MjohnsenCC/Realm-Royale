@@ -326,8 +326,10 @@ export class HUD {
             isUT: false,
             lockedStat1Type: -1,
             lockedStat1Tier: 0,
+            lockedStat1Roll: 0,
             lockedStat2Type: -1,
             lockedStat2Tier: 0,
+            lockedStat2Roll: 0,
             openStats: [],
             forgeProtectedSlot: -1,
           };
@@ -463,11 +465,12 @@ export class HUD {
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
 
-    // --- Stats button (below bars, filling remaining space) ---
-    const statsBtnGap = Math.round(2 * S);
+    // --- Stats button (below bars, small square) ---
+    const statsBtnGap = Math.round(6 * S);
     const statsBtnY = this.barsY + barsH + statsBtnGap;
-    const statsBtnH = (this.panelY + innerPad + maxH) - statsBtnY;
-    const statsBtnW = this.barWidth;
+    const statsBtnSize = Math.round(20 * S);
+    const statsBtnH = statsBtnSize;
+    const statsBtnW = statsBtnSize;
     const statsBtnX = this.barsX;
 
     this.statsButton = scene.add.graphics().setScrollFactor(0).setDepth(101);
@@ -477,7 +480,7 @@ export class HUD {
     this.statsButton.strokeRoundedRect(statsBtnX, statsBtnY, statsBtnW, statsBtnH, 3);
 
     this.statsButtonText = scene.add
-      .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "[P] Stats", {
+      .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "P", {
         fontSize: `${Math.round(10 * S)}px`,
         color: "#aaaaaa",
         fontFamily: "monospace",

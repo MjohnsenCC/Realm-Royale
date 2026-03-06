@@ -248,6 +248,7 @@ export const CraftingOrbType = {
   Void: 5,
   Prism: 6,
   Forge: 7,
+  Calibrate: 8,
 } as const;
 export type CraftingOrbType = (typeof CraftingOrbType)[keyof typeof CraftingOrbType];
 

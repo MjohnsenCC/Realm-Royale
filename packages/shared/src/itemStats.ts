@@ -10,22 +10,40 @@ import {
 
 export interface ItemInstanceData {
   baseItemId: number; // category*1000 + subtype*100 + tier (or UT id)
-  instanceTier: number; // 1-6 for tiered items, 0 for UT
+  instanceTier: number; // 1-12 for tiered items, 0 for UT
   isUT: boolean;
   lockedStat1Type: number;
   lockedStat1Tier: number;
+  lockedStat1Roll: number; // 0-100 percentile within tier range
   lockedStat2Type: number;
   lockedStat2Tier: number;
-  openStats: number[]; // packed pairs: [type, tier, type, tier, ...]
-  forgeProtectedSlot: number; // index into openStats pairs (0-4), -1 if none
+  lockedStat2Roll: number; // 0-100 percentile within tier range
+  openStats: number[]; // packed triples: [type, tier, roll, type, tier, roll, ...]
+  forgeProtectedSlot: number; // index into openStats triples (0-4), -1 if none
 }
 
 // --- Constants ---
 
 export const MAX_OPEN_STATS = 5;
-export const MAX_STAT_TIER = 5;
+export const MAX_STAT_TIER = 6;
 export const MAX_ITEM_TIER = 12;
 export const ORB_MAX_STACK = 99;
+
+// --- Item Tier to Max Stat Tier Mapping ---
+// T1-2 -> Stat T1, T3-4 -> Stat T2, ..., T11-12 -> Stat T6
+
+export const MAX_STAT_TIER_FOR_ITEM_TIER: Record<number, number> = {
+  1: 1, 2: 1,
+  3: 2, 4: 2,
+  5: 3, 6: 3,
+  7: 4, 8: 4,
+  9: 5, 10: 5,
+  11: 6, 12: 6,
+};
+
+export function getMaxStatTierForItemTier(itemTier: number): number {
+  return MAX_STAT_TIER_FOR_ITEM_TIER[itemTier] ?? 1;
+}
 
 // --- Locked Stats by Item Category ---
 
@@ -65,24 +83,25 @@ export const OPEN_STAT_POOL: Record<number, number[]> = {
   ],
 };
 
-// --- Stat Values by Stat Tier (T1-T5) ---
-// These are BASE values, multiplied by ITEM_TIER_MULTIPLIER
+// --- Stat Ranges by Stat Tier (T1-T6) ---
+// Values are FINAL -- no item tier multiplier applied.
+// Each entry is [min, max].
 
-export const STAT_VALUES_BY_TIER: Record<number, Record<number, number>> = {
-  [StatType.AttackDamage]: { 1: 3, 2: 6, 3: 10, 4: 15, 5: 22 },
-  [StatType.AttackSpeed]: { 1: 5, 2: 10, 3: 18, 4: 28, 5: 40 }, // ms cooldown reduction
-  [StatType.Health]: { 1: 5, 2: 12, 3: 20, 4: 30, 5: 45 },
-  [StatType.HealthRegen]: { 1: 0.3, 2: 0.7, 3: 1.2, 4: 2.0, 5: 3.0 },
-  [StatType.ManaRegen]: { 1: 0.5, 2: 1.0, 3: 2.0, 4: 3.5, 5: 5.0 },
-  [StatType.MovementSpeed]: { 1: 2, 2: 5, 3: 8, 4: 12, 5: 18 },
-  [StatType.Mana]: { 1: 25, 2: 60, 3: 100, 4: 150, 5: 225 },
+export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]>> = {
+  [StatType.AttackDamage]:  { 1: [2, 5],     2: [6, 14],    3: [15, 24],   4: [25, 34],   5: [35, 44],   6: [45, 55] },
+  [StatType.AttackSpeed]:   { 1: [1, 2],     2: [2, 3],     3: [3, 5],     4: [5, 8],     5: [8, 10],    6: [10, 13] },
+  [StatType.Health]:        { 1: [3, 9],     2: [10, 24],   3: [25, 39],   4: [40, 54],   5: [55, 69],   6: [70, 84] },
+  [StatType.HealthRegen]:   { 1: [1, 2],     2: [2, 3],     3: [3, 5],     4: [5, 7],     5: [7, 10],    6: [10, 14] },
+  [StatType.ManaRegen]:     { 1: [1, 3],     2: [3, 5],     3: [5, 8],     4: [8, 12],    5: [12, 17],   6: [17, 23] },
+  [StatType.MovementSpeed]: { 1: [1, 4],     2: [4, 8],     3: [8, 12],    4: [12, 17],   5: [17, 22],   6: [22, 28] },
+  [StatType.Mana]:          { 1: [15, 40],   2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260], 6: [260, 340] },
 };
 
-// Separate locked stat value table for stats that scale differently as locked stats
+// Separate locked stat range table for stats that scale differently as locked stats
 // (e.g., Health on armor gives much more than Health as an open stat)
-export const LOCKED_STAT_VALUES_BY_TIER: Record<number, Record<number, number>> = {
-  [StatType.Health]: { 1: 125, 2: 300, 3: 500, 4: 750, 5: 1125 },
-  [StatType.Mana]: { 1: 25, 2: 60, 3: 100, 4: 150, 5: 225 },
+export const LOCKED_STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]>> = {
+  [StatType.Health]: { 1: [80, 170], 2: [180, 370], 3: [380, 580], 4: [590, 800], 5: [810, 1030], 6: [1040, 1280] },
+  [StatType.Mana]:   { 1: [15, 40],  2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260],  6: [260, 340] },
 };
 
 // --- Locked Quality Multiplier ---
@@ -94,10 +113,11 @@ export const LOCKED_QUALITY_MULTIPLIER: Record<number, number> = {
   3: 1.0,
   4: 1.08,
   5: 1.18,
+  6: 1.30,
 };
 
 // --- Item Tier Multiplier ---
-// Scales stat values based on item tier. T4=1.0 is the baseline.
+// Used ONLY for weapon/ability base stat scaling. NOT applied to stat tier ranges.
 
 export const ITEM_TIER_MULTIPLIER: Record<number, number> = {
   1: 0.4,
@@ -253,6 +273,13 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     rarity: OrbRarity.VeryRare,
     color: 0xffaa00,
   },
+  [CraftingOrbType.Calibrate]: {
+    type: CraftingOrbType.Calibrate,
+    name: "Calibrate Orb",
+    description: "Re-rolls the value of one open stat within its tier range.",
+    rarity: OrbRarity.Uncommon,
+    color: 0x66ff88,
+  },
 };
 
 // --- Orb Drop Chances per Difficulty Zone ---
@@ -277,37 +304,49 @@ export const ORB_DROP_CHANCES: Record<
 // Map orb rarity to specific orb types
 export const ORBS_BY_RARITY: Record<number, number[]> = {
   [OrbRarity.Common]: [CraftingOrbType.Blank, CraftingOrbType.Ember],
-  [OrbRarity.Uncommon]: [CraftingOrbType.Shard, CraftingOrbType.Flux],
+  [OrbRarity.Uncommon]: [CraftingOrbType.Shard, CraftingOrbType.Flux, CraftingOrbType.Calibrate],
   [OrbRarity.Rare]: [CraftingOrbType.Void, CraftingOrbType.Prism],
   [OrbRarity.VeryRare]: [CraftingOrbType.Chaos, CraftingOrbType.Forge],
 };
 
 // --- Stat Tier Roll Weights by Item Tier ---
-// Higher item tiers bias toward higher stat tiers
+// 6-element arrays. Weights for tiers above the item's max stat tier are 0.
 
 const STAT_TIER_WEIGHTS: Record<number, number[]> = {
-  1: [0.50, 0.30, 0.15, 0.04, 0.01], // T1 items: mostly T1-T2 stats
-  2: [0.35, 0.30, 0.20, 0.10, 0.05],
-  3: [0.20, 0.25, 0.25, 0.20, 0.10],
-  4: [0.10, 0.20, 0.30, 0.25, 0.15],
-  5: [0.05, 0.15, 0.25, 0.30, 0.25],
-  6: [0.02, 0.08, 0.20, 0.35, 0.35],
-  7: [0.01, 0.05, 0.15, 0.35, 0.44],
-  8: [0.01, 0.04, 0.12, 0.33, 0.50],
-  9: [0.01, 0.03, 0.10, 0.30, 0.56],
-  10: [0.00, 0.02, 0.08, 0.28, 0.62],
-  11: [0.00, 0.01, 0.06, 0.25, 0.68],
-  12: [0.00, 0.01, 0.04, 0.20, 0.75], // T12 items: mostly T5 stats
+  // T1-2 items: max stat tier 1
+  1:  [1.0,  0,    0,    0,    0,    0],
+  2:  [1.0,  0,    0,    0,    0,    0],
+  // T3-4 items: max stat tier 2
+  3:  [0.60, 0.40, 0,    0,    0,    0],
+  4:  [0.45, 0.55, 0,    0,    0,    0],
+  // T5-6 items: max stat tier 3
+  5:  [0.30, 0.40, 0.30, 0,    0,    0],
+  6:  [0.20, 0.35, 0.45, 0,    0,    0],
+  // T7-8 items: max stat tier 4
+  7:  [0.10, 0.25, 0.35, 0.30, 0,    0],
+  8:  [0.05, 0.15, 0.35, 0.45, 0,    0],
+  // T9-10 items: max stat tier 5
+  9:  [0.03, 0.10, 0.22, 0.35, 0.30, 0],
+  10: [0.02, 0.07, 0.18, 0.33, 0.40, 0],
+  // T11-12 items: max stat tier 6
+  11: [0.01, 0.04, 0.10, 0.25, 0.35, 0.25],
+  12: [0.01, 0.03, 0.08, 0.20, 0.33, 0.35],
 };
 
-// --- Open Stat Tier Weights ---
-// Flat weights for open stats: T1 most common, T5 rarest
-export const OPEN_STAT_TIER_WEIGHTS: number[] = [0.35, 0.28, 0.20, 0.12, 0.05];
-
-/** Roll a random stat tier for open stats, using the flat open-stat weight table. */
-export function rollOpenStatTier(): number {
-  const weights = OPEN_STAT_TIER_WEIGHTS;
-  const roll = Math.random();
+/** Roll a random stat tier for open stats, respecting the item tier cap. */
+export function rollOpenStatTier(itemTier: number): number {
+  const maxStatTier = getMaxStatTierForItemTier(itemTier);
+  // Linearly decreasing weight: slight bias toward lower tiers
+  const weights: number[] = [];
+  for (let t = 1; t <= MAX_STAT_TIER; t++) {
+    if (t > maxStatTier) {
+      weights.push(0);
+    } else {
+      weights.push(maxStatTier - t + 1);
+    }
+  }
+  const total = weights.reduce((a, b) => a + b, 0);
+  const roll = Math.random() * total;
   let cumulative = 0;
   for (let i = 0; i < weights.length; i++) {
     cumulative += weights[i];
@@ -331,11 +370,16 @@ export function rollPrerollCount(): number {
   return 0;
 }
 
+/** Roll a random percentile (0-100 inclusive integer) for a stat value within its range. */
+export function rollStatRoll(): number {
+  return Math.floor(Math.random() * 101); // 0-100
+}
+
 /**
  * Roll initial open stats for a newly generated item.
- * No duplicate stat types. Returns packed array: [type, tier, type, tier, ...].
+ * No duplicate stat types. Returns packed triples: [type, tier, roll, type, tier, roll, ...].
  */
-export function rollInitialOpenStats(category: number): number[] {
+export function rollInitialOpenStats(category: number, itemTier: number): number[] {
   const count = rollPrerollCount();
   if (count === 0) return [];
 
@@ -347,30 +391,46 @@ export function rollInitialOpenStats(category: number): number[] {
   const actual = Math.min(count, shuffled.length);
   const stats: number[] = [];
   for (let i = 0; i < actual; i++) {
-    stats.push(shuffled[i], rollOpenStatTier());
+    stats.push(shuffled[i], rollOpenStatTier(itemTier), rollStatRoll());
   }
   return stats;
 }
 
 // --- Helper Functions ---
 
-/** Get the final stat value for a stat, accounting for stat tier and item tier. */
+/** Get the final stat value for a stat, given stat tier and roll percentile (0-100).
+ *  The roll linearly interpolates between the tier's min and max.
+ *  Item tier is NOT used -- ranges are final values. */
 export function getStatValue(
   statType: number,
   statTier: number,
-  itemTier: number,
+  roll: number,
   isLocked: boolean = false
 ): number {
   const table =
-    isLocked && LOCKED_STAT_VALUES_BY_TIER[statType]
-      ? LOCKED_STAT_VALUES_BY_TIER
-      : STAT_VALUES_BY_TIER;
-  const baseValue = table[statType]?.[statTier] ?? 0;
-  const multiplier = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  return baseValue * multiplier;
+    isLocked && LOCKED_STAT_RANGES_BY_TIER[statType]
+      ? LOCKED_STAT_RANGES_BY_TIER
+      : STAT_RANGES_BY_TIER;
+  const range = table[statType]?.[statTier];
+  if (!range) return 0;
+  const [min, max] = range;
+  return Math.round(min + (max - min) * (roll / 100));
 }
 
-/** Roll a random stat tier based on item tier weights. */
+/** Get the min and max values for a stat at a given tier. */
+export function getStatRange(
+  statType: number,
+  statTier: number,
+  isLocked: boolean = false
+): [number, number] {
+  const table =
+    isLocked && LOCKED_STAT_RANGES_BY_TIER[statType]
+      ? LOCKED_STAT_RANGES_BY_TIER
+      : STAT_RANGES_BY_TIER;
+  return table[statType]?.[statTier] ?? [0, 0];
+}
+
+/** Roll a random stat tier based on item tier weights (for locked stats). */
 export function rollStatTier(itemTier: number): number {
   const weights = STAT_TIER_WEIGHTS[itemTier] ?? STAT_TIER_WEIGHTS[1];
   const roll = Math.random();
@@ -400,8 +460,10 @@ export function createEmptyItemInstance(): ItemInstanceData {
     isUT: false,
     lockedStat1Type: -1,
     lockedStat1Tier: 0,
+    lockedStat1Roll: 0,
     lockedStat2Type: -1,
     lockedStat2Tier: 0,
+    lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
   };
@@ -409,7 +471,7 @@ export function createEmptyItemInstance(): ItemInstanceData {
 
 /** Get the number of filled open stat slots. */
 export function getOpenStatCount(item: ItemInstanceData): number {
-  return Math.floor(item.openStats.length / 2);
+  return Math.floor(item.openStats.length / 3);
 }
 
 /** Get the number of empty open stat slots. */

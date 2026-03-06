@@ -12,6 +12,7 @@ import {
   ItemInstanceData,
   LOCKED_STATS_BY_CATEGORY,
   rollStatTier,
+  rollStatRoll,
   createEmptyItemInstance,
   pickRandom,
   rollInitialOpenStats,
@@ -709,9 +710,11 @@ export function generateItemInstance(
     isUT: false,
     lockedStat1Type: lockedStats[0],
     lockedStat1Tier: rollStatTier(tier),
+    lockedStat1Roll: rollStatRoll(),
     lockedStat2Type: lockedStats[1],
     lockedStat2Tier: rollStatTier(tier),
-    openStats: prerollOpenStats ? rollInitialOpenStats(category) : [],
+    lockedStat2Roll: rollStatRoll(),
+    openStats: prerollOpenStats ? rollInitialOpenStats(category, tier) : [],
     forgeProtectedSlot: -1,
   };
 }
@@ -724,8 +727,10 @@ export function generateUTItemInstance(baseItemId: number): ItemInstanceData {
     isUT: true,
     lockedStat1Type: -1,
     lockedStat1Tier: 0,
+    lockedStat1Roll: 0,
     lockedStat2Type: -1,
     lockedStat2Tier: 0,
+    lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
   };
@@ -739,8 +744,10 @@ export function generateConsumableInstance(baseItemId: number): ItemInstanceData
     isUT: false,
     lockedStat1Type: -1,
     lockedStat1Tier: 0,
+    lockedStat1Roll: 0,
     lockedStat2Type: -1,
     lockedStat2Tier: 0,
+    lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
   };
@@ -754,8 +761,10 @@ export function generateOrbInstance(orbType: number): ItemInstanceData {
     isUT: false,
     lockedStat1Type: -1,
     lockedStat1Tier: 0,
+    lockedStat1Roll: 0,
     lockedStat2Type: -1,
     lockedStat2Tier: 0,
+    lockedStat2Roll: 0,
     openStats: [],
     forgeProtectedSlot: -1,
   };

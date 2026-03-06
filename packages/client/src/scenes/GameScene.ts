@@ -2642,15 +2642,17 @@ function readItemSchema(schema: SchemaInstance): ItemInstanceData {
     isUT: (schema.isUT as boolean) ?? false,
     lockedStat1Type: (schema.lockedStat1Type as number) ?? -1,
     lockedStat1Tier: (schema.lockedStat1Tier as number) ?? 0,
+    lockedStat1Roll: (schema.lockedStat1Roll as number) ?? 0,
     lockedStat2Type: (schema.lockedStat2Type as number) ?? -1,
     lockedStat2Tier: (schema.lockedStat2Tier as number) ?? 0,
+    lockedStat2Roll: (schema.lockedStat2Roll as number) ?? 0,
     openStats,
     forgeProtectedSlot: (schema.forgeProtectedSlot as number) ?? -1,
   };
 }
 
 function readOrbCounts(player: SchemaInstance): number[] {
-  const counts = new Array(8).fill(0);
+  const counts = new Array(9).fill(0);
   counts[0] = (player.orbBlank as number) ?? 0;
   counts[1] = (player.orbEmber as number) ?? 0;
   counts[2] = (player.orbShard as number) ?? 0;
@@ -2659,6 +2661,7 @@ function readOrbCounts(player: SchemaInstance): number[] {
   counts[5] = (player.orbVoid as number) ?? 0;
   counts[6] = (player.orbPrism as number) ?? 0;
   counts[7] = (player.orbForge as number) ?? 0;
+  counts[8] = (player.orbCalibrate as number) ?? 0;
   return counts;
 }
 

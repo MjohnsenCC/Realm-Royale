@@ -25,6 +25,7 @@ export interface CharacterOrbs {
   void: number;
   prism: number;
   forge: number;
+  calibrate: number;
 }
 
 export interface CharacterData {

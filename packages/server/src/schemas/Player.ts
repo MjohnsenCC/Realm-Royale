@@ -49,6 +49,7 @@ export class Player extends Schema {
   @type("uint16") orbVoid: number = 0;
   @type("uint16") orbPrism: number = 0;
   @type("uint16") orbForge: number = 0;
+  @type("uint16") orbCalibrate: number = 0;
 
   // Server-only: persistence tracking (not synced)
   accountId: string = "";

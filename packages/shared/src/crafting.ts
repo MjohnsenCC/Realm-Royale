@@ -3,11 +3,11 @@ import { getItemCategory } from "./items";
 import {
   ItemInstanceData,
   MAX_OPEN_STATS,
-  MAX_STAT_TIER,
   OPEN_STAT_POOL,
   getOpenStatCount,
   getEmptySlotCount,
   rollOpenStatTier,
+  rollStatRoll,
   pickRandom,
   isEmptyItem,
 } from "./itemStats";
@@ -42,12 +42,13 @@ function getPool(item: ItemInstanceData): number[] {
   return OPEN_STAT_POOL[category] ?? [];
 }
 
-/** Roll a random stat from the pool at a random tier. Returns [type, tier]. */
-function rollRandomStat(item: ItemInstanceData): [number, number] {
+/** Roll a random stat from the pool at a random tier. Returns [type, tier, roll]. */
+function rollRandomStat(item: ItemInstanceData): [number, number, number] {
   const pool = getPool(item);
   const statType = pickRandom(pool);
-  const statTier = rollOpenStatTier();
-  return [statType, statTier];
+  const statTier = rollOpenStatTier(item.instanceTier);
+  const statRoll = rollStatRoll();
+  return [statType, statTier, statRoll];
 }
 
 /** Get indices of open stats that are NOT forge-protected. */
@@ -100,8 +101,8 @@ export function applyEmberOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   for (let i = 0; i < emptyCount; i++) {
-    const [statType, statTier] = rollRandomStat(result);
-    result.openStats.push(statType, statTier);
+    const [statType, statTier, statRoll] = rollRandomStat(result);
+    result.openStats.push(statType, statTier, statRoll);
   }
   consumeForgeProtection(result);
   return { success: true, item: result };
@@ -119,14 +120,14 @@ export function applyShardOrb(item: ItemInstanceData): CraftingResult {
   }
 
   const result = cloneItem(item);
-  const [statType, statTier] = rollRandomStat(result);
-  result.openStats.push(statType, statTier);
+  const [statType, statTier, statRoll] = rollRandomStat(result);
+  result.openStats.push(statType, statTier, statRoll);
   consumeForgeProtection(result);
   return { success: true, item: result };
 }
 
 /**
- * Chaos Orb: Rerolls ALL 5 open stats completely (types + tiers).
+ * Chaos Orb: Rerolls ALL 5 open stats completely (types + tiers + rolls).
  * Forge-protected slots are preserved.
  */
 export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
@@ -139,10 +140,10 @@ export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
   for (let i = 0; i < MAX_OPEN_STATS; i++) {
     if (i === item.forgeProtectedSlot && i < getOpenStatCount(item)) {
       // Preserve protected stat
-      newStats.push(item.openStats[i * 2], item.openStats[i * 2 + 1]);
+      newStats.push(item.openStats[i * 3], item.openStats[i * 3 + 1], item.openStats[i * 3 + 2]);
     } else {
-      const [statType, statTier] = rollRandomStat(result);
-      newStats.push(statType, statTier);
+      const [statType, statTier, statRoll] = rollRandomStat(result);
+      newStats.push(statType, statTier, statRoll);
     }
   }
 
@@ -152,7 +153,7 @@ export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
 }
 
 /**
- * Flux Orb: Rerolls ONE randomly selected existing stat (type + tier).
+ * Flux Orb: Rerolls ONE randomly selected existing stat (type + tier + roll).
  * Cannot reroll a forge-protected stat.
  */
 export function applyFluxOrb(item: ItemInstanceData): CraftingResult {
@@ -166,9 +167,10 @@ export function applyFluxOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   const targetIdx = pickRandom(unprotected);
-  const [statType, statTier] = rollRandomStat(result);
-  result.openStats[targetIdx * 2] = statType;
-  result.openStats[targetIdx * 2 + 1] = statTier;
+  const [statType, statTier, statRoll] = rollRandomStat(result);
+  result.openStats[targetIdx * 3] = statType;
+  result.openStats[targetIdx * 3 + 1] = statTier;
+  result.openStats[targetIdx * 3 + 2] = statRoll;
   consumeForgeProtection(result);
   return { success: true, item: result };
 }
@@ -189,8 +191,8 @@ export function applyVoidOrb(item: ItemInstanceData): CraftingResult {
   const result = cloneItem(item);
   const targetIdx = pickRandom(unprotected);
 
-  // Remove the stat pair at targetIdx
-  result.openStats.splice(targetIdx * 2, 2);
+  // Remove the stat triple at targetIdx
+  result.openStats.splice(targetIdx * 3, 3);
 
   // Adjust forge protected slot index if needed
   if (result.forgeProtectedSlot > targetIdx) {
@@ -203,7 +205,7 @@ export function applyVoidOrb(item: ItemInstanceData): CraftingResult {
 
 /**
  * Prism Orb: Rerolls the TIER of one randomly selected existing stat.
- * The stat type stays the same, only its tier (T1-T5) is re-randomized.
+ * The stat type stays the same, its tier and roll are re-randomized.
  * Cannot target a forge-protected stat.
  */
 export function applyPrismOrb(item: ItemInstanceData): CraftingResult {
@@ -217,8 +219,9 @@ export function applyPrismOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   const targetIdx = pickRandom(unprotected);
-  const newTier = rollOpenStatTier();
-  result.openStats[targetIdx * 2 + 1] = newTier;
+  const newTier = rollOpenStatTier(item.instanceTier);
+  result.openStats[targetIdx * 3 + 1] = newTier;
+  result.openStats[targetIdx * 3 + 2] = rollStatRoll(); // re-roll value for new tier
   consumeForgeProtection(result);
   return { success: true, item: result };
 }
@@ -248,6 +251,26 @@ export function applyForgeOrb(
   return { success: true, item: result };
 }
 
+/**
+ * Calibrate Orb: Re-rolls the value (0-100 percentile) of one random open stat,
+ * keeping its type and tier unchanged. Cannot target forge-protected stats.
+ */
+export function applyCalibrateOrb(item: ItemInstanceData): CraftingResult {
+  const error = validateCraftTarget(item);
+  if (error) return { success: false, item, message: error };
+
+  const unprotected = getUnprotectedIndices(item);
+  if (unprotected.length === 0) {
+    return { success: false, item, message: "No stats to calibrate." };
+  }
+
+  const result = cloneItem(item);
+  const targetIdx = pickRandom(unprotected);
+  result.openStats[targetIdx * 3 + 2] = rollStatRoll();
+  consumeForgeProtection(result);
+  return { success: true, item: result };
+}
+
 /** Map of orb type to apply function. */
 export function applyCraftingOrb(
   orbType: number,
@@ -262,6 +285,7 @@ export function applyCraftingOrb(
     case 5: return applyVoidOrb(item);
     case 6: return applyPrismOrb(item);
     case 7: return applyForgeOrb(item);
+    case 8: return applyCalibrateOrb(item);
     default: return { success: false, item, message: "Unknown orb type." };
   }
 }

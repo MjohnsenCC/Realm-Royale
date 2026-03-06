@@ -3,6 +3,7 @@ import {
   ClientMessage,
   CraftingOrbType,
   ORB_DEFINITIONS,
+  StatType,
   STAT_NAMES,
   getStatValue,
   getItemInstanceName,
@@ -27,10 +28,11 @@ const ORB_KEYS = [
   CraftingOrbType.Void,
   CraftingOrbType.Prism,
   CraftingOrbType.Forge,
+  CraftingOrbType.Calibrate,
 ] as const;
 
-// Orb slot grid: 4 columns x 2 rows
-const ORB_COLS = 4;
+// Orb slot grid: 3 columns x 3 rows
+const ORB_COLS = 3;
 
 export class CraftingUI {
   private scene: Phaser.Scene;
@@ -72,7 +74,7 @@ export class CraftingUI {
   private currentItem: ItemInstanceData | null = null;
   private currentLocation: "inventory" | "equipment" = "equipment";
   private currentSlotIndex = -1;
-  private orbCounts = new Array(8).fill(0);
+  private orbCounts = new Array(9).fill(0);
 
   // Callbacks
   private onCloseCallback: (() => void) | null = null;
@@ -102,7 +104,7 @@ export class CraftingUI {
     const pad = Math.round(12 * S);
 
     this.panelWidth = Math.round(260 * S);
-    this.panelHeight = Math.round(340 * S);
+    this.panelHeight = Math.round(380 * S);
 
     const screenW = scene.scale.width;
     const screenH = scene.scale.height;
@@ -552,12 +554,12 @@ export class CraftingUI {
     } else {
       // Armor and Ring: use rolled locked stat bonuses
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier, true);
+        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
         lockedLines.push(`+${fmtVal(val)} ${name} (T${item.lockedStat1Tier})`);
       }
       if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier, true);
+        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
         lockedLines.push(`+${fmtVal(val)} ${name} (T${item.lockedStat2Tier})`);
       }
@@ -593,12 +595,14 @@ export class CraftingUI {
 
     // === Open stats (no empty placeholders) ===
     const openLines: string[] = [];
-    for (let i = 0; i < item.openStats.length; i += 2) {
+    for (let i = 0; i < item.openStats.length; i += 3) {
       const sType = item.openStats[i];
       const sTier = item.openStats[i + 1];
-      const val = getStatValue(sType, sTier, item.instanceTier);
-      const forge = item.forgeProtectedSlot === Math.floor(i / 2) ? " [P]" : "";
-      openLines.push(`+${fmtVal(val)} ${STAT_NAMES[sType] ?? "???"} (T${sTier})${forge}`);
+      const sRoll = item.openStats[i + 2];
+      const val = getStatValue(sType, sTier, sRoll);
+      const forge = item.forgeProtectedSlot === Math.floor(i / 3) ? " [P]" : "";
+      const suffix = sType === StatType.AttackSpeed ? "%" : "";
+      openLines.push(`+${fmtVal(val)}${suffix} ${STAT_NAMES[sType] ?? "???"} (T${sTier})${forge}`);
     }
     this.openStatsText.setText(openLines.length > 0 ? openLines.join("\n") : "No open stats");
     this.openStatsText.setY(currentY);
@@ -721,5 +725,5 @@ export class CraftingUI {
 }
 
 function fmtVal(val: number): string {
-  return Number.isInteger(val) ? String(val) : val.toFixed(1);
+  return String(Math.round(val));
 }

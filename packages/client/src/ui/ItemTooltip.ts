@@ -7,8 +7,10 @@ import {
   getItemInstanceName,
   getItemColor,
   ItemCategory,
+  StatType,
   STAT_NAMES,
   getStatValue,
+  getStatRange,
   getScaledWeaponStats,
   getScaledAbilityStats,
   ORB_DEFINITIONS,
@@ -242,16 +244,24 @@ export class ItemTooltip {
     } else {
       // Armor and Ring: use rolled locked stat bonuses
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.instanceTier, true);
+        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
-        const tierInfo = shiftHeld ? ` (T${item.lockedStat1Tier})` : "";
-        lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
+        if (shiftHeld) {
+          const [min, max] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
+          lockedLines.push(`+${formatStatValue(val)} ${name} T${item.lockedStat1Tier} [${formatStatValue(min)}-${formatStatValue(max)}]`);
+        } else {
+          lockedLines.push(`+${formatStatValue(val)} ${name}`);
+        }
       }
       if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.instanceTier, true);
+        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
-        const tierInfo = shiftHeld ? ` (T${item.lockedStat2Tier})` : "";
-        lockedLines.push(`+${formatStatValue(val)} ${name}${tierInfo}`);
+        if (shiftHeld) {
+          const [min, max] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
+          lockedLines.push(`+${formatStatValue(val)} ${name} T${item.lockedStat2Tier} [${formatStatValue(min)}-${formatStatValue(max)}]`);
+        } else {
+          lockedLines.push(`+${formatStatValue(val)} ${name}`);
+        }
       }
     }
 
@@ -274,16 +284,22 @@ export class ItemTooltip {
 
     // === Open stats ===
     const openLines: string[] = [];
-    const openStatCount = Math.floor(item.openStats.length / 2);
+    const openStatCount = Math.floor(item.openStats.length / 3);
     if (openStatCount > 0) {
-      for (let i = 0; i < item.openStats.length; i += 2) {
+      for (let i = 0; i < item.openStats.length; i += 3) {
         const sType = item.openStats[i];
         const sTier = item.openStats[i + 1];
-        const val = getStatValue(sType, sTier, item.instanceTier);
+        const sRoll = item.openStats[i + 2];
+        const val = getStatValue(sType, sTier, sRoll);
         const name = STAT_NAMES[sType] ?? "???";
-        const forgeIcon = item.forgeProtectedSlot === Math.floor(i / 2) ? " [P]" : "";
-        const tierInfo = shiftHeld ? ` (T${sTier})` : "";
-        openLines.push(`+${formatStatValue(val)} ${name}${tierInfo}${forgeIcon}`);
+        const forgeIcon = item.forgeProtectedSlot === Math.floor(i / 3) ? " [P]" : "";
+        const suffix = sType === StatType.AttackSpeed ? "%" : "";
+        if (shiftHeld) {
+          const [min, max] = getStatRange(sType, sTier);
+          openLines.push(`+${formatStatValue(val)}${suffix} ${name} T${sTier} [${formatStatValue(min)}-${formatStatValue(max)}]${forgeIcon}`);
+        } else {
+          openLines.push(`+${formatStatValue(val)}${suffix} ${name}${forgeIcon}`);
+        }
       }
     }
 
@@ -491,5 +507,5 @@ export class ItemTooltip {
 }
 
 function formatStatValue(val: number): string {
-  return Number.isInteger(val) ? String(val) : val.toFixed(1);
+  return String(Math.round(val));
 }

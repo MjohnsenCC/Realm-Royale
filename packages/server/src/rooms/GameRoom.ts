@@ -639,7 +639,7 @@ export class GameRoom extends Room<GameState> {
         if (!player || !player.alive) return;
 
         const orbType = data.orbType;
-        if (orbType < 0 || orbType > 7) return;
+        if (orbType < 0 || orbType > 8) return;
         if (this.getOrbCount(player, orbType) <= 0) return;
 
         // Get target item
@@ -675,7 +675,7 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.ToggleUnlimitedOrbs, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      for (let i = 0; i <= 7; i++) this.setOrbCount(player, i, 999);
+      for (let i = 0; i <= 8; i++) this.setOrbCount(player, i, 999);
     });
 
     // Spawn permanent test portals in nexus (bottom area)
@@ -743,6 +743,7 @@ export class GameRoom extends Room<GameState> {
       player.orbVoid = character.orbs.void;
       player.orbPrism = character.orbs.prism;
       player.orbForge = character.orbs.forge;
+      player.orbCalibrate = character.orbs.calibrate ?? 0;
     } else {
       // --- Guest player: ephemeral session (current behavior) ---
       player.name =
@@ -871,6 +872,7 @@ export class GameRoom extends Room<GameState> {
         void: player.orbVoid,
         prism: player.orbPrism,
         forge: player.orbForge,
+        calibrate: player.orbCalibrate,
       },
     };
 
@@ -955,6 +957,7 @@ export class GameRoom extends Room<GameState> {
       case CraftingOrbType.Void: return player.orbVoid;
       case CraftingOrbType.Prism: return player.orbPrism;
       case CraftingOrbType.Forge: return player.orbForge;
+      case CraftingOrbType.Calibrate: return player.orbCalibrate;
       default: return 0;
     }
   }
@@ -970,6 +973,7 @@ export class GameRoom extends Room<GameState> {
       case CraftingOrbType.Void: player.orbVoid = val; break;
       case CraftingOrbType.Prism: player.orbPrism = val; break;
       case CraftingOrbType.Forge: player.orbForge = val; break;
+      case CraftingOrbType.Calibrate: player.orbCalibrate = val; break;
     }
   }
 

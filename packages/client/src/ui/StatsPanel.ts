@@ -3,7 +3,9 @@ import {
   computePlayerStats,
   getStatsForLevel,
   getScaledAbilityStats,
+  getScaledWeaponStats,
   getItemSubtype,
+  MIN_SHOOT_COOLDOWN,
   isEmptyItem,
   ItemCategory,
   ITEM_DEFS,
@@ -16,7 +18,7 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
 
-// Stat row definitions: [label, section]
+// Stat row definitions
 const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility" }[] = [
   { label: "Damage Per Second", section: "offensive" },
   { label: "Weapon DPS", section: "offensive" },
@@ -42,17 +44,23 @@ export class StatsPanel {
   private visible = false;
   private S: number;
 
-  // Panel position & size
+  // Panel outer position & visible size (the clipped viewport)
   private px: number;
   private py: number;
   private panelWidth: number;
-  private panelHeight: number;
+  private viewHeight: number;
 
-  // Graphics
+  // Full content height (may exceed viewHeight)
+  private contentHeight: number;
+
+  // Panel background (drawn at panel position, not scrolled)
   private panelBg: Phaser.GameObjects.Graphics;
+
+  // Scrollable content container — holds all text + separator graphics
+  private contentContainer: Phaser.GameObjects.Container;
   private separatorGraphics: Phaser.GameObjects.Graphics;
 
-  // Texts
+  // Texts (added to contentContainer, positioned relative to container origin)
   private titleText: Phaser.GameObjects.Text;
   private hintText: Phaser.GameObjects.Text;
   private sectionHeaders: Phaser.GameObjects.Text[] = [];
@@ -60,14 +68,29 @@ export class StatsPanel {
   private statValueTexts: Phaser.GameObjects.Text[] = [];
   private statBonusTexts: Phaser.GameObjects.Text[] = [];
 
+  // Scroll bar
+  private scrollBarBg: Phaser.GameObjects.Graphics;
+  private scrollBarThumb: Phaser.GameObjects.Graphics;
+
   // Layout constants (pre-scaled)
   private pad: number;
   private lineH: number;
   private sectionGap: number;
   private headerH: number;
 
-  // Cached Y positions for separators
+  // Separator Y positions relative to content container
   private separatorYs: number[] = [];
+
+  // Scroll state
+  private scrollY = 0;
+  private maxScrollY = 0;
+  private scrollBarWidth: number;
+
+  // Mask for clipping
+  private maskGraphics: Phaser.GameObjects.Graphics;
+
+  // Wheel listener reference for cleanup
+  private wheelListener: ((e: WheelEvent) => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -78,15 +101,16 @@ export class StatsPanel {
     this.lineH = Math.round(16 * S);
     this.sectionGap = Math.round(10 * S);
     this.headerH = Math.round(18 * S);
+    this.scrollBarWidth = Math.round(4 * S);
 
-    this.panelWidth = Math.round(300 * S);
-    // Calculate height dynamically
-    // title + hint + separator + 3 sections (header + separator each) + stat rows + bottom pad
+    this.panelWidth = Math.round(260 * S);
+
+    // Calculate full content height
     const offensiveRows = 11;
     const defensiveRows = 4;
     const utilityRows = 2;
     const totalRows = offensiveRows + defensiveRows + utilityRows;
-    this.panelHeight =
+    this.contentHeight =
       this.pad +
       this.headerH + // title
       this.lineH + // hint
@@ -95,53 +119,89 @@ export class StatsPanel {
       totalRows * this.lineH +
       this.pad;
 
-    const screenW = scene.scale.width;
+    // Position: left side, from top down to just above the HUD panel
+    // HUD panel Y = screenH - panelH - 12*S
+    // panelH = innerPad + maxH + innerPad where innerPad=8*S, maxH = max(barsH, eqSectionH, invH)
+    // eqSectionH = 36*S + 4*S + 36*S = 76*S  (the tallest section)
+    // So panelH = 8*S + 76*S + 8*S = 92*S
+    // HUD top Y = screenH - 92*S - 12*S = screenH - 104*S
     const screenH = scene.scale.height;
-    this.px = Math.round(screenW / 2 - this.panelWidth / 2);
-    this.py = Math.round(screenH / 2 - this.panelHeight / 2);
+    const hudPanelH = Math.round(92 * S);
+    const hudMargin = Math.round(12 * S);
+    const hudTopY = screenH - hudPanelH - hudMargin;
+    const panelMargin = Math.round(12 * S);
 
+    this.px = panelMargin;
+    this.py = panelMargin;
+    this.viewHeight = hudTopY - panelMargin - panelMargin; // gap above HUD
+
+    // Clamp viewHeight to content if content is shorter
+    if (this.contentHeight <= this.viewHeight) {
+      this.viewHeight = this.contentHeight;
+    }
+    this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
+
+    // --- Panel background (fixed, not scrolled) ---
+    this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(250);
+
+    // --- Scroll bar ---
+    this.scrollBarBg = scene.add.graphics().setScrollFactor(0).setDepth(252);
+    this.scrollBarThumb = scene.add.graphics().setScrollFactor(0).setDepth(253);
+
+    // --- Mask for clipping content ---
+    this.maskGraphics = scene.add.graphics().setScrollFactor(0);
+    this.maskGraphics.fillStyle(0xffffff);
+    this.maskGraphics.fillRect(this.px, this.py, this.panelWidth, this.viewHeight);
+    this.maskGraphics.setVisible(false);
+    const mask = this.maskGraphics.createGeometryMask();
+
+    // --- Scrollable content container ---
+    this.contentContainer = scene.add.container(this.px, this.py)
+      .setScrollFactor(0)
+      .setDepth(251);
+    this.contentContainer.setMask(mask);
+
+    // --- Separator graphics (inside container) ---
+    this.separatorGraphics = scene.add.graphics();
+    this.contentContainer.add(this.separatorGraphics);
+
+    // Font sizes
     const labelFontSize = `${Math.round(10 * S)}px`;
     const valueFontSize = `${Math.round(10 * S)}px`;
     const headerFontSize = `${Math.round(11 * S)}px`;
     const titleFontSize = `${Math.round(14 * S)}px`;
     const hintFontSize = `${Math.round(9 * S)}px`;
 
-    const labelX = this.px + this.pad;
-    const valueX = this.px + this.panelWidth - this.pad;
+    // Content positions (relative to container)
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(2 * S);
+    const labelX = this.pad;
+    const valueX = contentW - this.pad;
     const bonusOffsetX = Math.round(70 * S);
-    const centerX = this.px + this.panelWidth / 2;
-
-    // --- Panel background ---
-    this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(250);
-
-    // --- Separator graphics ---
-    this.separatorGraphics = scene.add.graphics().setScrollFactor(0).setDepth(250);
+    const centerX = contentW / 2;
 
     // --- Title ---
     this.titleText = scene.add
-      .text(centerX, this.py + this.pad, "CHARACTER STATS", {
+      .text(centerX, this.pad, "CHARACTER STATS", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily: "monospace",
         fontStyle: "bold",
       })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251);
+      .setOrigin(0.5, 0);
+    this.contentContainer.add(this.titleText);
 
     // --- Hint ---
     this.hintText = scene.add
-      .text(centerX, this.py + this.pad + this.headerH, "Press P to close", {
+      .text(centerX, this.pad + this.headerH, "Press P to close", {
         fontSize: hintFontSize,
         color: "#666666",
         fontFamily: "monospace",
       })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251);
+      .setOrigin(0.5, 0);
+    this.contentContainer.add(this.hintText);
 
     // --- Build rows ---
-    let curY = this.py + this.pad + this.headerH + this.lineH;
+    let curY = this.pad + this.headerH + this.lineH;
 
     // Top separator after hint
     this.separatorYs.push(curY);
@@ -169,9 +229,8 @@ export class StatsPanel {
             fontFamily: "monospace",
             fontStyle: "bold",
           })
-          .setOrigin(0, 0)
-          .setScrollFactor(0)
-          .setDepth(251);
+          .setOrigin(0, 0);
+        this.contentContainer.add(header);
         this.sectionHeaders.push(header);
 
         curY += this.headerH;
@@ -186,21 +245,19 @@ export class StatsPanel {
           color: "#bbbbbb",
           fontFamily: "monospace",
         })
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(251);
+        .setOrigin(0, 0);
+      this.contentContainer.add(label);
       this.statLabelTexts.push(label);
 
-      // Value (right-aligned, but leave room for bonus)
+      // Value (right-aligned, leave room for bonus)
       const value = scene.add
         .text(valueX - bonusOffsetX, curY, "", {
           fontSize: valueFontSize,
           color: "#ffffff",
           fontFamily: "monospace",
         })
-        .setOrigin(1, 0)
-        .setScrollFactor(0)
-        .setDepth(251);
+        .setOrigin(1, 0);
+      this.contentContainer.add(value);
       this.statValueTexts.push(value);
 
       // Bonus (right of value)
@@ -210,9 +267,8 @@ export class StatsPanel {
           color: "#88ccff",
           fontFamily: "monospace",
         })
-        .setOrigin(1, 0)
-        .setScrollFactor(0)
-        .setDepth(251);
+        .setOrigin(1, 0);
+      this.contentContainer.add(bonus);
       this.statBonusTexts.push(bonus);
 
       curY += this.lineH;
@@ -225,14 +281,39 @@ export class StatsPanel {
   show(): void {
     if (this.visible) return;
     this.visible = true;
+    this.scrollY = 0;
     this.setAllVisible(true);
     this.drawBackground();
+    this.drawSeparators();
+    this.applyScroll();
+
+    // Mouse wheel scrolling
+    this.wheelListener = (e: WheelEvent) => {
+      if (!this.visible) return;
+      // Only scroll when cursor is over the panel
+      const pointer = this.scene.input.activePointer;
+      if (
+        pointer.x >= this.px &&
+        pointer.x <= this.px + this.panelWidth &&
+        pointer.y >= this.py &&
+        pointer.y <= this.py + this.viewHeight
+      ) {
+        this.scrollY = Math.max(0, Math.min(this.maxScrollY, this.scrollY + e.deltaY * 0.5));
+        this.applyScroll();
+        e.preventDefault();
+      }
+    };
+    this.scene.game.canvas.addEventListener("wheel", this.wheelListener, { passive: false });
   }
 
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
     this.setAllVisible(false);
+    if (this.wheelListener) {
+      this.scene.game.canvas.removeEventListener("wheel", this.wheelListener);
+      this.wheelListener = null;
+    }
   }
 
   isVisible(): boolean {
@@ -247,20 +328,41 @@ export class StatsPanel {
   private drawBackground(): void {
     this.panelBg.clear();
     this.panelBg.fillStyle(0x0a0a14, 0.95);
-    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
+    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.viewHeight, 8);
     this.panelBg.lineStyle(2, 0x4a4a6a, 0.8);
-    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
+    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.viewHeight, 8);
+  }
 
-    // Draw separators
+  private drawSeparators(): void {
     this.separatorGraphics.clear();
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(2 * this.S);
     for (const sy of this.separatorYs) {
       this.separatorGraphics.lineStyle(1, 0x444466, 0.6);
-      this.separatorGraphics.lineBetween(
-        this.px + this.pad,
-        sy,
-        this.px + this.panelWidth - this.pad,
-        sy
-      );
+      this.separatorGraphics.lineBetween(this.pad, sy, contentW - this.pad, sy);
+    }
+  }
+
+  private applyScroll(): void {
+    this.contentContainer.setPosition(this.px, this.py - this.scrollY);
+
+    // Draw scroll bar
+    this.scrollBarBg.clear();
+    this.scrollBarThumb.clear();
+    if (this.maxScrollY > 0) {
+      const sbX = this.px + this.panelWidth - this.scrollBarWidth - 2;
+      const sbY = this.py + 4;
+      const sbH = this.viewHeight - 8;
+
+      // Track
+      this.scrollBarBg.fillStyle(0x222233, 0.5);
+      this.scrollBarBg.fillRoundedRect(sbX, sbY, this.scrollBarWidth, sbH, 2);
+
+      // Thumb
+      const thumbRatio = this.viewHeight / this.contentHeight;
+      const thumbH = Math.max(Math.round(20 * this.S), sbH * thumbRatio);
+      const thumbY = sbY + (sbH - thumbH) * (this.scrollY / this.maxScrollY);
+      this.scrollBarThumb.fillStyle(0x6666aa, 0.7);
+      this.scrollBarThumb.fillRoundedRect(sbX, thumbY, this.scrollBarWidth, thumbH, 2);
     }
   }
 
@@ -269,6 +371,25 @@ export class StatsPanel {
     const baseStats = getStatsForLevel(level);
     // Full stats (level + equipment)
     const fullStats = computePlayerStats(level, equipment);
+
+    // Weapon base stats (before open stat bonuses)
+    const weaponItem = equipment[ItemCategory.Weapon];
+    let weaponCooldown = baseStats.shootCooldown;
+    let weaponBaseDamage = baseStats.damage;
+    if (weaponItem && !isEmptyItem(weaponItem)) {
+      if (weaponItem.isUT) {
+        const def = ITEM_DEFS[weaponItem.baseItemId];
+        if (def?.weaponStats) {
+          weaponCooldown = def.weaponStats.shootCooldown;
+          weaponBaseDamage = def.weaponStats.damage;
+        }
+      } else {
+        const subtype = getItemSubtype(weaponItem.baseItemId);
+        const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Tier, weaponItem.lockedStat2Tier);
+        weaponCooldown = scaled.shootCooldown;
+        weaponBaseDamage = scaled.damage;
+      }
+    }
 
     // Ability stats
     const abilityItem = equipment[ItemCategory.Ability];
@@ -324,7 +445,7 @@ export class StatsPanel {
     const combinedDPS = weaponDPS + rawAbilityDPS;
 
     // Bonuses (full - base)
-    const dmgBonus = fullStats.damage - baseStats.damage;
+    const dmgBonus = fullStats.damage - weaponBaseDamage;
     const hpBonus = fullStats.maxHp - baseStats.maxHp;
     const hpRegenBonus = +(fullStats.hpRegen - baseStats.hpRegen).toFixed(2);
     const speedBonus = fullStats.speed - baseStats.speed;
@@ -342,7 +463,10 @@ export class StatsPanel {
     // Row 2: Weapon Damage
     this.setStatRow(2, String(Math.round(fullStats.damage)), dmgBonus);
     // Row 3: Attack Speed
-    this.setStatRow(3, (1000 / fullStats.shootCooldown).toFixed(2) + "/s");
+    const baseAtkSpd = 1000 / Math.max(MIN_SHOOT_COOLDOWN, weaponCooldown);
+    const fullAtkSpd = 1000 / fullStats.shootCooldown;
+    const atkSpdBonus = +(fullAtkSpd - baseAtkSpd).toFixed(2);
+    this.setStatRow(3, fullAtkSpd.toFixed(2) + "/s", atkSpdBonus);
     // Row 4: Weapon Range
     this.setStatRow(4, String(fullStats.weaponRange));
     // Row 5: Projectile Speed
@@ -364,11 +488,11 @@ export class StatsPanel {
     // Row 11: Max Health
     this.setStatRow(11, String(Math.round(fullStats.maxHp)), hpBonus);
     // Row 12: Health Regen
-    this.setStatRow(12, fullStats.hpRegen.toFixed(1) + "/s", hpRegenBonus);
+    this.setStatRow(12, Math.round(fullStats.hpRegen) + "/s", hpRegenBonus);
     // Row 13: Max Mana
     this.setStatRow(13, String(Math.round(fullStats.maxMana)), manaBonus);
     // Row 14: Mana Regen
-    this.setStatRow(14, fullStats.manaRegen.toFixed(1) + "/s", manaRegenBonus);
+    this.setStatRow(14, Math.round(fullStats.manaRegen) + "/s", manaRegenBonus);
     // Row 15: Movement Speed
     this.setStatRow(15, String(Math.round(fullStats.speed)), speedBonus);
     // Row 16: Level
@@ -396,12 +520,13 @@ export class StatsPanel {
 
   private setAllVisible(v: boolean): void {
     this.panelBg.setVisible(v);
-    this.separatorGraphics.setVisible(v);
-    this.titleText.setVisible(v);
-    this.hintText.setVisible(v);
-    for (const h of this.sectionHeaders) h.setVisible(v);
-    for (const t of this.statLabelTexts) t.setVisible(v);
-    for (const t of this.statValueTexts) t.setVisible(v);
-    for (const t of this.statBonusTexts) t.setVisible(v);
+    this.contentContainer.setVisible(v);
+    this.scrollBarBg.setVisible(v);
+    this.scrollBarThumb.setVisible(v);
+    if (!v) {
+      this.panelBg.clear();
+      this.scrollBarBg.clear();
+      this.scrollBarThumb.clear();
+    }
   }
 }

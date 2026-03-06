@@ -28,6 +28,7 @@ const DEFAULT_ORBS: CharacterOrbs = {
   void: 0,
   prism: 0,
   forge: 0,
+  calibrate: 0,
 };
 
 function generateDefaultEquipment(): ItemInstanceData[] {
