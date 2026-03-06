@@ -51,6 +51,11 @@ export class Player extends Schema {
   @type("uint16") orbForge: number = 0;
   @type("uint16") orbCalibrate: number = 0;
 
+  // Synced: last hit info for client damage indicators
+  @type("uint8") lastHitDamageType: number = 0; // 0=Physical, 1=Magic
+  @type("number") lastHitAmount: number = 0;
+  @type("uint32") lastHitSeq: number = 0; // monotonic counter for detecting new hits
+
   // Server-only: persistence tracking (not synced)
   accountId: string = "";
   characterId: string = "";
@@ -82,6 +87,8 @@ export class Player extends Schema {
   cachedWeaponRange: number = 400;
   cachedWeaponProjSpeed: number = 500;
   cachedWeaponProjSize: number = 5;
+  cachedPhysDmgReduce: number = 0;
+  cachedMagicDmgReduce: number = 0;
 
   // Speed boost from UT ability (server-only)
   speedBoostUntil: number = 0;

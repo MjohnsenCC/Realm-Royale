@@ -19,6 +19,7 @@ import {
   DungeonTile,
   EnemyAIState,
   isHostileZone,
+  DamageType,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { schemaToItemData } from "../schemas/ItemInstance";
@@ -203,7 +204,14 @@ export class CombatSystem {
           if (
             circlesOverlap(proj.x, proj.y, proj.collisionRadius, player.x, player.y, PLAYER_RADIUS)
           ) {
-            player.hp -= proj.damage;
+            const reduction = proj.damageType === DamageType.Magic
+              ? player.cachedMagicDmgReduce
+              : player.cachedPhysDmgReduce;
+            const finalDamage = Math.round(proj.damage * (1 - reduction / 100));
+            player.hp -= finalDamage;
+            player.lastHitDamageType = proj.damageType;
+            player.lastHitAmount = finalDamage;
+            player.lastHitSeq = (player.lastHitSeq ?? 0) + 1;
             projectilesToRemove.push(id);
 
             if (player.hp <= 0) {

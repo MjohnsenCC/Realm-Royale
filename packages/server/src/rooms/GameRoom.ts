@@ -124,6 +124,8 @@ function recalcPlayerStats(player: Player): void {
   player.cachedWeaponRange = stats.weaponRange;
   player.cachedWeaponProjSpeed = stats.weaponProjSpeed;
   player.cachedWeaponProjSize = stats.weaponProjSize;
+  player.cachedPhysDmgReduce = stats.physDmgReduce;
+  player.cachedMagicDmgReduce = stats.magicDmgReduce;
 
   if (player.maxHp > oldMaxHp) {
     player.hp = Math.min(player.hp + (player.maxHp - oldMaxHp), player.maxHp);

@@ -7,6 +7,7 @@ import {
   IdleIntensity,
   RealmBiome,
   DifficultyZone,
+  DamageType,
   getZoneBase,
 } from "./types";
 
@@ -43,6 +44,7 @@ export interface EnemyDefinition {
   movementPattern?: number; // MovementPatternType value (realm overworld only)
   idleIntensity?: number; // IdleIntensity value (0=low, 1=medium, 2=high)
   dungeonDrop?: number; // DungeonType value — this enemy drops a portal for this dungeon
+  defaultDamageType?: number; // DamageType value (0=Physical, 1=Magic); defaults to Physical
 }
 
 // --- Pack (cluster) enemy definitions ---
@@ -220,6 +222,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x446644,
     difficultyZone: DifficultyZone.Lowlands,
     biomeAffinity: [RealmBiome.Marsh, RealmBiome.Jungle],
+    defaultDamageType: DamageType.Magic,
   },
 
   // ===== MIDLANDS - Tier 3 (DifficultyZone.Midlands) =====
@@ -265,6 +268,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xccaa66,
     difficultyZone: DifficultyZone.Midlands,
     biomeAffinity: [RealmBiome.Desert, RealmBiome.Shrubland, RealmBiome.DesertCliffs],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.JungleStalker]: {
     type: EnemyType.JungleStalker,
@@ -310,6 +314,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x88bbdd,
     difficultyZone: DifficultyZone.Highlands,
     biomeAffinity: [RealmBiome.Snow, RealmBiome.Tundra],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.CliffDrake]: {
     type: EnemyType.CliffDrake,
@@ -353,6 +358,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x6688cc,
     difficultyZone: DifficultyZone.Highlands,
     biomeAffinity: [RealmBiome.Tundra, RealmBiome.Snow, RealmBiome.DesertCliffs],
+    defaultDamageType: DamageType.Magic,
   },
 
   // ===== GODLANDS - Tier 5 (DifficultyZone.Godlands) =====
@@ -376,6 +382,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xffcc44,
     difficultyZone: DifficultyZone.Godlands,
     biomeAffinity: [RealmBiome.Snow, RealmBiome.Scorched],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.VoidWalker]: {
     type: EnemyType.VoidWalker,
@@ -398,6 +405,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x9922cc,
     difficultyZone: DifficultyZone.Godlands,
     biomeAffinity: [RealmBiome.Tundra, RealmBiome.Scorched, RealmBiome.DesertCliffs],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.AncientTitan]: {
     type: EnemyType.AncientTitan,
@@ -443,6 +451,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x88bbff,
     difficultyZone: DifficultyZone.Shore,
     biomeAffinity: [RealmBiome.Beach, RealmBiome.Marsh],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.CoconutCrab]: {
     type: EnemyType.CoconutCrab,
@@ -595,6 +604,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xddcc88,
     difficultyZone: DifficultyZone.Midlands,
     biomeAffinity: [RealmBiome.Desert, RealmBiome.DryPlains, RealmBiome.DesertCliffs],
+    defaultDamageType: DamageType.Magic,
   },
 
   // ===== HIGHLANDS - Tier 4 (NEW) =====
@@ -619,6 +629,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xaaddff,
     difficultyZone: DifficultyZone.Highlands,
     biomeAffinity: [RealmBiome.Snow, RealmBiome.Tundra, RealmBiome.Taiga],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.ThunderHawk]: {
     type: EnemyType.ThunderHawk,
@@ -641,6 +652,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xffdd44,
     difficultyZone: DifficultyZone.Highlands,
     biomeAffinity: [RealmBiome.DesertCliffs, RealmBiome.Shrubland, RealmBiome.Scorched],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.MountainTroll]: {
     type: EnemyType.MountainTroll,
@@ -685,6 +697,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xcc22aa,
     difficultyZone: DifficultyZone.Godlands,
     biomeAffinity: [RealmBiome.Scorched, RealmBiome.Tundra, RealmBiome.DesertCliffs],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.ChaosSpawn]: {
     type: EnemyType.ChaosSpawn,
@@ -707,6 +720,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xff2244,
     difficultyZone: DifficultyZone.Godlands,
     biomeAffinity: [RealmBiome.Scorched, RealmBiome.Snow, RealmBiome.Tundra],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.DoomPriest]: {
     type: EnemyType.DoomPriest,
@@ -729,6 +743,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     difficultyZone: DifficultyZone.Godlands,
     biomeAffinity: [RealmBiome.Snow, RealmBiome.Scorched, RealmBiome.Tundra],
     dungeonDrop: DungeonType.VoidSanctum,
+    defaultDamageType: DamageType.Magic,
   },
 
   // ===== PACK ENEMIES =====
@@ -798,6 +813,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x4a2040,
     difficultyZone: DifficultyZone.Midlands,
     biomeAffinity: [RealmBiome.Jungle, RealmBiome.Forest, RealmBiome.Marsh],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.Broodling]: {
     type: EnemyType.Broodling,
@@ -842,6 +858,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x4488bb,
     difficultyZone: DifficultyZone.Highlands,
     biomeAffinity: [RealmBiome.Snow, RealmBiome.Tundra, RealmBiome.Taiga],
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.FrostSprite]: {
     type: EnemyType.FrostSprite,
@@ -862,6 +879,7 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 30,
     shape: "diamond",
     color: 0x66aadd,
+    defaultDamageType: DamageType.Magic,
     // No difficultyZone/biomeAffinity — never spawns independently
   },
 };
@@ -953,6 +971,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 400,
     shape: "hexagon",
     color: 0xff6600,
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.CinderWraith]: {
     type: EnemyType.CinderWraith,
@@ -971,6 +990,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 250,
     shape: "diamond",
     color: 0xffaa22,
+    defaultDamageType: DamageType.Magic,
   },
   // BOSS
   [EnemyType.MoltenWyrm]: {
@@ -990,6 +1010,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 3000,
     shape: "star",
     color: 0xff4400,
+    defaultDamageType: DamageType.Magic,
   },
 
   // ===== THE VOID SANCTUM =====
@@ -1010,6 +1031,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 650,
     shape: "circle",
     color: 0x6622cc,
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.ShadowWeaver]: {
     type: EnemyType.ShadowWeaver,
@@ -1028,6 +1050,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 500,
     shape: "diamond",
     color: 0x8844cc,
+    defaultDamageType: DamageType.Magic,
   },
   [EnemyType.AbyssalSentry]: {
     type: EnemyType.AbyssalSentry,
@@ -1046,6 +1069,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 900,
     shape: "square",
     color: 0x4400aa,
+    defaultDamageType: DamageType.Magic,
   },
   // BOSS
   [EnemyType.TheArchitect]: {
@@ -1065,6 +1089,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 5000,
     shape: "star",
     color: 0x6600cc,
+    defaultDamageType: DamageType.Magic,
   },
   // ADD (spawned by The Architect)
   [EnemyType.VoidMinion]: {
@@ -1084,6 +1109,7 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     xpValue: 50,
     shape: "circle",
     color: 0x9944ff,
+    defaultDamageType: DamageType.Magic,
   },
   // Destructible switch (stationary, no AI)
   [EnemyType.VoidSwitch]: {

@@ -105,6 +105,7 @@ interface DecodedState {
 export class GameScene extends Phaser.Scene {
   private network!: NetworkManager;
   private playerSprites = new Map<string, PlayerSprite>();
+  private lastHitSeqMap = new Map<string, number>();
   private enemySprites = new Map<string, EnemySprite>();
   private enemySnapshotCache = new Map<string, SnapshotBuffer>();
   private projectileSprites = new Map<string, ProjectileSprite>();
@@ -1382,6 +1383,18 @@ export class GameScene extends Phaser.Scene {
 
         // Update zone from schema
         s.setZone((player.zone as string) ?? "nexus");
+
+        // Damage indicator for local player
+        if (isLocal) {
+          const currentHitSeq = (player.lastHitSeq as number) ?? 0;
+          const prevHitSeq = this.lastHitSeqMap.get(sessionId) ?? 0;
+          if (currentHitSeq > prevHitSeq) {
+            const amount = (player.lastHitAmount as number) ?? 0;
+            const dmgType = (player.lastHitDamageType as number) ?? 0;
+            s.showDamage(amount, dmgType === 1);
+          }
+          this.lastHitSeqMap.set(sessionId, currentHitSeq);
+        }
 
         // Server reconciliation for local player
         if (isLocal) {

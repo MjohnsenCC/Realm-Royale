@@ -38,6 +38,9 @@ export class ItemTooltip {
   private shiftHintText: Phaser.GameObjects.Text;
   private descText: Phaser.GameObjects.Text;
 
+  // Pool for individual stat lines with tier labels (used in shift/detailed mode)
+  private statPool: { tier: Phaser.GameObjects.Text; stat: Phaser.GameObjects.Text }[] = [];
+
   private S: number;
   private tooltipWidth: number;
   private tooltipPadding: number;
@@ -115,7 +118,7 @@ export class ItemTooltip {
     this.lockedStatsText = scene.add
       .text(cx, statsY, "", {
         fontSize: statsFontSize,
-        color: "#8a7a6a",
+        color: "#ffffff",
         fontFamily: "monospace",
         lineSpacing: 2,
         align: "center",
@@ -169,6 +172,35 @@ export class ItemTooltip {
       .setOrigin(0.5, 0);
     this.container.add(this.shiftHintText);
 
+    // Pool of tier label + stat line pairs for detailed mode
+    const tierLabelFontSize = `${Math.round(8 * S)}px`;
+    for (let i = 0; i < 8; i++) {
+      const tierLabel = scene.add
+        .text(cx, 0, "", {
+          fontSize: tierLabelFontSize,
+          color: "#888888",
+          fontFamily: "monospace",
+          align: "center",
+        })
+        .setOrigin(0.5, 0)
+        .setVisible(false);
+      this.container.add(tierLabel);
+
+      const statLabel = scene.add
+        .text(cx, 0, "", {
+          fontSize: statsFontSize,
+          color: "#ffffff",
+          fontFamily: "monospace",
+          align: "center",
+        })
+        .setOrigin(0.5, 0)
+        .setWordWrapWidth(wrapWidth)
+        .setVisible(false);
+      this.container.add(statLabel);
+
+      this.statPool.push({ tier: tierLabel, stat: statLabel });
+    }
+
     this.descText = scene.add
       .text(cx, statsY, "", {
         fontSize: descFontSize,
@@ -221,22 +253,23 @@ export class ItemTooltip {
 
     // === Build locked stats per category ===
     const lockedLines: string[] = [];
+    const lockedTiers: (number | null)[] = [];
     const hiddenLines: string[] = [];
 
     if (category === ItemCategory.Weapon) {
       const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      const dmgTier = shiftHeld && item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
-      const frTier = shiftHeld && item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
-      lockedLines.push(`Damage: ${ws.damage}${dmgTier}`);
-      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s${frTier}`);
+      lockedLines.push(`Damage: ${ws.damage}`);
+      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
+      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
+      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
       // Range is hidden (shift only)
       hiddenLines.push(`Range: ${ws.range}`);
     } else if (category === ItemCategory.Ability) {
       const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      const dmgTier = shiftHeld && item.lockedStat1Tier > 0 ? ` (T${item.lockedStat1Tier})` : "";
-      const manaTier = shiftHeld && item.lockedStat2Tier > 0 ? ` (T${item.lockedStat2Tier})` : "";
-      lockedLines.push(`Damage: ${as.damage}${dmgTier}`);
-      lockedLines.push(`Mana Cost: ${as.manaCost}${manaTier}`);
+      lockedLines.push(`Damage: ${as.damage}`);
+      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
+      lockedLines.push(`Mana Cost: ${as.manaCost}`);
+      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
       // Range, cooldown, and piercing are hidden (shift only)
       hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);
       hiddenLines.push(`Range: ${as.range}`);
@@ -248,42 +281,29 @@ export class ItemTooltip {
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
         if (shiftHeld) {
           const [min, max] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
-          lockedLines.push(`+${formatStatValue(val)} ${name} T${item.lockedStat1Tier} [${formatStatValue(min)}-${formatStatValue(max)}]`);
+          lockedLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)}) ${name}`);
         } else {
           lockedLines.push(`+${formatStatValue(val)} ${name}`);
         }
+        lockedTiers.push(item.lockedStat1Tier);
       }
       if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
         const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
         if (shiftHeld) {
           const [min, max] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
-          lockedLines.push(`+${formatStatValue(val)} ${name} T${item.lockedStat2Tier} [${formatStatValue(min)}-${formatStatValue(max)}]`);
+          lockedLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)}) ${name}`);
         } else {
           lockedLines.push(`+${formatStatValue(val)} ${name}`);
         }
+        lockedTiers.push(item.lockedStat2Tier);
       }
     }
 
-    // === Divider above locked stats ===
-    let currentY = statsStartY;
-    if (lockedLines.length > 0) {
-      this.dividerAboveLockedText.setText("────────────");
-      this.dividerAboveLockedText.setY(currentY);
-      currentY += this.dividerAboveLockedText.height + 2;
-    } else {
-      this.dividerAboveLockedText.setText("");
-    }
-
-    // === Locked stats ===
-    this.lockedStatsText.setText(lockedLines.join("\n"));
-    this.lockedStatsText.setY(currentY);
-    if (lockedLines.length > 0) {
-      currentY += this.lockedStatsText.height + 2;
-    }
-
-    // === Open stats ===
+    // === Build open stats ===
     const openLines: string[] = [];
+    const openTiers: number[] = [];
+    const openForgeProtected: boolean[] = [];
     const openStatCount = Math.floor(item.openStats.length / 3);
     if (openStatCount > 0) {
       for (let i = 0; i < item.openStats.length; i += 3) {
@@ -292,30 +312,114 @@ export class ItemTooltip {
         const sRoll = item.openStats[i + 2];
         const val = getStatValue(sType, sTier, sRoll);
         const name = STAT_NAMES[sType] ?? "???";
-        const forgeIcon = item.forgeProtectedSlot === Math.floor(i / 3) ? " [P]" : "";
-        const suffix = sType === StatType.AttackSpeed ? "%" : "";
+        const suffix = (sType === StatType.AttackSpeed || sType === StatType.PhysicalDamageReduction || sType === StatType.MagicDamageReduction) ? "%" : "";
         if (shiftHeld) {
           const [min, max] = getStatRange(sType, sTier);
-          openLines.push(`+${formatStatValue(val)}${suffix} ${name} T${sTier} [${formatStatValue(min)}-${formatStatValue(max)}]${forgeIcon}`);
+          openLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)})${suffix} ${name}`);
         } else {
-          openLines.push(`+${formatStatValue(val)}${suffix} ${name}${forgeIcon}`);
+          openLines.push(`+${formatStatValue(val)}${suffix} ${name}`);
         }
+        openTiers.push(sTier);
+        openForgeProtected.push(item.forgeProtectedSlot === Math.floor(i / 3));
       }
     }
 
-    // === Divider below locked stats (always shown when locked stats exist) ===
-    if (lockedLines.length > 0) {
-      this.dividerBelowLockedText.setText("────────────");
-      this.dividerBelowLockedText.setY(currentY);
-      currentY += this.dividerBelowLockedText.height + 2;
+    // === Layout ===
+    let currentY = statsStartY;
+    let poolIdx = 0;
+
+    if (shiftHeld) {
+      // --- Detailed mode: use pool with tier labels above each stat ---
+      this.lockedStatsText.setText("");
+      this.openStatsText.setText("");
+
+      // Divider above locked stats
+      if (lockedLines.length > 0) {
+        this.dividerAboveLockedText.setText("────────────");
+        this.dividerAboveLockedText.setY(currentY);
+        currentY += this.dividerAboveLockedText.height + 2;
+      } else {
+        this.dividerAboveLockedText.setText("");
+      }
+
+      // Locked stats with tier labels
+      for (let i = 0; i < lockedLines.length && poolIdx < this.statPool.length; i++) {
+        const entry = this.statPool[poolIdx];
+        const tierNum = lockedTiers[i];
+        if (tierNum != null) {
+          entry.tier.setText(`(Tier: ${tierNum})`);
+          entry.tier.setY(currentY);
+          entry.tier.setVisible(true);
+          currentY += entry.tier.height + 1;
+        } else {
+          entry.tier.setVisible(false);
+        }
+        entry.stat.setText(lockedLines[i]);
+        entry.stat.setColor("#ffffff");
+        entry.stat.setY(currentY);
+        entry.stat.setVisible(true);
+        currentY += entry.stat.height + 2;
+        poolIdx++;
+      }
+
+      // Divider below locked stats
+      if (lockedLines.length > 0) {
+        this.dividerBelowLockedText.setText("────────────");
+        this.dividerBelowLockedText.setY(currentY);
+        currentY += this.dividerBelowLockedText.height + 2;
+      } else {
+        this.dividerBelowLockedText.setText("");
+      }
+
+      // Open stats with tier labels
+      for (let i = 0; i < openLines.length && poolIdx < this.statPool.length; i++) {
+        const entry = this.statPool[poolIdx];
+        entry.tier.setText(`(Tier: ${openTiers[i]})`);
+        entry.tier.setY(currentY);
+        entry.tier.setVisible(true);
+        currentY += entry.tier.height + 1;
+        entry.stat.setText(openLines[i]);
+        entry.stat.setColor(openForgeProtected[i] ? "#ffaa00" : "#88ccff");
+        entry.stat.setY(currentY);
+        entry.stat.setVisible(true);
+        currentY += entry.stat.height + 2;
+        poolIdx++;
+      }
     } else {
-      this.dividerBelowLockedText.setText("");
+      // --- Simple mode: use multi-line text objects, no tiers ---
+      if (lockedLines.length > 0) {
+        this.dividerAboveLockedText.setText("────────────");
+        this.dividerAboveLockedText.setY(currentY);
+        currentY += this.dividerAboveLockedText.height + 2;
+      } else {
+        this.dividerAboveLockedText.setText("");
+      }
+
+      this.lockedStatsText.setText(lockedLines.join("\n"));
+      this.lockedStatsText.setY(currentY);
+      if (lockedLines.length > 0) {
+        currentY += this.lockedStatsText.height + 2;
+      }
+
+      if (lockedLines.length > 0) {
+        this.dividerBelowLockedText.setText("────────────");
+        this.dividerBelowLockedText.setY(currentY);
+        currentY += this.dividerBelowLockedText.height + 2;
+      } else {
+        this.dividerBelowLockedText.setText("");
+      }
+
+      this.openStatsText.setText(openLines.join("\n"));
+      this.openStatsText.setY(currentY);
+      if (openStatCount > 0) {
+        currentY += this.openStatsText.height;
+      }
     }
 
-    this.openStatsText.setText(openLines.join("\n"));
-    this.openStatsText.setY(currentY);
-    if (openStatCount > 0) {
-      currentY += this.openStatsText.height;
+    // Hide unused pool entries
+    for (let i = poolIdx; i < this.statPool.length; i++) {
+      this.statPool[i].tier.setVisible(false);
+      this.statPool[i].stat.setVisible(false);
     }
 
     // === Hidden stats (shift-only) ===
@@ -431,6 +535,7 @@ export class ItemTooltip {
     this.hiddenStatsText.setText("");
     this.hiddenStatsText.setVisible(false);
     this.shiftHintText.setVisible(false);
+    for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
 
     // Description
     const statsBottom = statsStartY + this.statsText.height + 4;
@@ -469,6 +574,7 @@ export class ItemTooltip {
     this.hiddenStatsText.setText("");
     this.hiddenStatsText.setVisible(false);
     this.shiftHintText.setVisible(false);
+    for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
 
     const statsBottom = statsStartY + this.statsText.height + 4;
     this.descText.setY(statsBottom);

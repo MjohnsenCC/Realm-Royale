@@ -35,6 +35,8 @@ const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility"
   { label: "Health Regen", section: "defensive" },
   { label: "Max Mana", section: "defensive" },
   { label: "Mana Regen", section: "defensive" },
+  { label: "Phys Dmg Reduction", section: "defensive" },
+  { label: "Magic Dmg Reduction", section: "defensive" },
   { label: "Movement Speed", section: "utility" },
   { label: "Level", section: "utility" },
 ];
@@ -107,7 +109,7 @@ export class StatsPanel {
 
     // Calculate full content height
     const offensiveRows = 11;
-    const defensiveRows = 4;
+    const defensiveRows = 6;
     const utilityRows = 2;
     const totalRows = offensiveRows + defensiveRows + utilityRows;
     this.contentHeight =
@@ -493,17 +495,22 @@ export class StatsPanel {
     this.setStatRow(13, String(Math.round(fullStats.maxMana)), manaBonus);
     // Row 14: Mana Regen
     this.setStatRow(14, Math.round(fullStats.manaRegen) + "/s", manaRegenBonus);
-    // Row 15: Movement Speed
-    this.setStatRow(15, String(Math.round(fullStats.speed)), speedBonus);
-    // Row 16: Level
-    this.setStatRow(16, String(level));
+    // Row 15: Physical Damage Reduction
+    this.setStatRow(15, Math.round(fullStats.physDmgReduce) + "%", fullStats.physDmgReduce, undefined, "%");
+    // Row 16: Magic Damage Reduction
+    this.setStatRow(16, Math.round(fullStats.magicDmgReduce) + "%", fullStats.magicDmgReduce, undefined, "%");
+    // Row 17: Movement Speed
+    this.setStatRow(17, String(Math.round(fullStats.speed)), speedBonus);
+    // Row 18: Level
+    this.setStatRow(18, String(level));
   }
 
   private setStatRow(
     index: number,
     value: string,
     bonus?: number,
-    valueColor?: string
+    valueColor?: string,
+    bonusSuffix?: string
   ): void {
     this.statValueTexts[index].setText(value);
     this.statValueTexts[index].setColor(valueColor ?? "#ffffff");
@@ -511,7 +518,8 @@ export class StatsPanel {
     if (bonus !== undefined && Math.abs(bonus) >= 0.1) {
       const sign = bonus > 0 ? "+" : "";
       const formatted = Number.isInteger(bonus) ? String(Math.round(bonus)) : bonus.toFixed(1);
-      this.statBonusTexts[index].setText(`(${sign}${formatted})`);
+      const sfx = bonusSuffix ?? "";
+      this.statBonusTexts[index].setText(`(${sign}${formatted}${sfx})`);
       this.statBonusTexts[index].setColor(bonus > 0 ? "#88ccff" : "#ff6666");
     } else {
       this.statBonusTexts[index].setText("");

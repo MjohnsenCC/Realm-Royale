@@ -70,6 +70,8 @@ function accumulateItemBonuses(
     maxMana: number;
     speed: number;
     projSpeed: number;
+    physDmgReduce: number;
+    magicDmgReduce: number;
   }
 ): void {
   if (isEmptyItem(item) || item.isUT) return;
@@ -94,6 +96,8 @@ function addStatBonus(
     maxMana: number;
     speed: number;
     projSpeed: number;
+    physDmgReduce: number;
+    magicDmgReduce: number;
   },
   statType: number,
   statTier: number,
@@ -124,6 +128,12 @@ function addStatBonus(
     case StatType.MovementSpeed:
       bonuses.speed += value;
       break;
+    case StatType.PhysicalDamageReduction:
+      bonuses.physDmgReduce += value;
+      break;
+    case StatType.MagicDamageReduction:
+      bonuses.magicDmgReduce += value;
+      break;
   }
 }
 
@@ -142,6 +152,8 @@ export function computePlayerStats(
   weaponRange: number;
   weaponProjSpeed: number;
   weaponProjSize: number;
+  physDmgReduce: number;
+  magicDmgReduce: number;
 } {
   const base = getStatsForLevel(level);
   const bonuses = {
@@ -153,6 +165,8 @@ export function computePlayerStats(
     maxMana: 0,
     speed: 0,
     projSpeed: 0,
+    physDmgReduce: 0,
+    magicDmgReduce: 0,
   };
 
   // Default weapon stats (fallback if no weapon)
@@ -234,6 +248,8 @@ export function computePlayerStats(
     weaponRange,
     weaponProjSpeed: weaponProjSpeed + bonuses.projSpeed,
     weaponProjSize,
+    physDmgReduce: Math.min(bonuses.physDmgReduce, 75),
+    magicDmgReduce: Math.min(bonuses.magicDmgReduce, 75),
   };
 }
 

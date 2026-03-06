@@ -235,6 +235,8 @@ export const StatType = {
   ManaRegen: 4,
   MovementSpeed: 5,
   Mana: 6,
+  PhysicalDamageReduction: 7,
+  MagicDamageReduction: 8,
 } as const;
 export type StatType = (typeof StatType)[keyof typeof StatType];
 
@@ -302,6 +304,13 @@ export const ProjectileType = {
 } as const;
 export type ProjectileType =
   (typeof ProjectileType)[keyof typeof ProjectileType];
+
+// Damage types for projectiles
+export const DamageType = {
+  Physical: 0,
+  Magic: 1,
+} as const;
+export type DamageType = (typeof DamageType)[keyof typeof DamageType];
 
 // Loot bag rarity (visual + loot quality)
 export const BagRarity = {

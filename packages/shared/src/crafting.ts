@@ -82,8 +82,20 @@ export function applyBlankOrb(item: ItemInstanceData): CraftingResult {
   }
 
   const result = cloneItem(item);
-  result.openStats = [];
-  consumeForgeProtection(result);
+  if (result.forgeProtectedSlot >= 0) {
+    // Preserve the forge-protected stat, clear the rest
+    const pIdx = result.forgeProtectedSlot * 3;
+    if (pIdx + 2 < result.openStats.length) {
+      const protectedStat = result.openStats.slice(pIdx, pIdx + 3);
+      result.openStats = protectedStat;
+      consumeForgeProtection(result);
+    } else {
+      result.openStats = [];
+      consumeForgeProtection(result);
+    }
+  } else {
+    result.openStats = [];
+  }
   return { success: true, item: result };
 }
 

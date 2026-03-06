@@ -2,6 +2,15 @@ import Phaser from "phaser";
 import { PLAYER_RADIUS, PLAYER_MAX_HP } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
 
+interface DamageText {
+  text: Phaser.GameObjects.Text;
+  elapsed: number;
+  startY: number;
+}
+
+const DAMAGE_TEXT_DURATION = 800;
+const DAMAGE_TEXT_FLOAT = 30;
+
 export class PlayerSprite {
   private scene: Phaser.Scene;
   private graphics: Phaser.GameObjects.Graphics;
@@ -15,6 +24,7 @@ export class PlayerSprite {
   private snapshots: SnapshotBuffer;
   private hitFlashTimer: number = 0;
   private lastHp: number = PLAYER_MAX_HP;
+  private damageTexts: DamageText[] = [];
 
   // True predicted/reconciled position (used by prediction, reconciliation, aim)
   public x: number = 0;
@@ -103,6 +113,22 @@ export class PlayerSprite {
     this.hpBarFill.fillRect(xOffset, yOffset, barWidth * ratio, barHeight);
   }
 
+  showDamage(amount: number, isMagic: boolean): void {
+    const dx = this._isLocal ? this.displayX : this.x;
+    const dy = this._isLocal ? this.displayY : this.y;
+    const startY = -PLAYER_RADIUS - 30;
+    const color = isMagic ? "#4488ff" : "#ff4444";
+    const text = this.scene.add.text(dx, dy + startY, `-${Math.round(amount)}`, {
+      fontFamily: "monospace",
+      fontSize: "14px",
+      fontStyle: "bold",
+      color: color,
+    });
+    text.setOrigin(0.5, 1);
+    text.setDepth(1000);
+    this.damageTexts.push({ text, elapsed: 0, startY });
+  }
+
   updateFromServer(
     x: number,
     y: number,
@@ -167,6 +193,19 @@ export class PlayerSprite {
     } else {
       this.drawBody(this._isLocal ? 0x4488ff : 0x44cc44);
     }
+
+    // Animate floating damage texts
+    for (let i = this.damageTexts.length - 1; i >= 0; i--) {
+      const dt = this.damageTexts[i];
+      dt.elapsed += delta;
+      const progress = Math.min(dt.elapsed / DAMAGE_TEXT_DURATION, 1);
+      dt.text.setPosition(dx, dy + dt.startY - DAMAGE_TEXT_FLOAT * progress);
+      dt.text.setAlpha(1 - progress);
+      if (progress >= 1) {
+        dt.text.destroy();
+        this.damageTexts.splice(i, 1);
+      }
+    }
   }
 
   // For client-side prediction: set position directly (instant, no smoothing)
@@ -216,5 +255,7 @@ export class PlayerSprite {
     this.nameText.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
+    for (const dt of this.damageTexts) dt.text.destroy();
+    this.damageTexts.length = 0;
   }
 }

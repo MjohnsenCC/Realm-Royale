@@ -72,6 +72,8 @@ export const OPEN_STAT_POOL: Record<number, number[]> = {
     StatType.HealthRegen,
     StatType.ManaRegen,
     StatType.MovementSpeed,
+    StatType.PhysicalDamageReduction,
+    StatType.MagicDamageReduction,
   ],
   [ItemCategory.Ring]: [
     StatType.AttackDamage,
@@ -80,6 +82,8 @@ export const OPEN_STAT_POOL: Record<number, number[]> = {
     StatType.HealthRegen,
     StatType.ManaRegen,
     StatType.MovementSpeed,
+    StatType.PhysicalDamageReduction,
+    StatType.MagicDamageReduction,
   ],
 };
 
@@ -95,6 +99,8 @@ export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]
   [StatType.ManaRegen]:     { 1: [1, 3],     2: [3, 5],     3: [5, 8],     4: [8, 12],    5: [12, 17],   6: [17, 23] },
   [StatType.MovementSpeed]: { 1: [1, 4],     2: [4, 8],     3: [8, 12],    4: [12, 17],   5: [17, 22],   6: [22, 28] },
   [StatType.Mana]:          { 1: [15, 40],   2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260], 6: [260, 340] },
+  [StatType.PhysicalDamageReduction]: { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [3, 16], 5: [3, 20], 6: [3, 25] },
+  [StatType.MagicDamageReduction]:    { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [3, 16], 5: [3, 20], 6: [3, 25] },
 };
 
 // Separate locked stat range table for stats that scale differently as locked stats
@@ -197,6 +203,8 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.ManaRegen]: "Mana Regen",
   [StatType.MovementSpeed]: "Movement Speed",
   [StatType.Mana]: "Mana",
+  [StatType.PhysicalDamageReduction]: "Phys Dmg Reduction",
+  [StatType.MagicDamageReduction]: "Magic Dmg Reduction",
 };
 
 // --- Crafting Orb Definitions ---

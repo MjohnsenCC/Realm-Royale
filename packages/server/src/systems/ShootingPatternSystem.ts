@@ -6,6 +6,7 @@ import { generateId } from "../utils/idGenerator";
 import {
   EntityType,
   ShootingPatternType,
+  DamageType,
   angleBetween,
 } from "@rotmg-lite/shared";
 import { EnemyDefinition } from "@rotmg-lite/shared";
@@ -47,6 +48,7 @@ export class ShootingPatternSystem {
       proj.maxRange = def.projectileRange;
       proj.collisionRadius = def.projectileCollisionRadius ?? 5;
       proj.zone = enemy.zone || "hostile:1";
+      proj.damageType = def.defaultDamageType ?? DamageType.Physical;
 
       state.projectiles.set(proj.id, proj);
     }
