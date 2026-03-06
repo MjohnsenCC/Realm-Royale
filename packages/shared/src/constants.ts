@@ -133,8 +133,8 @@ export const MANA_POT_MAX_STACK = 6;
 export const PORTAL_GEM_MAX_STACK = 20;
 export const HEALTH_POT_HEAL = 100;
 export const MANA_POT_RESTORE = 100;
-export const HEALTH_POT_ID = 401; // category=4, subtype=0, tier=1
-export const MANA_POT_ID = 411; // category=4, subtype=1, tier=1
-export const PORTAL_GEM_ID = 421; // category=4, subtype=2, tier=1
+export const HEALTH_POT_ID = 4001; // makeItemId(4, 0, 1): category=4, subtype=0, tier=1
+export const MANA_POT_ID = 4101; // makeItemId(4, 1, 1): category=4, subtype=1, tier=1
+export const PORTAL_GEM_ID = 4201; // makeItemId(4, 2, 1): category=4, subtype=2, tier=1
 export const CONSUMABLE_MAX_STACKS = [HEALTH_POT_MAX_STACK, MANA_POT_MAX_STACK, PORTAL_GEM_MAX_STACK];
 export const PORTAL_GEM_INVULN_MS = 2000; // 2s invulnerability after portal gem teleport

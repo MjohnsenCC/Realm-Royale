@@ -140,9 +140,7 @@ export class LootBagUI {
               pointer.x,
               pointer.y
             );
-            return;
           }
-          this.onPickupItem(i);
         }
       });
 
@@ -343,13 +341,13 @@ export class LootBagUI {
     }
   }
 
-  onPickupItem(slotIndex: number): void {
-    if (!this.room || !this.currentBagId) return;
-    if (this.currentItems[slotIndex].baseItemId < 0) return;
-    this.room.send(ClientMessage.PickupItem, {
-      bagId: this.currentBagId,
-      slotIndex,
-    });
+  getItems(): ItemInstanceData[] {
+    return this.currentItems;
+  }
+
+  /** Force redraw (used by DragManager for optimistic updates) */
+  redrawItems(): void {
+    if (this.visible) this.redraw();
   }
 
   // --- Drag-and-drop support ---

@@ -5,6 +5,7 @@ import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
 import { DragManager } from "./DragManager";
 import { getUIScale } from "./UIScale";
+import { drawItemIcon } from "./ItemIcons";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -24,7 +25,14 @@ import {
   generateNexusMap,
   DungeonTile,
   isHostileZone,
+  ItemCategory,
+  ConsumableSubtype,
+  HEALTH_POT_ID,
+  MANA_POT_ID,
+  PORTAL_GEM_ID,
+  createEmptyItemInstance,
 } from "@rotmg-lite/shared";
+import type { ItemInstanceData } from "@rotmg-lite/shared";
 
 export class HUD {
   private scene: Phaser.Scene;
@@ -80,6 +88,9 @@ export class HUD {
   private consumableZones: Phaser.GameObjects.Zone[] = [];
   private consumableSlotSize: number = 0;
   private currentConsumables: [number, number, number] = [0, 0, 0];
+  private dragActive: boolean = false;
+  private dragSourceConsumableSlot: number = -1;
+  private highlightedConsumableSlot: number = -1;
 
   // Portal gem targeting
   private portalGemCallback: ((worldX: number, worldY: number) => void) | null = null;
@@ -132,7 +143,6 @@ export class HUD {
     const slotGap = Math.round(4 * S);
     const sectionGap = Math.round(12 * S);
     const innerPad = Math.round(8 * S);
-    const iconBtnSize = Math.round(16 * S);
     const iconGap = Math.round(4 * S);
 
     // Section dimensions
@@ -140,7 +150,7 @@ export class HUD {
     const barsH = 3 * this.barHeight + 2 * this.barGap;
 
     const eqW = 4 * slotSize + 3 * slotGap;
-    const eqSectionH = slotSize + iconGap + iconBtnSize;
+    const eqSectionH = slotSize + iconGap + slotSize;
 
     const invW = 4 * slotSize + 3 * slotGap;
     const invH = 2 * slotSize + slotGap;
@@ -250,24 +260,24 @@ export class HUD {
       .setDepth(100)
       .setVisible(false);
 
-    // --- Consumable slots (below equipment slots) ---
+    // --- Consumable slots (below equipment slots, same size as regular slots) ---
     this.consumableGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.consumableSlotSize = iconBtnSize;
-    const iconRowW = 3 * iconBtnSize + 2 * iconGap;
-    const iconRowX = eqX + Math.round((eqW - iconRowW) / 2);
-    const iconRowY = eqY + slotSize + iconGap;
+    this.consumableSlotSize = slotSize;
+    const consRowW = 3 * slotSize + 2 * iconGap;
+    const consRowX = eqX + Math.round((eqW - consRowW) / 2);
+    const consRowY = eqY + slotSize + iconGap;
 
     const keyLabels = ["F", "G", ""];
-    const countFontSm = `${Math.round(8 * S)}px`;
-    const keyFontSm = `${Math.round(7 * S)}px`;
+    const countFontSm = `${Math.round(10 * S)}px`;
+    const keyFontSm = `${Math.round(8 * S)}px`;
 
     for (let i = 0; i < 3; i++) {
-      const ix = iconRowX + i * (iconBtnSize + iconGap);
-      this.consumableSlotPositions.push({ x: ix, y: iconRowY });
+      const ix = consRowX + i * (slotSize + iconGap);
+      this.consumableSlotPositions.push({ x: ix, y: consRowY });
 
       // Count text (bottom-right)
       const countText = scene.add
-        .text(ix + iconBtnSize - 1, iconRowY + iconBtnSize - 1, "", {
+        .text(ix + slotSize - 2, consRowY + slotSize - 2, "", {
           fontSize: countFontSm,
           color: "#ffffff",
           fontFamily: "monospace",
@@ -279,7 +289,7 @@ export class HUD {
 
       // Key label (top-left)
       const keyText = scene.add
-        .text(ix + 2, iconRowY + 1, keyLabels[i], {
+        .text(ix + 2, consRowY + 1, keyLabels[i], {
           fontSize: keyFontSm,
           color: "#aaaaaa",
           fontFamily: "monospace",
@@ -290,26 +300,49 @@ export class HUD {
       this.consumableKeyTexts.push(keyText);
     }
 
-    // Consumable slot tooltip zones
-    const consumableItemIds = [401, 411, 421];
+    // Consumable slot interactive zones (tooltip + drag source)
+    const consumableItemIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
     for (let i = 0; i < 3; i++) {
       const pos = this.consumableSlotPositions[i];
       const zone = scene.add
-        .zone(pos.x + iconBtnSize / 2, pos.y + iconBtnSize / 2, iconBtnSize, iconBtnSize)
+        .zone(pos.x + slotSize / 2, pos.y + slotSize / 2, slotSize, slotSize)
         .setScrollFactor(0)
         .setDepth(104)
-        .setInteractive();
+        .setInteractive({ useHandCursor: true });
 
-      zone.on("pointerover", () => {
-        if (this.currentConsumables[i] > 0) {
-          const ptr = this.scene.input.activePointer;
-          this.inventoryUI.getTooltip().showById(consumableItemIds[i], ptr.x, ptr.y);
+      // Drag source: pointerdown starts drag
+      zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.leftButtonDown() && this.currentConsumables[i] > 0 && this.dragManager) {
+          const itemId = consumableItemIds[i];
+          const fakeItem: ItemInstanceData = {
+            baseItemId: itemId,
+            instanceTier: 1,
+            isUT: false,
+            lockedStat1Type: -1,
+            lockedStat1Tier: 0,
+            lockedStat2Type: -1,
+            lockedStat2Tier: 0,
+            openStats: [],
+            forgeProtectedSlot: -1,
+          };
+          this.dragManager.onSlotPointerDown(
+            { type: "consumable", slotIndex: i },
+            fakeItem,
+            pointer.x,
+            pointer.y
+          );
         }
       });
+
+      // Tooltips (show even when empty to indicate slot purpose)
+      zone.on("pointerover", () => {
+        if (this.dragActive) return;
+        const ptr = this.scene.input.activePointer;
+        this.inventoryUI.getTooltip().showById(consumableItemIds[i], ptr.x, ptr.y);
+      });
       zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (this.currentConsumables[i] > 0) {
-          this.inventoryUI.getTooltip().showById(consumableItemIds[i], pointer.x, pointer.y);
-        }
+        if (this.dragActive) return;
+        this.inventoryUI.getTooltip().showById(consumableItemIds[i], pointer.x, pointer.y);
       });
       zone.on("pointerout", () => {
         this.inventoryUI.getTooltip().hide();
@@ -415,6 +448,7 @@ export class HUD {
       w: this.panelW,
       h: this.panelH,
     }));
+    this.dragManager.setHUD(this);
     this.inventoryUI.setDragManager(this.dragManager);
     this.lootBagUI.setDragManager(this.dragManager);
 
@@ -587,46 +621,79 @@ export class HUD {
     this.consumableGraphics.clear();
     const size = this.consumableSlotSize;
     const colors = [0xcc3333, 0x4466cc, 0xaa44ff];
+    const subtypes = [ConsumableSubtype.HealthPot, ConsumableSubtype.ManaPot, ConsumableSubtype.PortalGem];
 
     for (let i = 0; i < 3; i++) {
       const pos = this.consumableSlotPositions[i];
       const count = this.currentConsumables[i];
+      const isDragSource = this.dragSourceConsumableSlot === i;
+      const isHighlighted = this.highlightedConsumableSlot === i;
 
       // Background
-      this.consumableGraphics.fillStyle(count > 0 ? colors[i] : 0x333344, count > 0 ? 0.3 : 0.5);
+      this.consumableGraphics.fillStyle(count > 0 ? colors[i] : 0x222233, count > 0 ? 0.3 : 0.6);
       this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
 
-      // Border
-      this.consumableGraphics.lineStyle(1, count > 0 ? colors[i] : 0x555566, 0.8);
-      this.consumableGraphics.strokeRect(pos.x, pos.y, size, size);
-
-      // Icon
-      if (count > 0) {
-        const cx = pos.x + size / 2;
-        const cy = pos.y + size / 2;
-        this.consumableGraphics.fillStyle(colors[i], 0.9);
-        if (i <= 1) {
-          // Potion bottle
-          const bw = size * 0.35;
-          const bh = size * 0.45;
-          this.consumableGraphics.fillRect(cx - bw / 2, cy - bh / 2 + size * 0.05, bw, bh);
-          this.consumableGraphics.fillRect(cx - bw / 4, cy - bh / 2 - size * 0.1, bw / 2, size * 0.15);
-        } else {
-          // Portal gem: diamond
-          const half = size * 0.3;
-          this.consumableGraphics.beginPath();
-          this.consumableGraphics.moveTo(cx, cy - half);
-          this.consumableGraphics.lineTo(cx + half * 0.7, cy);
-          this.consumableGraphics.lineTo(cx, cy + half);
-          this.consumableGraphics.lineTo(cx - half * 0.7, cy);
-          this.consumableGraphics.closePath();
-          this.consumableGraphics.fillPath();
-        }
+      // Drag source overlay (dim)
+      if (isDragSource) {
+        this.consumableGraphics.fillStyle(0x000000, 0.5);
+        this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
       }
+
+      // Drop target highlight (green)
+      if (isHighlighted) {
+        this.consumableGraphics.fillStyle(0x44ff44, 0.25);
+        this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
+      }
+
+      // Icon (always show using drawItemIcon)
+      const cx = pos.x + size / 2;
+      const cy = pos.y + size / 2;
+      const iconSize = size * 0.55;
+      const iconColor = count > 0 ? colors[i] : (colors[i] & 0x7f7f7f); // dimmer when empty
+      drawItemIcon(this.consumableGraphics, cx, cy - size * 0.05, iconSize, ItemCategory.Consumable, subtypes[i], iconColor);
+
+      // Border
+      const borderColor = isHighlighted ? 0x44ff44 : (count > 0 ? colors[i] : 0x333344);
+      const borderAlpha = isHighlighted ? 0.8 : 0.8;
+      this.consumableGraphics.lineStyle(1, borderColor, borderAlpha);
+      this.consumableGraphics.strokeRect(pos.x, pos.y, size, size);
 
       // Count text
       this.consumableCountTexts[i].setText(count > 0 ? `${count}` : "");
     }
+  }
+
+  // --- Drag & drop support for consumable slots ---
+
+  setDragActive(active: boolean): void {
+    this.dragActive = active;
+    if (!active) {
+      this.dragSourceConsumableSlot = -1;
+      this.highlightedConsumableSlot = -1;
+      this.drawConsumableSlots();
+    }
+  }
+
+  setDragSourceConsumableSlot(slot: number): void {
+    this.dragSourceConsumableSlot = slot;
+    this.drawConsumableSlots();
+  }
+
+  setHighlightedConsumableSlot(slot: number): void {
+    if (this.highlightedConsumableSlot !== slot) {
+      this.highlightedConsumableSlot = slot;
+      this.drawConsumableSlots();
+    }
+  }
+
+  getConsumableSlotBounds(): { x: number; y: number; w: number; h: number }[] {
+    const size = this.consumableSlotSize;
+    return this.consumableSlotPositions.map(pos => ({
+      x: pos.x,
+      y: pos.y,
+      w: size,
+      h: size,
+    }));
   }
 
   setPortalGemCallback(cb: (worldX: number, worldY: number) => void): void {

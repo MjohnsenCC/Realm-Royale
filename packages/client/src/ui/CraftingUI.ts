@@ -146,7 +146,7 @@ export class CraftingUI {
     // --- Placeholder text ---
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText = scene.add
-      .text(this.px + this.panelWidth / 2, placeholderY, "Click an item to craft", {
+      .text(this.px + this.panelWidth / 2, placeholderY, "Drag an item here to craft", {
         fontSize: statsFontSize,
         color: "#666688",
         fontFamily: "monospace",
@@ -324,6 +324,28 @@ export class CraftingUI {
     this.clearForgeSlotButtons();
     this.messageText.setText("");
     this.redraw();
+  }
+
+  getItemSlotBounds(): { x: number; y: number; w: number; h: number } | null {
+    if (!this.visible) return null;
+    return {
+      x: this.itemSlotCx - this.itemSlotSize / 2,
+      y: this.itemSlotCy - this.itemSlotSize / 2,
+      w: this.itemSlotSize,
+      h: this.itemSlotSize,
+    };
+  }
+
+  setHighlighted(on: boolean): void {
+    if (!this.visible) return;
+    const slotX = this.itemSlotCx - this.itemSlotSize / 2;
+    const slotY = this.itemSlotCy - this.itemSlotSize / 2;
+    // Redraw item slot with highlight border
+    this.itemSlotGraphics.clear();
+    this.itemSlotGraphics.fillStyle(0x222233, 0.6);
+    this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
+    this.itemSlotGraphics.lineStyle(2, on ? 0x44ff44 : 0x333344, 1);
+    this.itemSlotGraphics.strokeRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
   }
 
   updateOrbCounts(counts: number[]): void {

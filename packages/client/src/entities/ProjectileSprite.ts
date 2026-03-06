@@ -29,6 +29,11 @@ export class ProjectileSprite {
 
     this.graphics = scene.add.graphics();
 
+    // Player projectiles render below the player sprite
+    if (ownerType !== EntityType.Enemy) {
+      this.graphics.setDepth(-0.25);
+    }
+
     if (ownerType === EntityType.Enemy) {
       // Enemy bullets: red circle
       this.graphics.fillStyle(0xff4444, 1);

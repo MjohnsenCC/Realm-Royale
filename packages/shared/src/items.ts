@@ -568,19 +568,19 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
 
   // ===== CONSUMABLES (category=4) =====
   [makeItemId(4, 0, 1)]: {
-    id: 401, name: "Health Potion", category: 4, subtype: 0, tier: 1,
+    id: 4001, name: "Health Potion", category: 4, subtype: 0, tier: 1,
     color: 0xcc3333, tierColor: TIER_COLORS[1],
     description: "Restores 100 HP. Press F to use.",
     consumableStats: { maxStack: 6, healAmount: 100 },
   },
   [makeItemId(4, 1, 1)]: {
-    id: 411, name: "Mana Potion", category: 4, subtype: 1, tier: 1,
+    id: 4101, name: "Mana Potion", category: 4, subtype: 1, tier: 1,
     color: 0x4466cc, tierColor: TIER_COLORS[1],
     description: "Restores 100 Mana. Press G to use.",
     consumableStats: { maxStack: 6, manaAmount: 100 },
   },
   [makeItemId(4, 2, 1)]: {
-    id: 421, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
+    id: 4201, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
     color: 0xaa44ff, tierColor: TIER_COLORS[1],
     description: "Teleport anywhere on the map. Right-click minimap to target.",
     consumableStats: { maxStack: 20 },

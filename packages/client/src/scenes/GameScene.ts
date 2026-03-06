@@ -266,7 +266,7 @@ export class GameScene extends Phaser.Scene {
     this.currentDungeonMap = this.nexusMap; // enable wall collision in nexus
 
     // Draw ground for current zone
-    this.groundGraphics = this.add.graphics();
+    this.groundGraphics = this.add.graphics().setDepth(-1);
     this.portalGraphics = this.add.graphics();
     this.drawGround();
     this.drawPortal();
@@ -306,9 +306,7 @@ export class GameScene extends Phaser.Scene {
     // Create crafting UI
     this.craftingUI = new CraftingUI(this);
     this.craftingUI.setRoom(room);
-    this.craftingUI.setOnClose(() => {
-      this.hud.inventoryUI.setCraftingSelectCallback(null);
-    });
+    this.hud.dragManager.setCraftingUI(this.craftingUI);
 
     // Create dungeon tooltip (shows portal stats above minimap)
     this.dungeonTooltip = new DungeonTooltip(this);
@@ -2494,11 +2492,6 @@ export class GameScene extends Phaser.Scene {
 
     const orbCounts = readOrbCounts(localPlayer);
     this.craftingUI.show(orbCounts);
-
-    // Set callback: clicking inventory/equipment slots selects item for crafting
-    this.hud.inventoryUI.setCraftingSelectCallback((location, slotIndex, item) => {
-      this.craftingUI.selectItem(item, location, slotIndex);
-    });
   }
 
   private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {

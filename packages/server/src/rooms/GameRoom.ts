@@ -74,6 +74,9 @@ import {
   isCraftingOrbItem,
   getConsumableSlotIndex,
   CONSUMABLE_MAX_STACKS,
+  HEALTH_POT_ID,
+  MANA_POT_ID,
+  PORTAL_GEM_ID,
   HEALTH_POT_HEAL,
   MANA_POT_RESTORE,
   HOSTILE_WIDTH,
@@ -299,7 +302,7 @@ export class GameRoom extends Room<GameState> {
     // Listen for item pickup from loot bag
     this.onMessage(
       ClientMessage.PickupItem,
-      (client, data: { bagId: string; slotIndex: number }) => {
+      (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
 
@@ -319,18 +322,14 @@ export class GameRoom extends Room<GameState> {
         const itemData = schemaToItemData(bagItem.item);
         const itemId = itemData.baseItemId;
 
-        // Consumable items go to dedicated slots
-        if (isConsumableItem(itemId)) {
+        // Direct pickup to consumable slot (bag → consumable slot drag)
+        if (data.targetConsumableSlot !== undefined && isConsumableItem(itemId)) {
+          const expectedSlot = getConsumableSlotIndex(itemId);
+          if (expectedSlot !== data.targetConsumableSlot) return;
           if (!this.addConsumableToPlayer(player, itemId)) return;
           updateSchemaFromData(bagItem.item, createEmptyItemInstance());
         }
-        // Crafting orbs go to orb counter
-        else if (isCraftingOrbItem(itemId)) {
-          const orbType = getItemSubtype(itemId);
-          this.addOrbToPlayer(player, orbType);
-          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
-        }
-        // Equipment goes to inventory
+        // All items go to inventory (player drags to inventory)
         else {
           let emptySlot = -1;
           for (let i = 0; i < player.inventory.length; i++) {
@@ -513,6 +512,70 @@ export class GameRoom extends Room<GameState> {
         }
 
         recalcPlayerStats(player);
+      }
+    );
+
+    // Listen for drop consumable from dedicated slot (drops one)
+    this.onMessage(
+      ClientMessage.DropConsumable,
+      (client, data: { consumableSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const slot = data.consumableSlot;
+        if (slot < 0 || slot > 2) return;
+        const count = this.getConsumableCount(player, slot);
+        if (count <= 0) return;
+
+        // Decrement counter
+        this.setConsumableCount(player, slot, count - 1);
+
+        // Create consumable item instance
+        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
+        const itemData = generateConsumableInstance(consumableIds[slot]);
+
+        // Drop to open bag or spawn new bag
+        if (player.openBagId) {
+          const openBag = this.state.lootBags.get(player.openBagId);
+          if (openBag) {
+            const emptySlot = openBag.items.findIndex((item) => item.item.baseItemId === -1);
+            if (emptySlot !== -1) {
+              updateSchemaFromData(openBag.items[emptySlot]!.item, itemData);
+              return;
+            }
+          }
+        }
+        this.spawnLootBag(player.x, player.y, BagRarity.Green, [itemData], player.zone);
+      }
+    );
+
+    // Listen for move consumable from dedicated slot to inventory
+    this.onMessage(
+      ClientMessage.MoveConsumableToInventory,
+      (client, data: { consumableSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const slot = data.consumableSlot;
+        if (slot < 0 || slot > 2) return;
+        const count = this.getConsumableCount(player, slot);
+        if (count <= 0) return;
+
+        // Find empty inventory slot
+        let emptyInvSlot = -1;
+        for (let i = 0; i < player.inventory.length; i++) {
+          if (player.inventory[i]!.baseItemId === -1) {
+            emptyInvSlot = i;
+            break;
+          }
+        }
+        if (emptyInvSlot === -1) return;
+
+        // Decrement counter, place item in inventory
+        this.setConsumableCount(player, slot, count - 1);
+        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
+        const itemData = generateConsumableInstance(consumableIds[slot]);
+        updateSchemaFromData(player.inventory[emptyInvSlot]!, itemData);
       }
     );
 

@@ -340,5 +340,7 @@ export const ClientMessage = {
   ToggleUnlimitedOrbs: "toggleUnlimitedOrbs",
   SwapInventory: "swapInventory",
   UnequipItem: "unequipItem",
+  DropConsumable: "dropConsumable",
+  MoveConsumableToInventory: "moveConsumableToInventory",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

@@ -57,9 +57,6 @@ export class InventoryUI {
   private shiftKey: Phaser.Input.Keyboard.Key | null = null;
   private lastHoveredItem: { item: ItemInstanceData; screenX: number; screenY: number } | null = null;
 
-  // Crafting mode: when set, left-clicks select items for crafting instead of equipping
-  private craftingSelectCallback: ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null = null;
-
   // Drag-and-drop
   private dragManager: DragManager | null = null;
   private dragActive = false;
@@ -148,14 +145,6 @@ export class InventoryUI {
               pointer.x,
               pointer.y
             );
-            return;
-          }
-          // Fallback: crafting select
-          if (this.craftingSelectCallback) {
-            const item2 = this.currentEquipment[i];
-            if (item2 && item2.baseItemId >= 0) {
-              this.craftingSelectCallback("equipment", i, item2);
-            }
           }
         }
       });
@@ -203,10 +192,6 @@ export class InventoryUI {
         .setInteractive({ useHandCursor: true });
 
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        if (pointer.rightButtonDown()) {
-          this.onDropItem(i);
-          return;
-        }
         if (pointer.leftButtonDown()) {
           const item = this.currentInventory[i];
           if (item && item.baseItemId >= 0 && this.dragManager) {
@@ -216,17 +201,7 @@ export class InventoryUI {
               pointer.x,
               pointer.y
             );
-            return;
           }
-          // Fallback if no DragManager
-          if (this.craftingSelectCallback) {
-            const item2 = this.currentInventory[i];
-            if (item2 && item2.baseItemId >= 0) {
-              this.craftingSelectCallback("inventory", i, item2);
-            }
-            return;
-          }
-          this.onEquipItem(i);
         }
       });
 
@@ -303,10 +278,6 @@ export class InventoryUI {
 
   getSlotGap(): number {
     return this.slotGap;
-  }
-
-  setCraftingSelectCallback(cb: ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null): void {
-    this.craftingSelectCallback = cb;
   }
 
   getInventory(): ItemInstanceData[] {
@@ -494,12 +465,6 @@ export class InventoryUI {
     }
   }
 
-  onDropItem(slotIndex: number): void {
-    if (!this.room) return;
-    if (this.currentInventory[slotIndex].baseItemId < 0) return;
-    this.room.send(ClientMessage.DropItem, { slotIndex });
-  }
-
   onEquipItem(slotIndex: number): void {
     if (!this.room) return;
     if (this.currentInventory[slotIndex].baseItemId < 0) return;
@@ -516,14 +481,20 @@ export class InventoryUI {
     );
   }
 
+  /** Force redraw inventory slots (used by DragManager for optimistic updates) */
+  redrawSlots(): void {
+    this.drawSlots();
+  }
+
+  /** Force redraw equipment slots (used by DragManager for optimistic updates) */
+  redrawEquipmentSlots(): void {
+    this.drawEquipmentSlots();
+  }
+
   // --- Drag-and-drop support ---
 
   setDragManager(dm: DragManager): void {
     this.dragManager = dm;
-  }
-
-  getCraftingSelectCallback(): ((location: "inventory" | "equipment", slotIndex: number, item: ItemInstanceData) => void) | null {
-    return this.craftingSelectCallback;
   }
 
   setDragActive(active: boolean): void {
