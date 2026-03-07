@@ -165,20 +165,19 @@ export async function saveCharacter(
 ): Promise<void> {
   const supabase = getSupabase();
 
+  const updatePayload: Record<string, unknown> = {
+    level: data.level,
+    xp: data.xp,
+    equipment: data.equipment,
+    inventory: data.inventory,
+    consumables: data.consumables,
+    orbs: data.orbs,
+    last_played: new Date().toISOString(),
+  };
+
   const { error, count } = await supabase
     .from("characters")
-    .update(
-      {
-        level: data.level,
-        xp: data.xp,
-        equipment: data.equipment,
-        inventory: data.inventory,
-        consumables: data.consumables,
-        orbs: data.orbs,
-        last_played: new Date().toISOString(),
-      },
-      { count: "exact" }
-    )
+    .update(updatePayload, { count: "exact" })
     .eq("id", characterId);
 
   if (error) {

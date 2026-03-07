@@ -127,6 +127,20 @@ export const INFERNAL_PORTAL_CHANCE = 0.02; // legacy — no longer used
 export const VOID_PORTAL_CHANCE = 0.015; // legacy — no longer used
 export const DUNGEON_DROP_CHANCE = 0.30; // 30% for specific Godlands enemies
 
+// Vault (personal storage instance)
+export const VAULT_SIZE = 20;
+export const VAULT_TILES_X = 20;
+export const VAULT_TILES_Y = 20;
+export const VAULT_CHEST_X = 10 * TILE_SIZE; // 400 — center of vault room
+export const VAULT_CHEST_Y = 6 * TILE_SIZE; // 240 — upper area
+export const VAULT_CHEST_INTERACT_RADIUS = 60;
+export const VAULT_SPAWN_X = 10 * TILE_SIZE; // 400 — center
+export const VAULT_SPAWN_Y = 14 * TILE_SIZE; // 560 — lower area
+export const VAULT_PORTAL_X = 7 * TILE_SIZE; // 280 — nexus west room center X
+export const VAULT_PORTAL_Y = 25.5 * TILE_SIZE; // 1020 — nexus west room center Y
+export const VAULT_RETURN_PORTAL_X = 10 * TILE_SIZE; // 400 — center bottom
+export const VAULT_RETURN_PORTAL_Y = 16 * TILE_SIZE; // 640 — bottom of room
+
 // Consumables
 export const HEALTH_POT_MAX_STACK = 6;
 export const MANA_POT_MAX_STACK = 6;

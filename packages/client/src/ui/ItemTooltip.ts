@@ -13,6 +13,8 @@ import {
   getStatRange,
   getScaledWeaponStats,
   getScaledAbilityStats,
+  getScaledWeaponStatsRange,
+  getScaledAbilityStatsRange,
   ORB_DEFINITIONS,
   TIER_COLORS,
 } from "@rotmg-lite/shared";
@@ -257,18 +259,40 @@ export class ItemTooltip {
     const hiddenLines: string[] = [];
 
     if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedLines.push(`Damage: ${ws.damage}`);
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
+      if (shiftHeld && item.lockedStat1Tier > 0) {
+        const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+        lockedLines.push(`Damage: ${ws.damage}(${range.damageMin}-${range.damageMax})`);
+      } else {
+        lockedLines.push(`Damage: ${ws.damage}`);
+      }
       lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
-      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
+      if (shiftHeld && item.lockedStat2Tier > 0) {
+        const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+        const frMin = (1000 / range.shootCooldownMax).toFixed(1);
+        const frMax = (1000 / range.shootCooldownMin).toFixed(1);
+        lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`);
+      } else {
+        lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
+      }
       lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
       // Range is hidden (shift only)
       hiddenLines.push(`Range: ${ws.range}`);
     } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedLines.push(`Damage: ${as.damage}`);
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
+      if (shiftHeld && item.lockedStat1Tier > 0) {
+        const range = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+        lockedLines.push(`Damage: ${as.damage}(${range.damageMin}-${range.damageMax})`);
+      } else {
+        lockedLines.push(`Damage: ${as.damage}`);
+      }
       lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
-      lockedLines.push(`Mana Cost: ${as.manaCost}`);
+      if (shiftHeld && item.lockedStat2Tier > 0) {
+        const range = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+        lockedLines.push(`Mana Cost: ${as.manaCost}(${range.manaCostMin}-${range.manaCostMax})`);
+      } else {
+        lockedLines.push(`Mana Cost: ${as.manaCost}`);
+      }
       lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
       // Range, cooldown, and piercing are hidden (shift only)
       hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);

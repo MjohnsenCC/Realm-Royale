@@ -41,10 +41,10 @@ export class PlayerSprite {
 
   // Display position = true position + correction offset (smooth)
   get displayX(): number {
-    return this.x + this.corrOffsetX;
+    return Math.round(this.x + this.corrOffsetX);
   }
   get displayY(): number {
-    return this.y + this.corrOffsetY;
+    return Math.round(this.y + this.corrOffsetY);
   }
 
   constructor(

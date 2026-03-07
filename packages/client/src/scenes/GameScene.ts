@@ -46,6 +46,7 @@ import {
   DUNGEON_VISUALS,
   REALM_BIOME_VISUALS,
   isHostileZone,
+  isVaultZone,
   getZoneInstance,
   getDungeonTypeFromZone,
   DUNGEON_PORTAL_RADIUS,
@@ -67,6 +68,14 @@ import {
   HITBOX_PADDING,
   isEmptyItem,
   createEmptyItemInstance,
+  VAULT_PORTAL_X,
+  VAULT_PORTAL_Y,
+  VAULT_CHEST_X,
+  VAULT_CHEST_Y,
+  VAULT_CHEST_INTERACT_RADIUS,
+  VAULT_RETURN_PORTAL_X,
+  VAULT_RETURN_PORTAL_Y,
+  generateVaultMap,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -124,6 +133,7 @@ export class GameScene extends Phaser.Scene {
     SHIFT: Phaser.Input.Keyboard.Key;
     U: Phaser.Input.Keyboard.Key;
     P: Phaser.Input.Keyboard.Key;
+    T: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -157,6 +167,15 @@ export class GameScene extends Phaser.Scene {
   private craftingUI!: CraftingUI;
   private statsPanel!: StatsPanel;
   private nearCraftingTable: boolean = false;
+  private nearVaultChest: boolean = false;
+
+  // Portal gem vault portal (client-only visual)
+  private vaultPortalActive: boolean = false;
+  private vaultPortalX: number = 0;
+  private vaultPortalY: number = 0;
+  private vaultPortalGraphics: Phaser.GameObjects.Graphics | null = null;
+  private vaultPortalLabel: Phaser.GameObjects.Text | null = null;
+  private enteredVaultViaPortalGem: boolean = false;
 
   // Q key cooldown to prevent spam
   private returnToNexusCooldown: number = 0;
@@ -174,6 +193,7 @@ export class GameScene extends Phaser.Scene {
   private dungeonSeed: number = 0;
   private currentDungeonMap: DungeonMapData | null = null;
   private nexusMap: DungeonMapData = generateNexusMap();
+  private vaultMap: DungeonMapData = generateVaultMap();
 
   // Hostile zone chunk-based tilemap system
   private static readonly CHUNK_SIZE = 64; // tiles per chunk axis
@@ -294,6 +314,7 @@ export class GameScene extends Phaser.Scene {
         SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
         U: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U),
         P: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P),
+        T: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T),
       };
     }
 
@@ -331,13 +352,22 @@ export class GameScene extends Phaser.Scene {
       this.pendingInputs = [];
       this.isDead = false;
       this.hud.hideDeathScreen();
+      this.hud.vaultUI.hide();
+      this.nearVaultChest = false;
+      // Reset portal gem vault state when returning to nexus (e.g. Q key while portal active)
+      if (data.zone === "nexus") {
+        this.vaultPortalActive = false;
+        this.enteredVaultViaPortalGem = false;
+      }
 
-      // Generate dungeon map from seed if entering a dungeon, or use nexus map
+      // Generate dungeon map from seed if entering a dungeon, or use nexus/vault map
       if (isDungeonZone(data.zone) && data.dungeonSeed !== undefined) {
         this.dungeonSeed = data.dungeonSeed;
         this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, getDungeonTypeFromZone(data.zone)!);
       } else if (data.zone === "nexus") {
         this.currentDungeonMap = this.nexusMap;
+      } else if (isVaultZone(data.zone)) {
+        this.currentDungeonMap = this.vaultMap;
       } else {
         this.currentDungeonMap = null;
       }
@@ -423,9 +453,10 @@ export class GameScene extends Phaser.Scene {
     // Listen for dungeon portal state changes
     this.setupDungeonPortalListeners(state);
 
-    // Set room on inventory/loot bag UIs so they can send messages
+    // Set room on inventory/loot bag/vault UIs so they can send messages
     this.hud.inventoryUI.setRoom(room);
     this.hud.lootBagUI.setRoom(room);
+    this.hud.vaultUI.setRoom(room);
     this.hud.dragManager.setRoom(room);
 
     // Listen for bag open/close (server proximity detection)
@@ -446,6 +477,31 @@ export class GameScene extends Phaser.Scene {
 
     room.onMessage(ServerMessage.BagClosed, () => {
       this.hud.lootBagUI.hide();
+    });
+
+    // Vault messages
+    room.onMessage(ServerMessage.VaultOpened, (data: { items: ItemInstanceData[] }) => {
+      this.hud.vaultUI.show(data.items);
+    });
+    room.onMessage(ServerMessage.VaultClosed, () => {
+      this.hud.vaultUI.hide();
+    });
+    room.onMessage(ServerMessage.VaultUpdated, (data: { items: ItemInstanceData[] }) => {
+      this.hud.vaultUI.updateItems(data.items);
+    });
+
+    // Portal gem vault portal messages
+    room.onMessage(ServerMessage.VaultPortalCreated, (data: { x: number; y: number }) => {
+      this.vaultPortalActive = true;
+      this.vaultPortalX = data.x;
+      this.vaultPortalY = data.y;
+      this.enteredVaultViaPortalGem = true;
+      this.drawVaultPortalGem();
+    });
+    room.onMessage(ServerMessage.VaultPortalClosed, () => {
+      this.vaultPortalActive = false;
+      this.enteredVaultViaPortalGem = false;
+      this.destroyVaultPortalGem();
     });
 
     // Listen for death notification — show death screen, hide player, wait for respawn
@@ -514,11 +570,14 @@ export class GameScene extends Phaser.Scene {
     this.portalGraphics.clear();
     this.clearNexusLabels();
     this.clearDungeonPortalSprites();
+    this.destroyVaultPortalGem();
     this.destroyHostileTilemap();
     this.drawGround();
 
     if (zone === "nexus") {
       this.drawPortal();
+      this.cameras.main.setBackgroundColor("#0a0a0a");
+    } else if (isVaultZone(zone)) {
       this.cameras.main.setBackgroundColor("#0a0a0a");
     } else if (isDungeonZone(zone)) {
       // Dark background so wall areas appear as dark void
@@ -543,6 +602,9 @@ export class GameScene extends Phaser.Scene {
         return { name: visuals.name, color, difficulty, difficultyColor };
       }
       return { name: "Dungeon", color: "#ffffff" };
+    }
+    if (isVaultZone(zone)) {
+      return { name: "Vault", color: "#ddaa55" };
     }
     if (isHostileZone(zone)) {
       const inst = getZoneInstance(zone) || "1";
@@ -649,6 +711,8 @@ export class GameScene extends Phaser.Scene {
 
     if (this.localZone === "nexus") {
       this.drawNexusGround();
+    } else if (isVaultZone(this.localZone)) {
+      this.drawVaultGround();
     } else if (isDungeonZone(this.localZone)) {
       this.drawDungeonGround();
     }
@@ -738,6 +802,145 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.6);
     this.nexusLabels.push(craftLabel);
+  }
+
+  private drawVaultGround(): void {
+    const mapData = this.vaultMap;
+    const { tiles, width, height } = mapData;
+    const groundFill = 0x1a1a2a;
+    const lineColor = 0x2a2a4a;
+    const edgeColor = 0xddaa55;
+
+    // Draw floor tiles (dark stone)
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] === DungeonTile.Floor) {
+          const px = tx * TILE_SIZE;
+          const py = ty * TILE_SIZE;
+          this.groundGraphics.fillStyle(groundFill, 1);
+          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
+          this.groundGraphics.lineStyle(1, lineColor, 0.4);
+          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
+        }
+      }
+    }
+
+    // Draw highlighted edges where floor meets wall
+    this.groundGraphics.lineStyle(2, edgeColor, 0.4);
+    for (let ty = 0; ty < height; ty++) {
+      for (let tx = 0; tx < width; tx++) {
+        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
+        const px = tx * TILE_SIZE;
+        const py = ty * TILE_SIZE;
+        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
+        }
+        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
+        }
+        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
+        }
+        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
+          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
+        }
+      }
+    }
+
+    // Draw vault chest at center-upper area
+    const chestX = VAULT_CHEST_X;
+    const chestY = VAULT_CHEST_Y;
+    const chestW = 32;
+    const chestH = 24;
+
+    // Chest body
+    this.groundGraphics.fillStyle(0x553311, 0.9);
+    this.groundGraphics.fillRoundedRect(chestX - chestW / 2, chestY - chestH / 2, chestW, chestH, 4);
+    this.groundGraphics.lineStyle(2, 0xddaa55, 0.8);
+    this.groundGraphics.strokeRoundedRect(chestX - chestW / 2, chestY - chestH / 2, chestW, chestH, 4);
+
+    // Chest lock/clasp
+    this.groundGraphics.fillStyle(0xddaa55, 0.7);
+    this.groundGraphics.fillCircle(chestX, chestY, 5);
+    this.groundGraphics.lineStyle(1, 0xffcc66, 0.8);
+    this.groundGraphics.strokeCircle(chestX, chestY, 5);
+
+    // Chest label
+    this.clearNexusLabels();
+    const chestLabel = this.add
+      .text(chestX, chestY + chestH / 2 + 14, "Vault Chest", {
+        fontSize: "12px",
+        color: "#ddaa55",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.6);
+    this.nexusLabels.push(chestLabel);
+
+    // Draw return portal near spawn area
+    const rpx = VAULT_RETURN_PORTAL_X;
+    const rpy = VAULT_RETURN_PORTAL_Y;
+    const rpr = 20;
+
+    this.portalGraphics.lineStyle(3, 0xddaa55, 0.3);
+    this.portalGraphics.strokeCircle(rpx, rpy, rpr + 8);
+    this.portalGraphics.lineStyle(2, 0xddaa55, 0.5);
+    this.portalGraphics.strokeCircle(rpx, rpy, rpr + 2);
+    this.portalGraphics.lineStyle(2, 0xddaa55, 0.8);
+    this.portalGraphics.strokeCircle(rpx, rpy, rpr);
+    this.portalGraphics.fillStyle(0x886622, 0.4);
+    this.portalGraphics.fillCircle(rpx, rpy, rpr - 2);
+    this.portalGraphics.fillStyle(0xddaa55, 0.2);
+    this.portalGraphics.fillCircle(rpx, rpy, rpr / 2);
+
+    const returnLabel = this.enteredVaultViaPortalGem ? "Return" : "Return to Nexus";
+    const portalLabel = this.add
+      .text(rpx, rpy + rpr + 14, returnLabel, {
+        fontSize: "10px",
+        color: "#ddaa55",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.5);
+    this.nexusLabels.push(portalLabel);
+  }
+
+  private drawVaultPortalGem(): void {
+    this.destroyVaultPortalGem();
+    const g = this.add.graphics().setDepth(1);
+    const px = this.vaultPortalX;
+    const py = this.vaultPortalY;
+    const r = 20;
+
+    g.lineStyle(3, 0xaa44ff, 0.3);
+    g.strokeCircle(px, py, r + 8);
+    g.lineStyle(2, 0xaa44ff, 0.5);
+    g.strokeCircle(px, py, r + 2);
+    g.lineStyle(2, 0xaa44ff, 0.8);
+    g.strokeCircle(px, py, r);
+    g.fillStyle(0x6622aa, 0.4);
+    g.fillCircle(px, py, r - 2);
+    g.fillStyle(0xaa44ff, 0.2);
+    g.fillCircle(px, py, r / 2);
+
+    this.vaultPortalGraphics = g;
+
+    const label = this.add
+      .text(px, py + r + 14, "Vault Portal", {
+        fontSize: "10px",
+        color: "#aa44ff",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.5);
+    this.vaultPortalLabel = label;
+  }
+
+  private destroyVaultPortalGem(): void {
+    this.vaultPortalGraphics?.destroy();
+    this.vaultPortalGraphics = null;
+    this.vaultPortalLabel?.destroy();
+    this.vaultPortalLabel = null;
   }
 
   private drawHostileGround(): void {
@@ -1344,6 +1547,28 @@ export class GameScene extends Phaser.Scene {
       }).setOrigin(0.5).setDepth(6);
       this.realmPortalLabels.push(lbl);
     }
+
+    // Vault portal (gold-themed, in west room)
+    const vpx = VAULT_PORTAL_X;
+    const vpy = VAULT_PORTAL_Y;
+
+    this.portalGraphics.lineStyle(4, 0xddaa55, 0.3);
+    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS + 12);
+    this.portalGraphics.lineStyle(3, 0xddaa55, 0.5);
+    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS + 4);
+    this.portalGraphics.lineStyle(3, 0xddaa55, 0.8);
+    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS);
+    this.portalGraphics.fillStyle(0x886622, 0.4);
+    this.portalGraphics.fillCircle(vpx, vpy, PORTAL_RADIUS - 4);
+    this.portalGraphics.fillStyle(0xddaa55, 0.25);
+    this.portalGraphics.fillCircle(vpx, vpy, PORTAL_RADIUS / 2);
+
+    const vaultLbl = this.add.text(vpx, vpy - PORTAL_RADIUS - 14, "Vault", {
+      fontSize: "12px",
+      color: "#ddaa55",
+      fontFamily: "monospace",
+    }).setOrigin(0.5).setDepth(6);
+    this.realmPortalLabels.push(vaultLbl);
   }
 
   private setupStateListeners(state: DecodedState): void {
@@ -1707,6 +1932,8 @@ export class GameScene extends Phaser.Scene {
         ) {
           if (this.nearCraftingTable) {
             this.openCraftingUI(state, sessionId);
+          } else if (this.nearVaultChest) {
+            this.network.sendOpenVault();
           } else {
             this.network.sendInteractPortal();
           }
@@ -1729,6 +1956,16 @@ export class GameScene extends Phaser.Scene {
         if (this.keys.G.isDown && this.manaPotCooldown <= 0) {
           this.network.sendUseManaPot();
           this.manaPotCooldown = 500;
+        }
+
+        // T key — open vault portal with portal gem
+        if (Phaser.Input.Keyboard.JustDown(this.keys.T)) {
+          if (
+            (isHostileZone(this.localZone) || isDungeonZone(this.localZone)) &&
+            ((state.players.get(sessionId) as any)?.portalGems ?? 0) > 0
+          ) {
+            this.network.sendUsePortalGemVault();
+          }
         }
 
         // U key — TESTING: give 999 of each crafting orb
@@ -1887,7 +2124,7 @@ export class GameScene extends Phaser.Scene {
             }
           } else {
             const subtype = getItemSubtype(abilityItem.baseItemId);
-            as = getScaledAbilityStats(subtype, abilityItem.instanceTier, abilityItem.lockedStat1Tier, abilityItem.lockedStat2Tier);
+            as = getScaledAbilityStats(subtype, abilityItem.instanceTier, abilityItem.lockedStat1Tier, abilityItem.lockedStat2Tier, abilityItem.lockedStat1Roll, abilityItem.lockedStat2Roll);
           }
           if (as && now - this.lastLocalAbilityTime >= as.cooldown) {
             const mana = (localPlayer.mana as number) ?? 0;
@@ -2096,12 +2333,10 @@ export class GameScene extends Phaser.Scene {
 
     // Update camera — always center on player's display position (rounded to avoid tile seams)
     if (localSprite) {
-      this.cameras.main.scrollX = Math.round(
-        localSprite.displayX - this.cameras.main.width / 2
-      );
-      this.cameras.main.scrollY = Math.round(
-        localSprite.displayY - this.cameras.main.height / 2
-      );
+      this.cameras.main.scrollX =
+        localSprite.displayX - this.cameras.main.width / 2;
+      this.cameras.main.scrollY =
+        localSprite.displayY - this.cameras.main.height / 2;
     }
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
@@ -2457,11 +2692,12 @@ export class GameScene extends Phaser.Scene {
     let portalX = 0;
     let portalY = 0;
 
-    // Check nexus realm portals
+    // Check nexus realm portals + vault portal
     if (this.localZone === "nexus") {
       const realmPortals = [
         { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y },
         { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y },
+        { x: VAULT_PORTAL_X, y: VAULT_PORTAL_Y },
       ];
       for (const rp of realmPortals) {
         const dx = px - rp.x;
@@ -2488,6 +2724,30 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
+    // Check vault chest in vault zone
+    this.nearVaultChest = false;
+    if (!nearPortal && isVaultZone(this.localZone)) {
+      const dx = px - VAULT_CHEST_X;
+      const dy = py - VAULT_CHEST_Y;
+      if (dx * dx + dy * dy < VAULT_CHEST_INTERACT_RADIUS * VAULT_CHEST_INTERACT_RADIUS) {
+        nearPortal = true;
+        portalX = VAULT_CHEST_X;
+        portalY = VAULT_CHEST_Y;
+        this.nearVaultChest = true;
+      }
+
+      // Also check return portal in vault
+      if (!nearPortal) {
+        const rdx = px - VAULT_RETURN_PORTAL_X;
+        const rdy = py - VAULT_RETURN_PORTAL_Y;
+        if (rdx * rdx + rdy * rdy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
+          nearPortal = true;
+          portalX = VAULT_RETURN_PORTAL_X;
+          portalY = VAULT_RETURN_PORTAL_Y;
+        }
+      }
+    }
+
     // Check dungeon portals
     if (!nearPortal) {
       this.dungeonPortalSprites.forEach((ps) => {
@@ -2502,8 +2762,19 @@ export class GameScene extends Phaser.Scene {
       });
     }
 
+    // Check portal gem vault portal
+    if (!nearPortal && this.vaultPortalActive) {
+      const dx = px - this.vaultPortalX;
+      const dy = py - this.vaultPortalY;
+      if (dx * dx + dy * dy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
+        nearPortal = true;
+        portalX = this.vaultPortalX;
+        portalY = this.vaultPortalY;
+      }
+    }
+
     if (nearPortal) {
-      const label = this.nearCraftingTable ? "Press E to Craft" : "Press E";
+      const label = this.nearCraftingTable ? "Press E to Craft" : this.nearVaultChest ? "Press E to Open Vault" : "Press E";
       this.pressEText.setText(label);
       this.pressEText.setPosition(portalX, portalY + DUNGEON_PORTAL_RADIUS + 20);
       this.pressEText.setVisible(true);
@@ -2662,6 +2933,7 @@ function readItemSchema(schema: SchemaInstance): ItemInstanceData {
     openStats,
     forgeProtectedSlot: (schema.forgeProtectedSlot as number) ?? -1,
     forgeProtectedSlot2: (schema.forgeProtectedSlot2 as number) ?? -1,
+    quantity: (schema.quantity as number) ?? 0,
   };
 }
 

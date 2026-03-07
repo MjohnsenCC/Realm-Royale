@@ -14,6 +14,7 @@ export class ItemInstance extends Schema {
   @type(["int8"]) openStats = new ArraySchema<number>();
   @type("int8") forgeProtectedSlot: number = -1;
   @type("int8") forgeProtectedSlot2: number = -1;
+  @type("int8") quantity: number = 0;
 }
 
 /** Convert a Schema ItemInstance to a plain ItemInstanceData object. */
@@ -31,6 +32,7 @@ export function schemaToItemData(schema: ItemInstance): ItemInstanceData {
     openStats: schema.openStats.map((v) => v as number),
     forgeProtectedSlot: schema.forgeProtectedSlot,
     forgeProtectedSlot2: schema.forgeProtectedSlot2,
+    quantity: schema.quantity,
   };
 }
 
@@ -49,6 +51,7 @@ export function itemDataToSchema(data: ItemInstanceData): ItemInstance {
   schema.openStats = new ArraySchema<number>(...data.openStats);
   schema.forgeProtectedSlot = data.forgeProtectedSlot;
   schema.forgeProtectedSlot2 = data.forgeProtectedSlot2;
+  schema.quantity = data.quantity;
   return schema;
 }
 
@@ -73,6 +76,7 @@ export function updateSchemaFromData(
   }
   schema.forgeProtectedSlot = data.forgeProtectedSlot;
   schema.forgeProtectedSlot2 = data.forgeProtectedSlot2;
+  schema.quantity = data.quantity;
 }
 
 /** Create an empty ItemInstance schema (represents empty slot). */

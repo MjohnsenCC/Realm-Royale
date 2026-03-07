@@ -224,7 +224,7 @@ export function computePlayerStats(
       }
     } else {
       const subtype = getItemSubtype(weapon.baseItemId);
-      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier, weapon.lockedStat1Tier, weapon.lockedStat2Tier);
+      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier, weapon.lockedStat1Tier, weapon.lockedStat2Tier, weapon.lockedStat1Roll, weapon.lockedStat2Roll);
       weaponDamage = scaled.damage;
       weaponCooldown = scaled.shootCooldown;
       weaponRange = scaled.range;
@@ -349,6 +349,8 @@ export function getZoneDimensions(zone: string): {
   const base = getZoneBase(zone);
   if (base === PlayerZone.Nexus)
     return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
+  if (base === PlayerZone.Vault)
+    return { width: 20 * TILE_SIZE, height: 20 * TILE_SIZE };
   const dType = ZONE_TO_DUNGEON_TYPE[base];
   if (dType !== undefined) {
     // Use actual generated dimensions if available (dynamic grid sizing)

@@ -41,6 +41,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.InteractPortal);
   }
 
+  sendOpenVault(): void {
+    this.room?.send(ClientMessage.OpenVault);
+  }
+
   sendZoneReady(): void {
     this.room?.send(ClientMessage.ZoneReady);
   }
@@ -55,6 +59,10 @@ export class NetworkManager {
 
   sendUsePortalGem(targetX: number, targetY: number): void {
     this.room?.send(ClientMessage.UsePortalGem, { targetX, targetY });
+  }
+
+  sendUsePortalGemVault(): void {
+    this.room?.send(ClientMessage.UsePortalGemVault);
   }
 
   getRoom(): Colyseus.Room | null {

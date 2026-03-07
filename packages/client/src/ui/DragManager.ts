@@ -6,8 +6,9 @@ import {
   getItemColor,
   ItemCategory,
   isConsumableItem,
+  isStackableItem,
+  getMaxStack,
   getConsumableSlotIndex,
-  CONSUMABLE_MAX_STACKS,
   HEALTH_POT_ID,
   MANA_POT_ID,
   PORTAL_GEM_ID,
@@ -19,16 +20,18 @@ import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import type { InventoryUI } from "./InventoryUI";
 import type { LootBagUI } from "./LootBagUI";
 import type { CraftingUI } from "./CraftingUI";
+import type { VaultUI } from "./VaultUI";
 import type { HUD } from "./HUD";
 
 export type DragSource =
   | { type: "bag"; bagId: string; slotIndex: number }
   | { type: "inventory"; slotIndex: number }
   | { type: "equipment"; slotIndex: number }
-  | { type: "consumable"; slotIndex: number };
+  | { type: "consumable"; slotIndex: number }
+  | { type: "vault"; slotIndex: number };
 
 export interface DropTarget {
-  type: "inventory" | "equipment" | "ground" | "crafting" | "consumable";
+  type: "inventory" | "equipment" | "ground" | "crafting" | "consumable" | "vault";
   slotIndex?: number;
 }
 
@@ -48,6 +51,7 @@ export class DragManager {
   private inventoryUI!: InventoryUI;
   private lootBagUI!: LootBagUI;
   private craftingUI: CraftingUI | null = null;
+  private vaultUI: VaultUI | null = null;
   private hud: HUD | null = null;
   private panelBoundsGetter!: () => SlotBounds;
 
@@ -92,6 +96,10 @@ export class DragManager {
     this.craftingUI = ui;
   }
 
+  setVaultUI(ui: VaultUI): void {
+    this.vaultUI = ui;
+  }
+
   setHUD(hud: HUD): void {
     this.hud = hud;
   }
@@ -124,6 +132,7 @@ export class DragManager {
       this.active = true;
       this.inventoryUI.setDragActive(true);
       this.lootBagUI.setDragActive(true);
+      this.vaultUI?.setDragActive(true);
       this.hud?.setDragActive(true);
       this.createGhost(this.item);
 
@@ -136,6 +145,8 @@ export class DragManager {
         this.inventoryUI.setDragSourceEqSlot(this.source.slotIndex);
       } else if (this.source.type === "consumable") {
         this.hud?.setDragSourceConsumableSlot(this.source.slotIndex);
+      } else if (this.source.type === "vault") {
+        this.vaultUI?.setDragSourceSlot(this.source.slotIndex);
       }
     }
 
@@ -182,6 +193,8 @@ export class DragManager {
     this.inventoryUI.setDragSourceEqSlot(-1);
     this.lootBagUI.setDragActive(false);
     this.lootBagUI.setDragSourceSlot(-1);
+    this.vaultUI?.setDragActive(false);
+    this.vaultUI?.setDragSourceSlot(-1);
     this.hud?.setDragActive(false);
     this.hud?.setDragSourceConsumableSlot(-1);
     this.resetState();
@@ -265,8 +278,8 @@ export class DragManager {
       }
     }
 
-    // Check equipment slots (from inventory or equipment source)
-    if (this.source?.type === "inventory" || this.source?.type === "equipment") {
+    // Check equipment slots (from inventory, equipment, vault, or bag source)
+    if (this.source?.type === "inventory" || this.source?.type === "equipment" || this.source?.type === "vault" || this.source?.type === "bag") {
       const eqBounds = this.inventoryUI.getEqSlotBounds();
       for (let i = 0; i < eqBounds.length; i++) {
         if (this.hitTest(px, py, eqBounds[i])) {
@@ -285,6 +298,16 @@ export class DragManager {
       }
     }
 
+    // Check vault slots
+    if (this.vaultUI?.isVisible()) {
+      const vaultBounds = this.vaultUI.getVaultSlotBounds();
+      for (let i = 0; i < vaultBounds.length; i++) {
+        if (this.hitTest(px, py, vaultBounds[i])) {
+          return { type: "vault", slotIndex: i };
+        }
+      }
+    }
+
     // Check crafting slot (before ground, since crafting panel overlaps game area)
     if (this.craftingUI?.isVisible() && (this.source?.type === "inventory" || this.source?.type === "equipment")) {
       const craftBounds = this.craftingUI.getItemSlotBounds();
@@ -296,7 +319,7 @@ export class DragManager {
     // Check ground drop — inventory, equipment, or consumable source
     if (this.source?.type === "inventory" || this.source?.type === "equipment" || this.source?.type === "consumable") {
       const panel = this.panelBoundsGetter();
-      if (py < panel.y && !this.lootBagUI.isOverPanel(px, py)) {
+      if (py < panel.y && !this.lootBagUI.isOverPanel(px, py) && !(this.vaultUI?.isOverPanel(px, py))) {
         return { type: "ground" };
       }
     }
@@ -309,11 +332,26 @@ export class DragManager {
   }
 
   private isValidDrop(source: DragSource, target: DropTarget, item: ItemInstanceData): boolean {
+    if (source.type === "vault") {
+      if (target.type === "inventory") return true;
+      if (target.type === "vault") return target.slotIndex !== source.slotIndex;
+      if (target.type === "equipment") {
+        const category = getItemCategory(item.baseItemId);
+        return category >= 0 && category < 4 && category === target.slotIndex;
+      }
+      return false;
+    }
+
     if (source.type === "bag") {
       if (target.type === "inventory") return true;
       // Bag to consumable slot: item must be the correct consumable
       if (target.type === "consumable" && target.slotIndex !== undefined) {
         return isConsumableItem(item.baseItemId) && getConsumableSlotIndex(item.baseItemId) === target.slotIndex;
+      }
+      // Bag to equipment: category must match equipment slot
+      if (target.type === "equipment") {
+        const category = getItemCategory(item.baseItemId);
+        return category >= 0 && category < 4 && category === target.slotIndex;
       }
       return false;
     }
@@ -328,6 +366,9 @@ export class DragManager {
       }
       if (target.type === "inventory") {
         return target.slotIndex !== source.slotIndex;
+      }
+      if (target.type === "vault") {
+        return true;
       }
       // Inventory to consumable slot: item must match the slot
       if (target.type === "consumable" && target.slotIndex !== undefined) {
@@ -349,6 +390,9 @@ export class DragManager {
       if (target.type === "equipment") {
         return target.slotIndex !== source.slotIndex; // No self-drop
       }
+      if (target.type === "vault") {
+        return true; // Equipment to vault
+      }
       if (target.type === "crafting") {
         return true;
       }
@@ -363,6 +407,9 @@ export class DragManager {
       }
       if (target.type === "consumable") {
         return target.slotIndex !== source.slotIndex; // No self-drop
+      }
+      if (target.type === "vault") {
+        return true; // Move consumable to vault
       }
       return false;
     }
@@ -393,6 +440,8 @@ export class DragManager {
       this.inventoryUI.setHighlightedEqSlot(target.slotIndex);
     } else if (target.type === "crafting") {
       this.craftingUI?.setHighlighted(true);
+    } else if (target.type === "vault" && target.slotIndex !== undefined) {
+      this.vaultUI?.setHighlightedVaultSlot(target.slotIndex);
     } else if (target.type === "consumable" && target.slotIndex !== undefined) {
       this.hud?.setHighlightedConsumableSlot(target.slotIndex);
     }
@@ -402,6 +451,7 @@ export class DragManager {
     this.inventoryUI.setHighlightedInvSlot(-1);
     this.inventoryUI.setHighlightedEqSlot(-1);
     this.craftingUI?.setHighlighted(false);
+    this.vaultUI?.setHighlightedVaultSlot(-1);
     this.hud?.setHighlightedConsumableSlot(-1);
     this.currentHighlight = null;
   }
@@ -474,18 +524,38 @@ export class DragManager {
         slotIndex: source.slotIndex,
       });
     } else if (source.type === "inventory" && target.type === "inventory") {
-      // Optimistic: swap two inventory slots
       const fromSlot = source.slotIndex;
       const toSlot = target.slotIndex!;
-      const temp = { ...inv[fromSlot] };
-      inv[fromSlot] = { ...inv[toSlot] };
-      inv[toSlot] = temp;
-      this.inventoryUI.redrawSlots();
+      const fromItem = inv[fromSlot];
+      const toItem = inv[toSlot];
 
-      this.room.send(ClientMessage.SwapInventory, {
-        fromSlot,
-        toSlot,
-      });
+      // Check for stackable merge (consumables + crafting orbs)
+      if (fromItem.baseItemId >= 0 && toItem.baseItemId >= 0 &&
+          isStackableItem(fromItem.baseItemId) && fromItem.baseItemId === toItem.baseItemId) {
+        const maxStack = getMaxStack(fromItem.baseItemId);
+        const fromQty = fromItem.quantity || 1;
+        const toQty = toItem.quantity || 1;
+        const merged = Math.min(fromQty + toQty, maxStack);
+        const remainder = fromQty + toQty - merged;
+        toItem.quantity = merged;
+        if (remainder > 0) {
+          fromItem.quantity = remainder;
+        } else {
+          inv[fromSlot] = createEmptyItemInstance();
+        }
+        this.inventoryUI.redrawSlots();
+        this.room.send(ClientMessage.StackConsumables, {
+          fromSource: "inventory", fromSlot,
+          toSource: "inventory", toSlot,
+        });
+      } else {
+        // Normal swap
+        const temp = { ...inv[fromSlot] };
+        inv[fromSlot] = { ...inv[toSlot] };
+        inv[toSlot] = temp;
+        this.inventoryUI.redrawSlots();
+        this.room.send(ClientMessage.SwapInventory, { fromSlot, toSlot });
+      }
     } else if (source.type === "equipment" && target.type === "inventory") {
       // Optimistic: move equipment to inventory (swap if occupied with same category)
       const eqSlot = source.slotIndex;
@@ -540,11 +610,209 @@ export class DragManager {
           this.craftingUI.selectItem(item, location, source.slotIndex);
         }
       }
+    } else if (source.type === "vault" && target.type === "inventory") {
+      // Vault -> Inventory
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        const fromItem = vaultItems[source.slotIndex];
+        const toItem = inv[target.slotIndex!];
+
+        // Check for stackable merge
+        if (fromItem.baseItemId >= 0 && toItem.baseItemId >= 0 &&
+            isStackableItem(fromItem.baseItemId) && fromItem.baseItemId === toItem.baseItemId) {
+          const maxStack = getMaxStack(fromItem.baseItemId);
+          const fromQty = fromItem.quantity || 1;
+          const toQty = toItem.quantity || 1;
+          const merged = Math.min(fromQty + toQty, maxStack);
+          const remainder = fromQty + toQty - merged;
+          toItem.quantity = merged;
+          if (remainder > 0) {
+            fromItem.quantity = remainder;
+          } else {
+            vaultItems[source.slotIndex] = createEmptyItemInstance();
+          }
+          this.vaultUI.redrawItems();
+          this.inventoryUI.redrawSlots();
+          this.room.send(ClientMessage.StackConsumables, {
+            fromSource: "vault", fromSlot: source.slotIndex,
+            toSource: "inventory", toSlot: target.slotIndex,
+          });
+        } else {
+          // Normal swap
+          const fromCopy = { ...fromItem };
+          const toCopy = { ...toItem };
+          vaultItems[source.slotIndex] = toCopy;
+          inv[target.slotIndex!] = fromCopy;
+          this.vaultUI.redrawItems();
+          this.inventoryUI.redrawSlots();
+          this.room.send(ClientMessage.VaultMoveItem, {
+            fromSource: "vault", fromSlot: source.slotIndex,
+            toSource: "inventory", toSlot: target.slotIndex,
+          });
+        }
+      }
+    } else if (source.type === "inventory" && target.type === "vault") {
+      // Inventory -> Vault
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        const fromItem = inv[source.slotIndex];
+        const toItem = vaultItems[target.slotIndex!];
+
+        // Check for stackable merge
+        if (fromItem.baseItemId >= 0 && toItem.baseItemId >= 0 &&
+            isStackableItem(fromItem.baseItemId) && fromItem.baseItemId === toItem.baseItemId) {
+          const maxStack = getMaxStack(fromItem.baseItemId);
+          const fromQty = fromItem.quantity || 1;
+          const toQty = toItem.quantity || 1;
+          const merged = Math.min(fromQty + toQty, maxStack);
+          const remainder = fromQty + toQty - merged;
+          toItem.quantity = merged;
+          if (remainder > 0) {
+            fromItem.quantity = remainder;
+          } else {
+            inv[source.slotIndex] = createEmptyItemInstance();
+          }
+          this.inventoryUI.redrawSlots();
+          this.vaultUI.redrawItems();
+          this.room.send(ClientMessage.StackConsumables, {
+            fromSource: "inventory", fromSlot: source.slotIndex,
+            toSource: "vault", toSlot: target.slotIndex,
+          });
+        } else {
+          // Normal swap
+          const fromCopy = { ...fromItem };
+          const toCopy = { ...toItem };
+          inv[source.slotIndex] = toCopy;
+          vaultItems[target.slotIndex!] = fromCopy;
+          this.inventoryUI.redrawSlots();
+          this.vaultUI.redrawItems();
+          this.room.send(ClientMessage.VaultMoveItem, {
+            fromSource: "inventory", fromSlot: source.slotIndex,
+            toSource: "vault", toSlot: target.slotIndex,
+          });
+        }
+      }
+    } else if (source.type === "vault" && target.type === "vault") {
+      // Vault -> Vault
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        const fromItem = vaultItems[source.slotIndex];
+        const toItem = vaultItems[target.slotIndex!];
+
+        // Check for stackable merge
+        if (fromItem.baseItemId >= 0 && toItem.baseItemId >= 0 &&
+            isStackableItem(fromItem.baseItemId) && fromItem.baseItemId === toItem.baseItemId) {
+          const maxStack = getMaxStack(fromItem.baseItemId);
+          const fromQty = fromItem.quantity || 1;
+          const toQty = toItem.quantity || 1;
+          const merged = Math.min(fromQty + toQty, maxStack);
+          const remainder = fromQty + toQty - merged;
+          toItem.quantity = merged;
+          if (remainder > 0) {
+            fromItem.quantity = remainder;
+          } else {
+            vaultItems[source.slotIndex] = createEmptyItemInstance();
+          }
+          this.vaultUI.redrawItems();
+          this.room.send(ClientMessage.StackConsumables, {
+            fromSource: "vault", fromSlot: source.slotIndex,
+            toSource: "vault", toSlot: target.slotIndex,
+          });
+        } else {
+          // Normal swap
+          const temp = { ...fromItem };
+          vaultItems[source.slotIndex] = { ...toItem };
+          vaultItems[target.slotIndex!] = temp;
+          this.vaultUI.redrawItems();
+          this.room.send(ClientMessage.VaultMoveItem, {
+            fromSource: "vault", fromSlot: source.slotIndex,
+            toSource: "vault", toSlot: target.slotIndex,
+          });
+        }
+      }
+    } else if (source.type === "vault" && target.type === "equipment") {
+      // Vault -> Equipment: equip item from vault, old equipment goes to vault slot
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        const fromItem = { ...vaultItems[source.slotIndex] };
+        const oldEquip = { ...eq[target.slotIndex!] };
+        eq[target.slotIndex!] = fromItem;
+        vaultItems[source.slotIndex] = oldEquip;
+        this.vaultUI.redrawItems();
+        this.inventoryUI.redrawEquipmentSlots();
+      }
+      this.room.send(ClientMessage.VaultMoveItem, {
+        fromSource: "vault", fromSlot: source.slotIndex,
+        toSource: "equipment", toSlot: target.slotIndex,
+      });
+    } else if (source.type === "equipment" && target.type === "vault") {
+      // Equipment -> Vault: store equipment in vault
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        const eqItem = { ...eq[source.slotIndex] };
+        const vaultItem = { ...vaultItems[target.slotIndex!] };
+        vaultItems[target.slotIndex!] = eqItem;
+        // Only equip vault item back if it matches the equipment slot category
+        if (vaultItem.baseItemId >= 0 && getItemCategory(vaultItem.baseItemId) === source.slotIndex) {
+          eq[source.slotIndex] = vaultItem;
+        } else {
+          eq[source.slotIndex] = createEmptyItemInstance();
+        }
+        this.vaultUI.redrawItems();
+        this.inventoryUI.redrawEquipmentSlots();
+      }
+      this.room.send(ClientMessage.VaultMoveItem, {
+        fromSource: "equipment", fromSlot: source.slotIndex,
+        toSource: "vault", toSlot: target.slotIndex,
+      });
+    } else if (source.type === "bag" && target.type === "equipment") {
+      // Bag -> Equipment: equip item directly from bag
+      const bagItems = this.lootBagUI.getItems();
+      const bagItem = bagItems[source.slotIndex];
+      if (bagItem) {
+        const eqSlot = target.slotIndex!;
+        const oldEquip = { ...eq[eqSlot] };
+        eq[eqSlot] = { ...bagItem };
+        bagItems[source.slotIndex] = createEmptyItemInstance();
+        this.lootBagUI.redrawItems();
+        this.inventoryUI.redrawEquipmentSlots();
+        // If old equipment exists, put it in first empty inventory slot
+        if (oldEquip.baseItemId >= 0) {
+          const emptySlot = inv.findIndex(item => item.baseItemId < 0);
+          if (emptySlot !== -1) {
+            inv[emptySlot] = oldEquip;
+            this.inventoryUI.redrawSlots();
+          }
+        }
+      }
+      this.room.send(ClientMessage.PickupItem, {
+        bagId: (source as { type: "bag"; bagId: string; slotIndex: number }).bagId,
+        slotIndex: source.slotIndex,
+        targetEquipmentSlot: target.slotIndex,
+      });
     } else if (source.type === "consumable" && target.type === "inventory") {
-      // Move one consumable from slot to inventory
+      // Move one consumable from slot to inventory (stacks if target has same consumable)
+      const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
+      const consumableId = consumableIds[source.slotIndex];
+      const targetSlot = target.slotIndex;
+      if (targetSlot !== undefined && inv[targetSlot] && inv[targetSlot].baseItemId === consumableId) {
+        // Optimistic stack
+        const maxStack = getMaxStack(consumableId);
+        const toQty = inv[targetSlot].quantity || 1;
+        if (toQty < maxStack) {
+          inv[targetSlot].quantity = toQty + 1;
+          this.inventoryUI.redrawSlots();
+        }
+      }
       this.room.send(ClientMessage.MoveConsumableToInventory, {
         consumableSlot: source.slotIndex,
         targetSlot: target.slotIndex,
+      });
+    } else if (source.type === "consumable" && target.type === "vault") {
+      // Move one consumable from slot to vault
+      this.room.send(ClientMessage.MoveConsumableToVault, {
+        consumableSlot: source.slotIndex,
+        targetVaultSlot: target.slotIndex,
       });
     } else if (source.type === "consumable" && target.type === "ground") {
       // Drop one consumable on ground

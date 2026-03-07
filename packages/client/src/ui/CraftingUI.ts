@@ -15,6 +15,8 @@ import {
   getCategoryName,
   getScaledWeaponStats,
   getScaledAbilityStats,
+  getScaledWeaponStatsRange,
+  getScaledAbilityStatsRange,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
@@ -603,13 +605,17 @@ export class CraftingUI {
     const lockedEntries: { text: string; tier: number | null }[] = [];
 
     if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedEntries.push({ text: `Damage: ${ws.damage}`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
-      lockedEntries.push({ text: `Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
+      const wRange = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      lockedEntries.push({ text: `Damage: ${ws.damage}(${wRange.damageMin}-${wRange.damageMax})`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
+      const frMin = (1000 / wRange.shootCooldownMax).toFixed(1);
+      const frMax = (1000 / wRange.shootCooldownMin).toFixed(1);
+      lockedEntries.push({ text: `Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
     } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedEntries.push({ text: `Damage: ${as.damage}`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
-      lockedEntries.push({ text: `Mana Cost: ${as.manaCost}`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
+      const aRange = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      lockedEntries.push({ text: `Damage: ${as.damage}(${aRange.damageMin}-${aRange.damageMax})`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
+      lockedEntries.push({ text: `Mana Cost: ${as.manaCost}(${aRange.manaCostMin}-${aRange.manaCostMax})`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
     } else {
       // Armor and Ring: use rolled locked stat bonuses
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
@@ -716,10 +722,10 @@ export class CraftingUI {
     // === Hidden stats (for weapons/abilities) ===
     const hiddenLines: string[] = [];
     if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
       hiddenLines.push(`Range: ${ws.range}`);
     } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
       hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);
       hiddenLines.push(`Range: ${as.range}`);
       if (as.piercing) hiddenLines.push(`Piercing: Yes`);

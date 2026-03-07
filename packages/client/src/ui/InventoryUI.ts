@@ -7,6 +7,7 @@ import {
   getItemSubtype,
   getItemColor,
   ItemCategory,
+  isStackableItem,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
@@ -41,6 +42,7 @@ export class InventoryUI {
   );
 
   private tierTexts: Phaser.GameObjects.Text[] = [];
+  private qtyTexts: Phaser.GameObjects.Text[] = [];
 
   // Equipment
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
@@ -254,6 +256,17 @@ export class InventoryUI {
         .setScrollFactor(0)
         .setDepth(102);
       this.tierTexts.push(tierText);
+
+      const qtyText = scene.add
+        .text(sx + 2, sy + this.slotSize - 2, "", {
+          fontSize: tierFontSize,
+          color: "#ffffff",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0, 1)
+        .setScrollFactor(0)
+        .setDepth(102);
+      this.qtyTexts.push(qtyText);
     }
 
     this.drawSlots();
@@ -295,7 +308,8 @@ export class InventoryUI {
           this.currentInventory[i].lockedStat2Tier !== newItem.lockedStat2Tier ||
           !openStatsEqual(this.currentInventory[i].openStats, newItem.openStats) ||
           this.currentInventory[i].forgeProtectedSlot !== newItem.forgeProtectedSlot ||
-          this.currentInventory[i].forgeProtectedSlot2 !== newItem.forgeProtectedSlot2) {
+          this.currentInventory[i].forgeProtectedSlot2 !== newItem.forgeProtectedSlot2 ||
+          this.currentInventory[i].quantity !== newItem.quantity) {
         this.currentInventory[i] = newItem;
         changed = true;
       }
@@ -365,10 +379,18 @@ export class InventoryUI {
           subtype,
           color
         );
-        const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
-        this.tierTexts[i].setText(tierLabel);
+        if (isStackableItem(item.baseItemId)) {
+          const qty = item.quantity || 1;
+          this.tierTexts[i].setText(`x${qty}`);
+          this.qtyTexts[i].setText("");
+        } else {
+          const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
+          this.tierTexts[i].setText(tierLabel);
+          this.qtyTexts[i].setText("");
+        }
       } else {
         this.tierTexts[i].setText("");
+        this.qtyTexts[i].setText("");
       }
 
       // Drag highlight overlays
@@ -383,6 +405,7 @@ export class InventoryUI {
       }
 
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
+      this.qtyTexts[i].setPosition(sx + 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
       this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
     }
@@ -425,8 +448,13 @@ export class InventoryUI {
           subtype,
           color
         );
-        const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
-        this.eqTierTexts[i].setText(tierLabel);
+        if (isStackableItem(item.baseItemId)) {
+          const qty = item.quantity || 1;
+          this.eqTierTexts[i].setText(`x${qty}`);
+        } else {
+          const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
+          this.eqTierTexts[i].setText(tierLabel);
+        }
       } else {
         // Draw faded category icon as placeholder
         const iconSize = this.slotSize * 0.55;

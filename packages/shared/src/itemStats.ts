@@ -21,6 +21,7 @@ export interface ItemInstanceData {
   openStats: number[]; // packed triples: [type, tier, roll, type, tier, roll, ...]
   forgeProtectedSlot: number; // index into openStats triples (0-4), -1 if none
   forgeProtectedSlot2: number; // second protected slot for Divine Forge, -1 if none
+  quantity: number; // 0 = non-stackable (default), >=1 = consumable stack count
 }
 
 // --- Constants ---
@@ -123,15 +124,24 @@ export const LOCKED_STAT_RANGES_BY_TIER: Record<number, Record<number, [number, 
 
 // --- Locked Quality Multiplier ---
 // For weapon/ability inherent stats, the locked stat tier acts as a quality modifier.
-// T3 is baseline (1.0), lower tiers reduce, higher tiers boost.
-export const LOCKED_QUALITY_MULTIPLIER: Record<number, number> = {
-  1: 0.85,
-  2: 0.93,
-  3: 1.0,
-  4: 1.08,
-  5: 1.18,
-  6: 1.30,
+// T3 is baseline (~1.0), lower tiers reduce, higher tiers boost.
+// Each tier is a [min, max] range; the locked roll (0-100) interpolates within it.
+export const LOCKED_QUALITY_MULTIPLIER: Record<number, [number, number]> = {
+  1: [0.80, 0.90],
+  2: [0.88, 0.98],
+  3: [0.95, 1.05],
+  4: [1.02, 1.14],
+  5: [1.12, 1.25],
+  6: [1.22, 1.38],
 };
+
+/** Get the quality multiplier for a locked quality tier and roll (0-100). */
+export function getQualityMultiplier(tier: number, roll: number): number {
+  const range = LOCKED_QUALITY_MULTIPLIER[tier];
+  if (!range) return 1.0;
+  const [min, max] = range;
+  return min + (max - min) * (roll / 100);
+}
 
 // --- Item Tier Multiplier ---
 // Used ONLY for weapon/ability base stat scaling. NOT applied to stat tier ranges.
@@ -498,6 +508,7 @@ export function createEmptyItemInstance(): ItemInstanceData {
     openStats: [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,
+    quantity: 0,
   };
 }
 
@@ -516,7 +527,9 @@ export function getScaledWeaponStats(
   subtype: number,
   itemTier: number,
   damageTier: number = 0,
-  fireRateTier: number = 0
+  fireRateTier: number = 0,
+  damageRoll: number = 50,
+  fireRateRoll: number = 50
 ): {
   damage: number;
   shootCooldown: number;
@@ -529,8 +542,8 @@ export function getScaledWeaponStats(
     return { damage: 20, shootCooldown: 300, range: 100, projectileSpeed: 300, projectileSize: 5 };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  const dmgQuality = damageTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[damageTier] ?? 1.0) : 1.0;
-  const frQuality = fireRateTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[fireRateTier] ?? 1.0) : 1.0;
+  const dmgQuality = damageTier > 0 ? getQualityMultiplier(damageTier, damageRoll) : 1.0;
+  const frQuality = fireRateTier > 0 ? getQualityMultiplier(fireRateTier, fireRateRoll) : 1.0;
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
     shootCooldown: Math.round(template.baseCooldown / mult / frQuality),
@@ -545,7 +558,9 @@ export function getScaledAbilityStats(
   subtype: number,
   itemTier: number,
   damageTier: number = 0,
-  manaCostTier: number = 0
+  manaCostTier: number = 0,
+  damageRoll: number = 50,
+  manaCostRoll: number = 50
 ): {
   damage: number;
   range: number;
@@ -560,8 +575,8 @@ export function getScaledAbilityStats(
     return { damage: 50, range: 500, projectileSpeed: 600, projectileSize: 12, manaCost: 30, cooldown: 1000, piercing: true };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  const dmgQuality = damageTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[damageTier] ?? 1.0) : 1.0;
-  const manaQuality = manaCostTier > 0 ? (LOCKED_QUALITY_MULTIPLIER[manaCostTier] ?? 1.0) : 1.0;
+  const dmgQuality = damageTier > 0 ? getQualityMultiplier(damageTier, damageRoll) : 1.0;
+  const manaQuality = manaCostTier > 0 ? getQualityMultiplier(manaCostTier, manaCostRoll) : 1.0;
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
@@ -570,5 +585,45 @@ export function getScaledAbilityStats(
     manaCost: Math.round(template.baseManaCost * (1.1 - 0.1 * mult) / manaQuality),
     cooldown: Math.round(template.baseCooldown / mult),
     piercing: template.piercing,
+  };
+}
+
+/** Get weapon stats at min and max quality roll for tooltip range display. */
+export function getScaledWeaponStatsRange(
+  subtype: number,
+  itemTier: number,
+  damageTier: number,
+  fireRateTier: number
+): {
+  damageMin: number; damageMax: number;
+  shootCooldownMin: number; shootCooldownMax: number;
+} {
+  const minStats = getScaledWeaponStats(subtype, itemTier, damageTier, fireRateTier, 0, 0);
+  const maxStats = getScaledWeaponStats(subtype, itemTier, damageTier, fireRateTier, 100, 100);
+  return {
+    damageMin: minStats.damage,
+    damageMax: maxStats.damage,
+    shootCooldownMin: maxStats.shootCooldown,
+    shootCooldownMax: minStats.shootCooldown,
+  };
+}
+
+/** Get ability stats at min and max quality roll for tooltip range display. */
+export function getScaledAbilityStatsRange(
+  subtype: number,
+  itemTier: number,
+  damageTier: number,
+  manaCostTier: number
+): {
+  damageMin: number; damageMax: number;
+  manaCostMin: number; manaCostMax: number;
+} {
+  const minStats = getScaledAbilityStats(subtype, itemTier, damageTier, manaCostTier, 0, 0);
+  const maxStats = getScaledAbilityStats(subtype, itemTier, damageTier, manaCostTier, 100, 100);
+  return {
+    damageMin: minStats.damage,
+    damageMax: maxStats.damage,
+    manaCostMin: maxStats.manaCost,
+    manaCostMax: minStats.manaCost,
   };
 }

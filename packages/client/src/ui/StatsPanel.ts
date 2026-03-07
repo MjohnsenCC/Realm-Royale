@@ -389,7 +389,7 @@ export class StatsPanel {
         }
       } else {
         const subtype = getItemSubtype(weaponItem.baseItemId);
-        const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Tier, weaponItem.lockedStat2Tier);
+        const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Tier, weaponItem.lockedStat2Tier, weaponItem.lockedStat1Roll, weaponItem.lockedStat2Roll);
         weaponCooldown = scaled.shootCooldown;
         weaponBaseDamage = scaled.damage;
       }
@@ -417,7 +417,9 @@ export class StatsPanel {
           subtype,
           abilityItem.instanceTier,
           abilityItem.lockedStat1Tier,
-          abilityItem.lockedStat2Tier
+          abilityItem.lockedStat2Tier,
+          abilityItem.lockedStat1Roll,
+          abilityItem.lockedStat2Roll
         );
         abilityDmg = as.damage;
         abilityCooldown = as.cooldown;

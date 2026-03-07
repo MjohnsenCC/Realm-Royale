@@ -57,6 +57,18 @@ import {
   isDungeonZone,
   DUNGEON_TO_ZONE,
   isHostileZone,
+  isVaultZone,
+  VAULT_PORTAL_X,
+  VAULT_PORTAL_Y,
+  VAULT_CHEST_X,
+  VAULT_CHEST_Y,
+  VAULT_CHEST_INTERACT_RADIUS,
+  VAULT_SPAWN_X,
+  VAULT_SPAWN_Y,
+  VAULT_SIZE,
+  VAULT_RETURN_PORTAL_X,
+  VAULT_RETURN_PORTAL_Y,
+  generateVaultMap,
   getDungeonTypeFromZone,
   resolveWallCollision,
   resolveHostileCollision,
@@ -72,6 +84,8 @@ import {
   getPackDef,
   isConsumableItem,
   isCraftingOrbItem,
+  isStackableItem,
+  getMaxStack,
   getConsumableSlotIndex,
   CONSUMABLE_MAX_STACKS,
   HEALTH_POT_ID,
@@ -97,6 +111,7 @@ import {
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
+import { getAccountVault, saveAccountVault } from "../db/accounts";
 import * as fs from "fs";
 import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
@@ -203,7 +218,7 @@ export class GameRoom extends Room<GameState> {
     });
 
     // Listen for portal interaction (E key)
-    this.onMessage(ClientMessage.InteractPortal, (client) => {
+    this.onMessage(ClientMessage.InteractPortal, async (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return;
 
@@ -226,6 +241,65 @@ export class GameRoom extends Room<GameState> {
             client.send(ServerMessage.ZoneChanged, { zone: player.zone });
             return;
           }
+        }
+
+        // Check vault portal (nexus west room)
+        const vaultDist = distanceBetween(player.x, player.y, VAULT_PORTAL_X, VAULT_PORTAL_Y);
+        if (vaultDist < PORTAL_RADIUS + PLAYER_RADIUS) {
+          // Lazy-load vault from DB if not yet loaded
+          if (player.vaultItems === null && player.accountId) {
+            try {
+              player.vaultItems = await getAccountVault(player.accountId);
+            } catch (err) {
+              console.error(`Failed to load vault for account ${player.accountId}:`, err);
+              player.vaultItems = [];
+            }
+          } else if (player.vaultItems === null) {
+            // Guest player: ephemeral vault
+            player.vaultItems = [];
+          }
+          // Pad vault to VAULT_SIZE if shorter
+          while (player.vaultItems.length < VAULT_SIZE) {
+            player.vaultItems.push(createEmptyItemInstance());
+          }
+
+          player.invulnerable = true;
+          player.invulnerableSince = Date.now();
+          player.zone = `vault:${player.characterId || client.sessionId}`;
+          player.x = VAULT_SPAWN_X;
+          player.y = VAULT_SPAWN_Y;
+          this.removePlayerProjectiles(player.id);
+          client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+          return;
+        }
+      }
+
+      // Check return portal inside vault
+      if (isVaultZone(player.zone)) {
+        const returnDist = distanceBetween(player.x, player.y, VAULT_RETURN_PORTAL_X, VAULT_RETURN_PORTAL_Y);
+        if (returnDist < PORTAL_RADIUS + PLAYER_RADIUS) {
+          player.nearVaultChest = false;
+          if (player.portalGemPortalActive) {
+            // Return to realm/dungeon position where portal gem was used
+            player.invulnerable = true;
+            player.invulnerableSince = Date.now();
+            const returnZone = player.portalGemReturnZone;
+            player.zone = returnZone;
+            player.x = player.portalGemReturnX;
+            player.y = player.portalGemReturnY;
+            player.portalGemPortalActive = false;
+            player.portalGemReturnZone = "";
+            this.removePlayerProjectiles(player.id);
+            // Include dungeonSeed so the client can regenerate the dungeon map
+            const dungeonSeed = isDungeonZone(returnZone)
+              ? this.dungeonSystem.getDungeonSeed(returnZone)
+              : undefined;
+            client.send(ServerMessage.ZoneChanged, { zone: returnZone, dungeonSeed });
+            client.send(ServerMessage.VaultPortalClosed);
+            return;
+          }
+          this.teleportPlayerToNexus(player, client);
+          return;
         }
       }
 
@@ -296,6 +370,37 @@ export class GameRoom extends Room<GameState> {
           handled = true;
         }
       });
+      if (handled) return;
+
+      // Check if player has an active portal gem vault portal nearby
+      if (player.portalGemPortalActive) {
+        const dist = distanceBetween(player.x, player.y, player.portalGemReturnX, player.portalGemReturnY);
+        if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
+          // Lazy-load vault from DB if not yet loaded
+          if (player.vaultItems === null && player.accountId) {
+            try {
+              player.vaultItems = await getAccountVault(player.accountId);
+            } catch (err) {
+              console.error(`Failed to load vault for account ${player.accountId}:`, err);
+              player.vaultItems = [];
+            }
+          } else if (player.vaultItems === null) {
+            player.vaultItems = [];
+          }
+          while (player.vaultItems.length < VAULT_SIZE) {
+            player.vaultItems.push(createEmptyItemInstance());
+          }
+
+          player.invulnerable = true;
+          player.invulnerableSince = Date.now();
+          player.zone = `vault:${player.characterId || client.sessionId}`;
+          player.x = VAULT_SPAWN_X;
+          player.y = VAULT_SPAWN_Y;
+          this.removePlayerProjectiles(player.id);
+          client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+          return;
+        }
+      }
     });
 
     // Client signals loading screen is done — remove invulnerability
@@ -308,7 +413,7 @@ export class GameRoom extends Room<GameState> {
     // Listen for item pickup from loot bag
     this.onMessage(
       ClientMessage.PickupItem,
-      (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number; targetSlot?: number }) => {
+      (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number; targetSlot?: number; targetEquipmentSlot?: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
 
@@ -334,6 +439,37 @@ export class GameRoom extends Room<GameState> {
           if (expectedSlot !== data.targetConsumableSlot) return;
           if (!this.addConsumableToPlayer(player, itemId)) return;
           updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+        }
+        // Direct pickup to equipment slot (bag → equipment drag)
+        else if (data.targetEquipmentSlot !== undefined) {
+          const eqSlot = data.targetEquipmentSlot;
+          if (eqSlot < 0 || eqSlot >= EQUIPMENT_SLOTS) return;
+          if (isConsumableItem(itemId) || isCraftingOrbItem(itemId)) return;
+          const category = getItemCategory(itemId);
+          if (category !== eqSlot) return;
+
+          const currentEquipped = schemaToItemData(player.equipment[eqSlot]!);
+          updateSchemaFromData(player.equipment[eqSlot]!, itemData);
+          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+
+          // If there was a previously equipped item, try to put it in inventory
+          if (currentEquipped.baseItemId >= 0) {
+            let emptySlot = -1;
+            for (let i = 0; i < player.inventory.length; i++) {
+              if (player.inventory[i]!.baseItemId === -1) {
+                emptySlot = i;
+                break;
+              }
+            }
+            if (emptySlot !== -1) {
+              updateSchemaFromData(player.inventory[emptySlot]!, currentEquipped);
+            } else {
+              // Inventory full: put old equipment back into the bag slot
+              updateSchemaFromData(bagItem.item, currentEquipped);
+            }
+          }
+
+          recalcPlayerStats(player);
         }
         // All items go to inventory (player drags to inventory)
         else {
@@ -417,9 +553,16 @@ export class GameRoom extends Room<GameState> {
           const slotIdx = getConsumableSlotIndex(itemId);
           const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
           const current = this.getConsumableCount(player, slotIdx);
-          if (current >= maxStack) return;
-          this.setConsumableCount(player, slotIdx, current + 1);
-          updateSchemaFromData(invItem, createEmptyItemInstance());
+          const qty = invItem.quantity || 1;
+          const canAdd = Math.min(qty, maxStack - current);
+          if (canAdd <= 0) return;
+          this.setConsumableCount(player, slotIdx, current + canAdd);
+          if (canAdd < qty) {
+            // Partial transfer: keep remainder in inventory
+            invItem.quantity = qty - canAdd;
+          } else {
+            updateSchemaFromData(invItem, createEmptyItemInstance());
+          }
           return;
         }
 
@@ -559,6 +702,57 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Listen for move consumable from dedicated slot to vault
+    this.onMessage(
+      ClientMessage.MoveConsumableToVault,
+      (client, data: { consumableSlot: number; targetVaultSlot?: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+        if (!isVaultZone(player.zone) || !player.vaultItems) return;
+
+        const slot = data.consumableSlot;
+        if (slot < 0 || slot > 2) return;
+        const count = this.getConsumableCount(player, slot);
+        if (count <= 0) return;
+
+        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
+        const consumableId = consumableIds[slot];
+        const maxStack = CONSUMABLE_MAX_STACKS[slot];
+        const vaultSlot = data.targetVaultSlot;
+
+        // Check if target vault slot has the same consumable and can stack
+        if (vaultSlot !== undefined && vaultSlot >= 0 && vaultSlot < player.vaultItems.length) {
+          const targetItem = player.vaultItems[vaultSlot];
+          if (targetItem.baseItemId === consumableId) {
+            const currentQty = targetItem.quantity || 1;
+            if (currentQty < maxStack) {
+              this.setConsumableCount(player, slot, count - 1);
+              player.vaultItems[vaultSlot] = { ...targetItem, quantity: currentQty + 1 };
+              player.vaultDirty = true;
+              client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+              return;
+            }
+          }
+          // Target slot is empty: place new item there
+          if (targetItem.baseItemId === -1) {
+            this.setConsumableCount(player, slot, count - 1);
+            player.vaultItems[vaultSlot] = generateConsumableInstance(consumableId);
+            player.vaultDirty = true;
+            client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+            return;
+          }
+        }
+
+        // Fallback: find first empty vault slot
+        const emptyIdx = player.vaultItems.findIndex((item) => item.baseItemId === -1);
+        if (emptyIdx === -1) return;
+        this.setConsumableCount(player, slot, count - 1);
+        player.vaultItems[emptyIdx] = generateConsumableInstance(consumableId);
+        player.vaultDirty = true;
+        client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+      }
+    );
+
     // Listen for move consumable from dedicated slot to inventory
     this.onMessage(
       ClientMessage.MoveConsumableToInventory,
@@ -570,6 +764,25 @@ export class GameRoom extends Room<GameState> {
         if (slot < 0 || slot > 2) return;
         const count = this.getConsumableCount(player, slot);
         if (count <= 0) return;
+
+        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
+        const consumableId = consumableIds[slot];
+        const maxStack = CONSUMABLE_MAX_STACKS[slot];
+
+        // Check if target slot has the same consumable and can stack
+        if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length) {
+          const targetItem = player.inventory[data.targetSlot]!;
+          if (targetItem.baseItemId === consumableId) {
+            const currentQty = targetItem.quantity || 1;
+            if (currentQty < maxStack) {
+              this.setConsumableCount(player, slot, count - 1);
+              const updated = schemaToItemData(targetItem);
+              updated.quantity = currentQty + 1;
+              updateSchemaFromData(targetItem, updated);
+              return;
+            }
+          }
+        }
 
         // Find empty inventory slot, preferring the target slot
         let emptyInvSlot = -1;
@@ -587,8 +800,7 @@ export class GameRoom extends Room<GameState> {
 
         // Decrement counter, place item in inventory
         this.setConsumableCount(player, slot, count - 1);
-        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-        const itemData = generateConsumableInstance(consumableIds[slot]);
+        const itemData = generateConsumableInstance(consumableId);
         updateSchemaFromData(player.inventory[emptyInvSlot]!, itemData);
       }
     );
@@ -637,6 +849,21 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Listen for portal gem vault portal (T key — open portal to vault)
+    this.onMessage(ClientMessage.UsePortalGemVault, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (!isHostileZone(player.zone) && !isDungeonZone(player.zone)) return;
+      if (player.portalGems <= 0) return;
+      if (player.portalGemPortalActive) return; // already have one open
+      player.portalGems--;
+      player.portalGemReturnX = player.x;
+      player.portalGemReturnY = player.y;
+      player.portalGemReturnZone = player.zone;
+      player.portalGemPortalActive = true;
+      client.send(ServerMessage.VaultPortalCreated, { x: player.x, y: player.y });
+    });
+
     // Listen for crafting orb use
     this.onMessage(
       ClientMessage.UseCraftingOrb,
@@ -683,6 +910,180 @@ export class GameRoom extends Room<GameState> {
       if (!player) return;
       for (let i = 0; i <= 9; i++) this.setOrbCount(player, i, 999);
     });
+
+    // Vault chest interaction (E key near vault chest)
+    this.onMessage(ClientMessage.OpenVault, (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (!isVaultZone(player.zone)) return;
+      if (!player.vaultItems) return;
+
+      const dist = distanceBetween(player.x, player.y, VAULT_CHEST_X, VAULT_CHEST_Y);
+      if (dist > VAULT_CHEST_INTERACT_RADIUS) return;
+
+      client.send(ServerMessage.VaultOpened, { items: player.vaultItems });
+    });
+
+    // Vault item move (drag between vault, inventory, and equipment)
+    this.onMessage(
+      ClientMessage.VaultMoveItem,
+      (client, data: { fromSource: string; fromSlot: number; toSource: string; toSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+        if (!isVaultZone(player.zone)) return;
+        if (!player.vaultItems) return;
+
+        const { fromSource, fromSlot, toSource, toSlot } = data;
+
+        // Validate sources
+        if (fromSource !== "vault" && fromSource !== "inventory" && fromSource !== "equipment") return;
+        if (toSource !== "vault" && toSource !== "inventory" && toSource !== "equipment") return;
+
+        // Validate slot indices
+        if (fromSource === "vault" && (fromSlot < 0 || fromSlot >= player.vaultItems.length)) return;
+        if (fromSource === "inventory" && (fromSlot < 0 || fromSlot >= INVENTORY_SIZE)) return;
+        if (fromSource === "equipment" && (fromSlot < 0 || fromSlot >= EQUIPMENT_SLOTS)) return;
+        if (toSource === "vault" && (toSlot < 0 || toSlot >= player.vaultItems.length)) return;
+        if (toSource === "inventory" && (toSlot < 0 || toSlot >= INVENTORY_SIZE)) return;
+        if (toSource === "equipment" && (toSlot < 0 || toSlot >= EQUIPMENT_SLOTS)) return;
+
+        // No self-swap
+        if (fromSource === toSource && fromSlot === toSlot) return;
+
+        // Get source item
+        const fromItem = fromSource === "vault"
+          ? player.vaultItems[fromSlot]
+          : fromSource === "equipment"
+            ? schemaToItemData(player.equipment[fromSlot]!)
+            : schemaToItemData(player.inventory[fromSlot]!);
+
+        // Get destination item (for swap)
+        const toItem = toSource === "vault"
+          ? player.vaultItems[toSlot]
+          : toSource === "equipment"
+            ? schemaToItemData(player.equipment[toSlot]!)
+            : schemaToItemData(player.inventory[toSlot]!);
+
+        // If moving TO equipment, validate category match
+        if (toSource === "equipment") {
+          if (fromItem.baseItemId < 0) return;
+          const category = getItemCategory(fromItem.baseItemId);
+          if (category !== toSlot) return;
+        }
+
+        // Perform swap
+        if (fromSource === "vault") {
+          player.vaultItems[fromSlot] = toItem;
+        } else if (fromSource === "equipment") {
+          // Only put toItem in equipment if it matches the slot category
+          if (toItem.baseItemId >= 0 && getItemCategory(toItem.baseItemId) === fromSlot) {
+            updateSchemaFromData(player.equipment[fromSlot]!, toItem);
+          } else {
+            updateSchemaFromData(player.equipment[fromSlot]!, createEmptyItemInstance());
+          }
+        } else {
+          updateSchemaFromData(player.inventory[fromSlot]!, toItem);
+        }
+
+        if (toSource === "vault") {
+          player.vaultItems[toSlot] = fromItem;
+        } else if (toSource === "equipment") {
+          updateSchemaFromData(player.equipment[toSlot]!, fromItem);
+        } else {
+          updateSchemaFromData(player.inventory[toSlot]!, fromItem);
+        }
+
+        // Recalculate stats if equipment changed
+        if (fromSource === "equipment" || toSource === "equipment") {
+          recalcPlayerStats(player);
+        }
+
+        player.vaultDirty = true;
+
+        // Send updated vault contents
+        client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+      }
+    );
+
+    // Stack consumables (drag one consumable onto same type to merge)
+    this.onMessage(
+      ClientMessage.StackConsumables,
+      (client, data: { fromSource: string; fromSlot: number; toSource: string; toSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const { fromSource, fromSlot, toSource, toSlot } = data;
+
+        // Validate sources: only inventory and vault
+        if (fromSource !== "inventory" && fromSource !== "vault") return;
+        if (toSource !== "inventory" && toSource !== "vault") return;
+
+        // Vault operations require vault zone
+        if ((fromSource === "vault" || toSource === "vault")) {
+          if (!isVaultZone(player.zone) || !player.vaultItems) return;
+        }
+
+        // Validate slot indices
+        if (fromSource === "inventory" && (fromSlot < 0 || fromSlot >= INVENTORY_SIZE)) return;
+        if (fromSource === "vault" && (fromSlot < 0 || fromSlot >= player.vaultItems!.length)) return;
+        if (toSource === "inventory" && (toSlot < 0 || toSlot >= INVENTORY_SIZE)) return;
+        if (toSource === "vault" && (toSlot < 0 || toSlot >= player.vaultItems!.length)) return;
+
+        // No self-merge
+        if (fromSource === toSource && fromSlot === toSlot) return;
+
+        // Get items
+        const fromItem = fromSource === "vault"
+          ? player.vaultItems![fromSlot]
+          : schemaToItemData(player.inventory[fromSlot]!);
+        const toItem = toSource === "vault"
+          ? player.vaultItems![toSlot]
+          : schemaToItemData(player.inventory[toSlot]!);
+
+        // Both must be the same stackable item (consumable or crafting orb)
+        if (fromItem.baseItemId < 0 || toItem.baseItemId < 0) return;
+        if (!isStackableItem(fromItem.baseItemId)) return;
+        if (fromItem.baseItemId !== toItem.baseItemId) return;
+
+        // Calculate merge
+        const maxStack = getMaxStack(fromItem.baseItemId);
+        const fromQty = fromItem.quantity || 1;
+        const toQty = toItem.quantity || 1;
+        const total = fromQty + toQty;
+        const merged = Math.min(total, maxStack);
+        const remainder = total - merged;
+
+        // Update destination
+        const newToItem = { ...toItem, quantity: merged };
+        if (toSource === "vault") {
+          player.vaultItems![toSlot] = newToItem;
+        } else {
+          updateSchemaFromData(player.inventory[toSlot]!, newToItem);
+        }
+
+        // Update source
+        if (remainder > 0) {
+          const newFromItem = { ...fromItem, quantity: remainder };
+          if (fromSource === "vault") {
+            player.vaultItems![fromSlot] = newFromItem;
+          } else {
+            updateSchemaFromData(player.inventory[fromSlot]!, newFromItem);
+          }
+        } else {
+          if (fromSource === "vault") {
+            player.vaultItems![fromSlot] = createEmptyItemInstance();
+          } else {
+            updateSchemaFromData(player.inventory[fromSlot]!, createEmptyItemInstance());
+          }
+        }
+
+        // Mark vault dirty if vault was involved
+        if (fromSource === "vault" || toSource === "vault") {
+          player.vaultDirty = true;
+          client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+        }
+      }
+    );
 
     // Spawn permanent test portals in nexus (bottom area)
     this.spawnNexusTestPortals();
@@ -885,6 +1286,12 @@ export class GameRoom extends Room<GameState> {
     };
 
     await saveCharacter(player.characterId, data);
+
+    // Save vault to account (separate from character)
+    if (player.vaultDirty && player.vaultItems && player.accountId) {
+      await saveAccountVault(player.accountId, player.vaultItems);
+      player.vaultDirty = false;
+    }
   }
 
   private spawnNexusTestPortals(): void {
@@ -990,6 +1397,13 @@ export class GameRoom extends Room<GameState> {
   private teleportPlayerToNexus(player: Player, client: Client): void {
     player.invulnerable = true;
     player.invulnerableSince = Date.now();
+    player.nearVaultChest = false;
+    // Clear any active portal gem vault portal
+    if (player.portalGemPortalActive) {
+      player.portalGemPortalActive = false;
+      player.portalGemReturnZone = "";
+      client.send(ServerMessage.VaultPortalClosed);
+    }
     player.zone = "nexus";
     player.x = this.nexusMap.spawnRoom.centerX + (Math.random() - 0.5) * 80;
     player.y = this.nexusMap.spawnRoom.centerY + (Math.random() - 0.5) * 80;
@@ -1225,7 +1639,7 @@ export class GameRoom extends Room<GameState> {
             speedBoostDur = as.speedBoostDuration;
           } else {
             const subtype = getItemSubtype(abilitySchema.baseItemId);
-            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier, abilitySchema.lockedStat1Tier, abilitySchema.lockedStat2Tier);
+            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier, abilitySchema.lockedStat1Tier, abilitySchema.lockedStat2Tier, abilitySchema.lockedStat1Roll, abilitySchema.lockedStat2Roll);
             abilityDamage = scaled.damage;
             abilityRange = scaled.range;
             abilityProjSpeed = scaled.projectileSpeed;
@@ -1579,7 +1993,30 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // 10. Periodically mark entities dirty for filterChildren
+    // 10. Vault chest proximity detection (auto-close when walking away)
+    this.state.players.forEach((player) => {
+      if (!player.alive || !isVaultZone(player.zone)) {
+        if (player.nearVaultChest) {
+          player.nearVaultChest = false;
+          const client = this.clients.find((c) => c.sessionId === player.id);
+          if (client) client.send(ServerMessage.VaultClosed, {});
+        }
+        return;
+      }
+
+      const dist = distanceBetween(player.x, player.y, VAULT_CHEST_X, VAULT_CHEST_Y);
+      const nearNow = dist <= VAULT_CHEST_INTERACT_RADIUS;
+
+      if (!nearNow && player.nearVaultChest) {
+        player.nearVaultChest = false;
+        const client = this.clients.find((c) => c.sessionId === player.id);
+        if (client) client.send(ServerMessage.VaultClosed, {});
+      } else if (nearNow) {
+        player.nearVaultChest = true;
+      }
+    });
+
+    // 11. Periodically mark entities dirty for filterChildren
     // Self-assignment (enemy.x = enemy.x) doesn't mark dirty if the value hasn't changed.
     // Alternate a sub-pixel nudge so stationary entities (switches, bags) get re-evaluated.
     this.tickCount++;

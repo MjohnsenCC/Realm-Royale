@@ -107,8 +107,19 @@ export class Player extends Schema {
   dungeonReturnY: number = 0;
   dungeonReturnZone: string = "";
 
+  // Server-only: portal gem vault portal state
+  portalGemReturnX: number = 0;
+  portalGemReturnY: number = 0;
+  portalGemReturnZone: string = "";
+  portalGemPortalActive: boolean = false;
+
   // Server-only: invulnerable during zone loading transition or portal gem
   invulnerable: boolean = false;
   invulnerableSince: number = 0;
   invulnerableUntil: number = 0; // explicit end time (0 = use ZoneReady or 5s safety net)
+
+  // Server-only: vault storage (loaded on demand when entering vault zone)
+  vaultItems: import("@rotmg-lite/shared").ItemInstanceData[] | null = null;
+  vaultDirty: boolean = false;
+  nearVaultChest: boolean = false;
 }

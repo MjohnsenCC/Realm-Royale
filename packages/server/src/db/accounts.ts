@@ -1,4 +1,5 @@
 import { getSupabase } from "./supabase";
+import { ItemInstanceData } from "@rotmg-lite/shared";
 
 export interface AccountRecord {
   id: string;
@@ -43,4 +44,38 @@ export async function findOrCreateAccount(
   }
 
   return created;
+}
+
+export async function getAccountVault(
+  accountId: string
+): Promise<ItemInstanceData[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("vault")
+    .eq("id", accountId)
+    .single();
+
+  if (error || !data) {
+    return [];
+  }
+
+  return (data.vault as ItemInstanceData[]) ?? [];
+}
+
+export async function saveAccountVault(
+  accountId: string,
+  vault: ItemInstanceData[]
+): Promise<void> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ vault, updated_at: new Date().toISOString() })
+    .eq("id", accountId);
+
+  if (error) {
+    throw new Error(`Failed to save vault for account ${accountId}: ${error.message}`);
+  }
 }

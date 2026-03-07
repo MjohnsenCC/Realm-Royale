@@ -594,6 +594,10 @@ export class DungeonSystem {
     const occupiedZones = new Set<string>();
     state.players.forEach((player) => {
       if (player.alive) occupiedZones.add(player.zone);
+      // Keep dungeon alive if player is temporarily in vault via portal gem
+      if (player.portalGemPortalActive && player.portalGemReturnZone) {
+        occupiedZones.add(player.portalGemReturnZone);
+      }
     });
 
     for (const zone of this.activeDungeonMaps.keys()) {

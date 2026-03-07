@@ -3,6 +3,7 @@ import { PlayerSprite } from "../entities/PlayerSprite";
 import { EnemySprite } from "../entities/EnemySprite";
 import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
+import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
@@ -25,6 +26,7 @@ import {
   generateNexusMap,
   DungeonTile,
   isHostileZone,
+  isVaultZone,
   ItemCategory,
   ConsumableSubtype,
   HEALTH_POT_ID,
@@ -116,9 +118,10 @@ export class HUD {
   private minimapZoomInBtn!: Phaser.GameObjects.Text;
   private minimapZoomOutBtn!: Phaser.GameObjects.Text;
 
-  // Inventory & Loot Bag UI
+  // Inventory & Loot Bag & Vault UI
   inventoryUI: InventoryUI;
   lootBagUI: LootBagUI;
+  vaultUI: VaultUI;
   dragManager: DragManager;
 
   // Stats button
@@ -333,6 +336,7 @@ export class HUD {
             openStats: [],
             forgeProtectedSlot: -1,
             forgeProtectedSlot2: -1,
+            quantity: 0,
           };
           this.dragManager.onSlotPointerDown(
             { type: "consumable", slotIndex: i },
@@ -447,10 +451,14 @@ export class HUD {
     // --- Loot Bag UI (above unified panel, aligned with inventory section) ---
     this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
 
+    // --- Vault UI (above unified panel, aligned with inventory section) ---
+    this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
+
     // --- Drag Manager ---
     this.dragManager = new DragManager(scene);
     this.dragManager.setInventoryUI(this.inventoryUI);
     this.dragManager.setLootBagUI(this.lootBagUI);
+    this.dragManager.setVaultUI(this.vaultUI);
     this.dragManager.setPanelBoundsGetter(() => ({
       x: this.panelX,
       y: this.panelY,
@@ -460,6 +468,7 @@ export class HUD {
     this.dragManager.setHUD(this);
     this.inventoryUI.setDragManager(this.dragManager);
     this.lootBagUI.setDragManager(this.dragManager);
+    this.vaultUI.setDragManager(this.dragManager);
 
     // Draw initial bars
     this.drawHealthBar(100, 100, 0);
@@ -619,6 +628,10 @@ export class HUD {
       this.zoneText.setText("Nexus (Safe Zone)");
       this.zoneText.setColor("#44aa66");
       this.qHintText.setVisible(false);
+    } else if (isVaultZone(zone)) {
+      this.zoneText.setText("Vault");
+      this.zoneText.setColor("#ddaa55");
+      this.qHintText.setVisible(true);
     } else if (isDungeonZone(zone)) {
       const dungeonType = getDungeonTypeFromZone(zone);
       const dungeonVisual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
@@ -1060,8 +1073,8 @@ export class HUD {
     ) {
       return true;
     }
-    // Check loot bag
-    return this.lootBagUI.isOverPanel(screenX, screenY);
+    // Check loot bag or vault
+    return this.lootBagUI.isOverPanel(screenX, screenY) || this.vaultUI.isOverPanel(screenX, screenY);
   }
 
   // Death screen elements

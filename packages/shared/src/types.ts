@@ -182,6 +182,7 @@ export const PlayerZone = {
   Hostile: "hostile",
   DungeonInfernal: "dungeon_infernal",
   DungeonVoid: "dungeon_void",
+  Vault: "vault",
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
 
@@ -201,6 +202,10 @@ export function isHostileZone(zone: string): boolean {
   return getZoneBase(zone) === "hostile";
 }
 
+export function isVaultZone(zone: string): boolean {
+  return getZoneBase(zone) === "vault";
+}
+
 export const DungeonType = {
   InfernalPit: 0,
   VoidSanctum: 1,
@@ -212,6 +217,7 @@ export const PortalType = {
   InfernalPitEntrance: 1,
   VoidSanctumEntrance: 2,
   DungeonExit: 3,
+  NexusToVault: 4,
 } as const;
 export type PortalType = (typeof PortalType)[keyof typeof PortalType];
 
@@ -336,6 +342,11 @@ export const ServerMessage = {
   PortalPrompt: "portalPrompt",
   SwitchDestroyed: "switchDestroyed",
   BossAwakened: "bossAwakened",
+  VaultOpened: "vaultOpened",
+  VaultClosed: "vaultClosed",
+  VaultUpdated: "vaultUpdated",
+  VaultPortalCreated: "vaultPortalCreated",
+  VaultPortalClosed: "vaultPortalClosed",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -358,5 +369,10 @@ export const ClientMessage = {
   UnequipItem: "unequipItem",
   DropConsumable: "dropConsumable",
   MoveConsumableToInventory: "moveConsumableToInventory",
+  MoveConsumableToVault: "moveConsumableToVault",
+  OpenVault: "openVault",
+  VaultMoveItem: "vaultMoveItem",
+  UsePortalGemVault: "usePortalGemVault",
+  StackConsumables: "stackConsumables",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

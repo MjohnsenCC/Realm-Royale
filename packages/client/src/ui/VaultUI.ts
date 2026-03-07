@@ -1,8 +1,6 @@
 import Phaser from "phaser";
 import {
-  BAG_SIZE,
-  BagRarity,
-  ClientMessage,
+  VAULT_SIZE,
   getItemCategory,
   getItemSubtype,
   getItemColor,
@@ -17,33 +15,15 @@ import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
-const COLS = 4;
-const ROWS = 2;
+const COLS = 5;
+const ROWS = 4;
 const BASE_PADDING = 8;
 const BASE_HEADER = 18;
 
-const BAG_HEADER_COLORS: Record<number, string> = {
-  [BagRarity.Green]: "#44aa44",
-  [BagRarity.Red]: "#cc3333",
-  [BagRarity.Black]: "#cccccc",
-  [BagRarity.Orange]: "#ff8800",
-};
+const VAULT_HEADER_COLOR = "#ddaa55";
+const VAULT_BORDER_COLOR = 0xddaa55;
 
-const BAG_HEADER_NAMES: Record<number, string> = {
-  [BagRarity.Green]: "Green Bag",
-  [BagRarity.Red]: "Red Bag",
-  [BagRarity.Black]: "Black Bag",
-  [BagRarity.Orange]: "Orange Bag",
-};
-
-const BAG_BORDER_COLORS: Record<number, number> = {
-  [BagRarity.Green]: 0x44aa44,
-  [BagRarity.Red]: 0xcc3333,
-  [BagRarity.Black]: 0xaaaaaa,
-  [BagRarity.Orange]: 0xff8800,
-};
-
-export class LootBagUI {
+export class VaultUI {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
   private panelBg: Phaser.GameObjects.Graphics;
@@ -55,12 +35,10 @@ export class LootBagUI {
   private headerText: Phaser.GameObjects.Text;
   private room: any = null;
   private visible: boolean = false;
-  private currentBagId: string = "";
   private currentItems: ItemInstanceData[] = Array.from(
-    { length: BAG_SIZE },
+    { length: VAULT_SIZE },
     () => createEmptyItemInstance()
   );
-  private currentBagRarity: number = 0;
   private tooltip: ItemTooltip;
   private shiftKey: Phaser.Input.Keyboard.Key | null = null;
   private lastHoveredItem: { item: ItemInstanceData; screenX: number; screenY: number } | null = null;
@@ -69,6 +47,7 @@ export class LootBagUI {
   private dragManager: DragManager | null = null;
   private dragActive = false;
   private dragSourceSlot = -1;
+  private highlightedSlot = -1;
 
   // Scaled dimensions
   private S: number;
@@ -115,9 +94,9 @@ export class LootBagUI {
     this.container.add(this.panelBg);
 
     this.headerText = scene.add
-      .text(0, 0, "Loot Bag", {
+      .text(0, 0, "Vault", {
         fontSize: headerFontSize,
-        color: "#44aa44",
+        color: VAULT_HEADER_COLOR,
         fontFamily: "monospace",
       });
     this.container.add(this.headerText);
@@ -125,7 +104,7 @@ export class LootBagUI {
     this.slotGraphics = scene.add.graphics();
     this.container.add(this.slotGraphics);
 
-    for (let i = 0; i < BAG_SIZE; i++) {
+    for (let i = 0; i < VAULT_SIZE; i++) {
       const zone = scene.add
         .zone(0, 0, this.slotSize, this.slotSize)
         .setScrollFactor(0)
@@ -137,7 +116,7 @@ export class LootBagUI {
           const item = this.currentItems[i];
           if (item && item.baseItemId >= 0 && this.dragManager) {
             this.dragManager.onSlotPointerDown(
-              { type: "bag", bagId: this.currentBagId, slotIndex: i },
+              { type: "vault", slotIndex: i },
               item,
               pointer.x,
               pointer.y
@@ -215,10 +194,8 @@ export class LootBagUI {
     this.room = room;
   }
 
-  show(bagId: string, bagRarity: number, items: ItemInstanceData[]): void {
-    this.currentBagId = bagId;
-    this.currentBagRarity = bagRarity;
-    for (let i = 0; i < BAG_SIZE; i++) {
+  show(items: ItemInstanceData[]): void {
+    for (let i = 0; i < VAULT_SIZE; i++) {
       this.currentItems[i] = i < items.length ? items[i] : createEmptyItemInstance();
     }
     this.setVisible(true);
@@ -229,7 +206,6 @@ export class LootBagUI {
     if (this.dragManager) {
       this.dragManager.cancelDrag();
     }
-    this.currentBagId = "";
     this.lastHoveredItem = null;
     this.tooltip.hide();
     this.setVisible(false);
@@ -237,19 +213,10 @@ export class LootBagUI {
 
   updateItems(items: ItemInstanceData[]): void {
     if (!this.visible) return;
-    let changed = false;
-    for (let i = 0; i < BAG_SIZE; i++) {
-      const newItem = i < items.length ? items[i] : createEmptyItemInstance();
-      if (this.currentItems[i].baseItemId !== newItem.baseItemId) {
-        this.currentItems[i] = newItem;
-        changed = true;
-      }
+    for (let i = 0; i < VAULT_SIZE; i++) {
+      this.currentItems[i] = i < items.length ? items[i] : createEmptyItemInstance();
     }
-    if (changed) this.redraw();
-  }
-
-  getBagId(): string {
-    return this.currentBagId;
+    this.redraw();
   }
 
   isVisible(): boolean {
@@ -283,20 +250,17 @@ export class LootBagUI {
     const panelY = this.anchorY;
 
     this.panelBg.clear();
-    const borderColor = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
     this.panelBg.fillStyle(0x111122, 0.9);
     this.panelBg.fillRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
-    this.panelBg.lineStyle(2, borderColor, 1);
+    this.panelBg.lineStyle(2, VAULT_BORDER_COLOR, 1);
     this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
 
-    const headerColor = BAG_HEADER_COLORS[this.currentBagRarity] ?? "#44aa44";
-    const headerName = BAG_HEADER_NAMES[this.currentBagRarity] ?? "Loot Bag";
-    this.headerText.setText(headerName);
-    this.headerText.setColor(headerColor);
+    this.headerText.setText("Vault");
+    this.headerText.setColor(VAULT_HEADER_COLOR);
     this.headerText.setPosition(panelX + this.padding, panelY + 4);
 
     this.slotGraphics.clear();
-    for (let i = 0; i < BAG_SIZE; i++) {
+    for (let i = 0; i < VAULT_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
       const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
@@ -350,6 +314,13 @@ export class LootBagUI {
         this.slotGraphics.fillStyle(0x000000, 0.5);
         this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
       }
+      // Drop target highlight overlay
+      if (i === this.highlightedSlot) {
+        this.slotGraphics.fillStyle(0x44ff44, 0.25);
+        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+        this.slotGraphics.lineStyle(2, 0x44ff44, 1);
+        this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+      }
 
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.qtyTexts[i].setPosition(sx + 2, sy + this.slotSize - 2);
@@ -389,6 +360,13 @@ export class LootBagUI {
     }
   }
 
+  setHighlightedVaultSlot(slotIndex: number): void {
+    if (this.highlightedSlot !== slotIndex) {
+      this.highlightedSlot = slotIndex;
+      if (this.visible) this.redraw();
+    }
+  }
+
   setDragSourceSlot(slotIndex: number): void {
     if (this.dragSourceSlot !== slotIndex) {
       this.dragSourceSlot = slotIndex;
@@ -396,12 +374,12 @@ export class LootBagUI {
     }
   }
 
-  getBagSlotBounds(): { x: number; y: number; w: number; h: number }[] {
+  getVaultSlotBounds(): { x: number; y: number; w: number; h: number }[] {
     if (!this.visible) return [];
     const panelX = this.anchorX;
     const panelY = this.anchorY;
     const bounds: { x: number; y: number; w: number; h: number }[] = [];
-    for (let i = 0; i < BAG_SIZE; i++) {
+    for (let i = 0; i < VAULT_SIZE; i++) {
       const col = i % COLS;
       const row = Math.floor(i / COLS);
       bounds.push({

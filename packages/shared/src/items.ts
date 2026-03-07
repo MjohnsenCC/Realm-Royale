@@ -8,6 +8,7 @@ import {
   EnemyType,
   CraftingOrbType,
 } from "./types";
+import { CONSUMABLE_MAX_STACKS } from "./constants";
 import {
   ItemInstanceData,
   LOCKED_STATS_BY_CATEGORY,
@@ -19,6 +20,7 @@ import {
   ORBS_BY_RARITY,
   OrbRarity,
   ORB_DEFINITIONS,
+  ORB_MAX_STACK,
 } from "./itemStats";
 
 // --- Loot Table Types ---
@@ -583,7 +585,7 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(4, 2, 1)]: {
     id: 4201, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
     color: 0xaa44ff, tierColor: TIER_COLORS[1],
-    description: "Teleport anywhere on the map. Right-click minimap to target.",
+    description: "Teleport anywhere on the map. Right-click minimap to target. Press T to open a portal to your vault.",
     consumableStats: { maxStack: 20 },
   },
 };
@@ -613,6 +615,16 @@ export function isCraftingOrbItem(itemId: number): boolean {
 
 export function getConsumableSlotIndex(itemId: number): number {
   return getItemSubtype(itemId);
+}
+
+export function isStackableItem(itemId: number): boolean {
+  return isConsumableItem(itemId) || isCraftingOrbItem(itemId);
+}
+
+export function getMaxStack(itemId: number): number {
+  if (isConsumableItem(itemId)) return CONSUMABLE_MAX_STACKS[getConsumableSlotIndex(itemId)] ?? 1;
+  if (isCraftingOrbItem(itemId)) return ORB_MAX_STACK;
+  return 1;
 }
 
 // --- Subtype display names ---
@@ -717,6 +729,7 @@ export function generateItemInstance(
     openStats: prerollOpenStats ? rollInitialOpenStats(category, tier) : [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,
+    quantity: 0,
   };
 }
 
@@ -735,6 +748,7 @@ export function generateUTItemInstance(baseItemId: number): ItemInstanceData {
     openStats: [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,
+    quantity: 0,
   };
 }
 
@@ -753,6 +767,7 @@ export function generateConsumableInstance(baseItemId: number): ItemInstanceData
     openStats: [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,
+    quantity: 1,
   };
 }
 
@@ -771,6 +786,7 @@ export function generateOrbInstance(orbType: number): ItemInstanceData {
     openStats: [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,
+    quantity: 1,
   };
 }
 
