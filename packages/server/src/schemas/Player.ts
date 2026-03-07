@@ -40,18 +40,6 @@ export class Player extends Schema {
   @type("int8") manaPots: number = 0;
   @type("int8") portalGems: number = 0;
 
-  // Crafting orb counters
-  @type("uint16") orbBlank: number = 0;
-  @type("uint16") orbEmber: number = 0;
-  @type("uint16") orbShard: number = 0;
-  @type("uint16") orbChaos: number = 0;
-  @type("uint16") orbFlux: number = 0;
-  @type("uint16") orbVoid: number = 0;
-  @type("uint16") orbPrism: number = 0;
-  @type("uint16") orbForge: number = 0;
-  @type("uint16") orbCalibrate: number = 0;
-  @type("uint16") orbDivine: number = 0;
-
   // Synced: last hit info for client damage indicators
   @type("uint8") lastHitDamageType: number = 0; // 0=Physical, 1=Magic
   @type("number") lastHitAmount: number = 0;

@@ -21,6 +21,7 @@ export class PlayerSprite {
   private serverX: number = 0;
   private serverY: number = 0;
   private _isLocal: boolean;
+  private baseName: string;
   private snapshots: SnapshotBuffer;
   private hitFlashTimer: number = 0;
   private lastHp: number = PLAYER_MAX_HP;
@@ -67,7 +68,8 @@ export class PlayerSprite {
     this.graphics = scene.add.graphics();
     this.drawBody(isLocal ? 0x4488ff : 0x44cc44);
 
-    // Name text
+    // Name text (hidden for local player)
+    this.baseName = name;
     this.nameText = scene.add
       .text(x, y - PLAYER_RADIUS - 20, name, {
         fontSize: "12px",
@@ -75,6 +77,9 @@ export class PlayerSprite {
         fontFamily: "monospace",
       })
       .setOrigin(0.5);
+    if (isLocal) {
+      this.nameText.setVisible(false);
+    }
 
     // HP bar background
     this.hpBarBg = scene.add.graphics();
@@ -239,9 +244,14 @@ export class PlayerSprite {
     this.zone = zone;
   }
 
+  updateLevel(level: number): void {
+    if (this._isLocal) return;
+    this.nameText.setText(`${this.baseName} Lv.${level}`);
+  }
+
   setVisible(visible: boolean): void {
     this.graphics.setVisible(visible);
-    this.nameText.setVisible(visible);
+    this.nameText.setVisible(this._isLocal ? false : visible);
     this.hpBarBg.setVisible(visible);
     this.hpBarFill.setVisible(visible);
   }

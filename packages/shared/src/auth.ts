@@ -16,19 +16,6 @@ export interface CharacterConsumables {
   portalGems: number;
 }
 
-export interface CharacterOrbs {
-  blank: number;
-  ember: number;
-  shard: number;
-  chaos: number;
-  flux: number;
-  void: number;
-  prism: number;
-  forge: number;
-  calibrate: number;
-  divine: number;
-}
-
 export interface CharacterData {
   id: string;
   accountId: string;
@@ -38,7 +25,6 @@ export interface CharacterData {
   equipment: ItemInstanceData[];
   inventory: ItemInstanceData[];
   consumables: CharacterConsumables;
-  orbs: CharacterOrbs;
 }
 
 // --- Auth Join Options ---

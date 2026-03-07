@@ -3,13 +3,14 @@ import {
   CharacterSummary,
   CharacterData,
   CharacterConsumables,
-  CharacterOrbs,
   MAX_CHARACTERS_PER_ACCOUNT,
   ItemInstanceData,
   generateItemInstance,
+  generateOrbInstance,
   createEmptyItemInstance,
   ItemCategory,
   WeaponSubtype,
+  CraftingOrbType,
   INVENTORY_SIZE,
 } from "@rotmg-lite/shared";
 
@@ -19,18 +20,63 @@ const DEFAULT_CONSUMABLES: CharacterConsumables = {
   portalGems: 5,
 };
 
-const DEFAULT_ORBS: CharacterOrbs = {
-  blank: 0,
-  ember: 0,
-  shard: 0,
-  chaos: 0,
-  flux: 0,
-  void: 0,
-  prism: 0,
-  forge: 0,
-  calibrate: 0,
-  divine: 0,
-};
+/** Legacy orb counter fields from DB. Used for one-time migration to inventory items. */
+interface LegacyCharacterOrbs {
+  blank?: number;
+  ember?: number;
+  shard?: number;
+  chaos?: number;
+  flux?: number;
+  void?: number;
+  prism?: number;
+  forge?: number;
+  calibrate?: number;
+  divine?: number;
+}
+
+const ORB_FIELD_TO_TYPE: [keyof LegacyCharacterOrbs, number][] = [
+  ["blank", CraftingOrbType.Blank],
+  ["ember", CraftingOrbType.Ember],
+  ["shard", CraftingOrbType.Shard],
+  ["chaos", CraftingOrbType.Chaos],
+  ["flux", CraftingOrbType.Flux],
+  ["void", CraftingOrbType.Void],
+  ["prism", CraftingOrbType.Prism],
+  ["forge", CraftingOrbType.Forge],
+  ["calibrate", CraftingOrbType.Calibrate],
+  ["divine", CraftingOrbType.Divine],
+];
+
+/** Migrate legacy orb counters into inventory items. Returns updated inventory. */
+function migrateOrbCountersToInventory(
+  inventory: ItemInstanceData[],
+  legacyOrbs: LegacyCharacterOrbs | undefined | null,
+): ItemInstanceData[] {
+  if (!legacyOrbs) return inventory;
+
+  const inv = [...inventory];
+  for (const [field, orbType] of ORB_FIELD_TO_TYPE) {
+    const count = legacyOrbs[field] ?? 0;
+    if (count <= 0) continue;
+
+    // Find existing stack of same orb in inventory
+    const orbItem = generateOrbInstance(orbType);
+    const existingIdx = inv.findIndex(
+      (item) => item.baseItemId === orbItem.baseItemId && item.baseItemId >= 0,
+    );
+    if (existingIdx >= 0) {
+      inv[existingIdx] = { ...inv[existingIdx], quantity: (inv[existingIdx].quantity || 1) + count };
+    } else {
+      // Find empty slot
+      const emptyIdx = inv.findIndex((item) => item.baseItemId < 0);
+      if (emptyIdx >= 0) {
+        inv[emptyIdx] = { ...orbItem, quantity: count };
+      }
+      // If no empty slot, orbs are lost (player needs to free up space)
+    }
+  }
+  return inv;
+}
 
 function generateDefaultEquipment(): ItemInstanceData[] {
   return [
@@ -86,6 +132,14 @@ export async function getCharacter(
     return null;
   }
 
+  let inventory = data.inventory as ItemInstanceData[];
+
+  // Migrate legacy orb counters into inventory items (one-time)
+  const legacyOrbs = data.orbs as LegacyCharacterOrbs | undefined;
+  if (legacyOrbs && Object.values(legacyOrbs).some((v) => typeof v === "number" && v > 0)) {
+    inventory = migrateOrbCountersToInventory(inventory, legacyOrbs);
+  }
+
   return {
     id: data.id,
     accountId: data.account_id,
@@ -93,9 +147,8 @@ export async function getCharacter(
     level: data.level,
     xp: data.xp,
     equipment: data.equipment as ItemInstanceData[],
-    inventory: data.inventory as ItemInstanceData[],
+    inventory,
     consumables: data.consumables as CharacterConsumables,
-    orbs: data.orbs as CharacterOrbs,
   };
 }
 
@@ -128,7 +181,6 @@ export async function createCharacter(
       equipment,
       inventory,
       consumables: DEFAULT_CONSUMABLES,
-      orbs: DEFAULT_ORBS,
     })
     .select("*")
     .single();
@@ -146,7 +198,6 @@ export async function createCharacter(
     equipment: data.equipment as ItemInstanceData[],
     inventory: data.inventory as ItemInstanceData[],
     consumables: data.consumables as CharacterConsumables,
-    orbs: data.orbs as CharacterOrbs,
   };
 }
 
@@ -156,7 +207,6 @@ export interface CharacterSaveData {
   equipment: ItemInstanceData[];
   inventory: ItemInstanceData[];
   consumables: CharacterConsumables;
-  orbs: CharacterOrbs;
 }
 
 export async function saveCharacter(
@@ -171,7 +221,7 @@ export async function saveCharacter(
     equipment: data.equipment,
     inventory: data.inventory,
     consumables: data.consumables,
-    orbs: data.orbs,
+    orbs: {}, // Clear legacy orb counters (orbs now stored as inventory items)
     last_played: new Date().toISOString(),
   };
 

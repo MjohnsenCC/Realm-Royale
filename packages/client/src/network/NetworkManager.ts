@@ -65,6 +65,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.UsePortalGemVault);
   }
 
+  sendOpenCraftingTable(): void {
+    this.room?.send(ClientMessage.OpenCraftingTable);
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }

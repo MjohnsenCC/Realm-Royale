@@ -30,7 +30,6 @@ import {
   RIVER_SPEED_MULTIPLIER,
   TICK_INTERVAL,
   ServerMessage,
-  ClientMessage,
   PlayerInput,
   PortalType,
   ProjectileType,
@@ -76,6 +75,8 @@ import {
   VAULT_RETURN_PORTAL_X,
   VAULT_RETURN_PORTAL_Y,
   generateVaultMap,
+  getItemCategory,
+  isCraftingOrbItem,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -168,6 +169,7 @@ export class GameScene extends Phaser.Scene {
   private statsPanel!: StatsPanel;
   private nearCraftingTable: boolean = false;
   private nearVaultChest: boolean = false;
+  private vaultOrbCounts: number[] = new Array(10).fill(0);
 
   // Portal gem vault portal (client-only visual)
   private vaultPortalActive: boolean = false;
@@ -488,6 +490,18 @@ export class GameScene extends Phaser.Scene {
     });
     room.onMessage(ServerMessage.VaultUpdated, (data: { items: ItemInstanceData[] }) => {
       this.hud.vaultUI.updateItems(data.items);
+    });
+
+    // Crafting table messages
+    room.onMessage(ServerMessage.CraftingOpened, (data: { vaultOrbCounts: number[] }) => {
+      this.vaultOrbCounts = data.vaultOrbCounts;
+      this.openCraftingUIFromServer(state, this.network.getSessionId());
+    });
+    room.onMessage(ServerMessage.CraftingOrbsUpdated, (data: { vaultOrbCounts: number[] }) => {
+      this.vaultOrbCounts = data.vaultOrbCounts;
+      if (this.craftingUI.isVisible()) {
+        this.craftingUI.updateOrbCounts(this.computeOrbCounts(state, this.network.getSessionId()));
+      }
     });
 
     // Portal gem vault portal messages
@@ -1583,6 +1597,7 @@ export class GameScene extends Phaser.Scene {
         isLocal
       );
       sprite.setZone((player.zone as string) ?? "nexus");
+      sprite.updateLevel((player.level as number) ?? 1);
       this.playerSprites.set(sessionId, sprite);
 
       // Listen for zone changes on this player
@@ -1606,8 +1621,9 @@ export class GameScene extends Phaser.Scene {
           player.maxHp as number
         );
 
-        // Update zone from schema
+        // Update zone and level from schema
         s.setZone((player.zone as string) ?? "nexus");
+        s.updateLevel((player.level as number) ?? 1);
 
         // Damage indicator for local player
         if (isLocal) {
@@ -2409,7 +2425,7 @@ export class GameScene extends Phaser.Scene {
             this.craftingUI.updateItem(sourceItems[slotIdx]);
           }
         }
-        this.craftingUI.updateOrbCounts(readOrbCounts(localPlayer));
+        this.craftingUI.updateOrbCounts(this.computeOrbCounts(state, sessionId));
 
         // Close crafting UI if player walks away from table
         if (!this.nearCraftingTable) {
@@ -2783,23 +2799,51 @@ export class GameScene extends Phaser.Scene {
     }
   }
 
-  private openCraftingUI(state: DecodedState, sessionId: string): void {
-    const localPlayer = state.players.get(sessionId);
-    if (!localPlayer) return;
-
+  private openCraftingUI(_state: DecodedState, _sessionId: string): void {
     // Toggle: if already open, close it
     if (this.craftingUI.isVisible()) {
       this.craftingUI.hide();
       return;
     }
 
+    // Request server to open crafting table (it will lazy-load vault and respond)
+    this.network.sendOpenCraftingTable();
+  }
+
+  /** Called when server responds with vault orb counts. */
+  private openCraftingUIFromServer(state: DecodedState, sessionId: string): void {
+    if (this.craftingUI.isVisible()) return; // already open
+
     // Close stats panel if open (mutual exclusion)
     if (this.statsPanel.isVisible()) {
       this.statsPanel.hide();
     }
 
-    const orbCounts = readOrbCounts(localPlayer);
+    const orbCounts = this.computeOrbCounts(state, sessionId);
     this.craftingUI.show(orbCounts);
+  }
+
+  /** Compute combined orb counts from inventory (synced schema) + vault (server-sent). */
+  private computeOrbCounts(state: DecodedState, sessionId: string): number[] {
+    const counts = [...this.vaultOrbCounts];
+    const localPlayer = state.players.get(sessionId);
+    if (!localPlayer) return counts;
+
+    const inv = localPlayer.inventory as unknown as { length: number; [i: number]: SchemaInstance };
+    if (inv && typeof inv.length === "number") {
+      for (let i = 0; i < inv.length; i++) {
+        const item = inv[i];
+        if (!item) continue;
+        const baseId = item.baseItemId as number;
+        if (baseId >= 0 && isCraftingOrbItem(baseId)) {
+          const orbType = getItemSubtype(baseId);
+          if (orbType >= 0 && orbType < 10) {
+            counts[orbType] += ((item.quantity as number) || 1);
+          }
+        }
+      }
+    }
+    return counts;
   }
 
   private toggleStatsPanel(): void {
@@ -2935,21 +2979,6 @@ function readItemSchema(schema: SchemaInstance): ItemInstanceData {
     forgeProtectedSlot2: (schema.forgeProtectedSlot2 as number) ?? -1,
     quantity: (schema.quantity as number) ?? 0,
   };
-}
-
-function readOrbCounts(player: SchemaInstance): number[] {
-  const counts = new Array(10).fill(0);
-  counts[0] = (player.orbBlank as number) ?? 0;
-  counts[1] = (player.orbEmber as number) ?? 0;
-  counts[2] = (player.orbShard as number) ?? 0;
-  counts[3] = (player.orbChaos as number) ?? 0;
-  counts[4] = (player.orbFlux as number) ?? 0;
-  counts[5] = (player.orbVoid as number) ?? 0;
-  counts[6] = (player.orbPrism as number) ?? 0;
-  counts[7] = (player.orbForge as number) ?? 0;
-  counts[8] = (player.orbCalibrate as number) ?? 0;
-  counts[9] = (player.orbDivine as number) ?? 0;
-  return counts;
 }
 
 function readInventoryData(player: SchemaInstance): ItemInstanceData[] {

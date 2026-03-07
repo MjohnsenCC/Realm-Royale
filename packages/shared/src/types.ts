@@ -347,6 +347,8 @@ export const ServerMessage = {
   VaultUpdated: "vaultUpdated",
   VaultPortalCreated: "vaultPortalCreated",
   VaultPortalClosed: "vaultPortalClosed",
+  CraftingOpened: "craftingOpened",
+  CraftingOrbsUpdated: "craftingOrbsUpdated",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -374,5 +376,6 @@ export const ClientMessage = {
   VaultMoveItem: "vaultMoveItem",
   UsePortalGemVault: "usePortalGemVault",
   StackConsumables: "stackConsumables",
+  OpenCraftingTable: "openCraftingTable",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

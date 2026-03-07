@@ -25,7 +25,6 @@ import {
   PortalType,
   DungeonType,
   BagRarity,
-  CraftingOrbType,
   TICK_INTERVAL,
   PLAYER_RADIUS,
   ROAD_SPEED_MULTIPLIER,
@@ -98,10 +97,16 @@ import {
   PORTAL_GEM_INVULN_MS,
   generateItemInstance,
   generateConsumableInstance,
+  generateOrbInstance,
   isEmptyItem,
   ItemInstanceData,
   createEmptyItemInstance,
   applyCraftingOrb,
+  makeItemId,
+  ORB_MAX_STACK,
+  CRAFTING_TABLE_X,
+  CRAFTING_TABLE_Y,
+  CRAFTING_TABLE_INTERACT_RADIUS,
   getScaledWeaponStats,
   getScaledAbilityStats,
   determineBagRarity,
@@ -473,6 +478,40 @@ export class GameRoom extends Room<GameState> {
         }
         // All items go to inventory (player drags to inventory)
         else {
+          // For stackable items, try to stack with existing same-type stack first
+          if (isStackableItem(itemId)) {
+            const maxStack = getMaxStack(itemId);
+            for (let i = 0; i < player.inventory.length; i++) {
+              const slot = player.inventory[i]!;
+              if (slot.baseItemId === itemId) {
+                const currentQty = slot.quantity || 1;
+                if (currentQty < maxStack) {
+                  const addQty = Math.min((itemData.quantity || 1), maxStack - currentQty);
+                  slot.quantity = currentQty + addQty;
+                  const remainder = (itemData.quantity || 1) - addQty;
+                  if (remainder <= 0) {
+                    updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+                  } else {
+                    bagItem.item.quantity = remainder;
+                  }
+                  // Check if bag is now empty after stacking
+                  const allEmpty = bag.items.every((item) => item.item.baseItemId === -1);
+                  if (allEmpty) {
+                    this.state.lootBags.delete(bag.id);
+                    this.state.players.forEach((p) => {
+                      if (p.openBagId === bag.id) {
+                        p.openBagId = "";
+                        const c = this.clients.find((cl) => cl.sessionId === p.id);
+                        if (c) c.send(ServerMessage.BagClosed, {});
+                      }
+                    });
+                  }
+                  return;
+                }
+              }
+            }
+          }
+
           let emptySlot = -1;
           if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length && player.inventory[data.targetSlot]!.baseItemId === -1) {
             emptySlot = data.targetSlot;
@@ -566,13 +605,8 @@ export class GameRoom extends Room<GameState> {
           return;
         }
 
-        // Crafting orb: add to orb counter
-        if (isCraftingOrbItem(itemId)) {
-          const orbType = getItemSubtype(itemId);
-          this.addOrbToPlayer(player, orbType);
-          updateSchemaFromData(invItem, createEmptyItemInstance());
-          return;
-        }
+        // Crafting orbs stay in inventory (used at crafting table)
+        if (isCraftingOrbItem(itemId)) return;
 
         const category = getItemCategory(itemId);
         if (category < 0 || category >= EQUIPMENT_SLOTS) return;
@@ -873,7 +907,33 @@ export class GameRoom extends Room<GameState> {
 
         const orbType = data.orbType;
         if (orbType < 0 || orbType > 9) return;
-        if (this.getOrbCount(player, orbType) <= 0) return;
+
+        // Find the orb in inventory or vault
+        const orbItemId = makeItemId(ItemCategory.CraftingOrb, orbType, 1);
+        let orbSource: "inventory" | "vault" | null = null;
+        let orbSlotIdx = -1;
+
+        // Search inventory first
+        for (let i = 0; i < player.inventory.length; i++) {
+          if (player.inventory[i]!.baseItemId === orbItemId && (player.inventory[i]!.quantity || 1) > 0) {
+            orbSource = "inventory";
+            orbSlotIdx = i;
+            break;
+          }
+        }
+
+        // Search vault if not found in inventory
+        if (!orbSource && player.vaultItems) {
+          for (let i = 0; i < player.vaultItems.length; i++) {
+            if (player.vaultItems[i].baseItemId === orbItemId && (player.vaultItems[i].quantity || 1) > 0) {
+              orbSource = "vault";
+              orbSlotIdx = i;
+              break;
+            }
+          }
+        }
+
+        if (!orbSource || orbSlotIdx < 0) return;
 
         // Get target item
         let targetSchema: ItemInstance | undefined;
@@ -890,7 +950,26 @@ export class GameRoom extends Room<GameState> {
         const result = applyCraftingOrb(orbType, itemData);
 
         if (result.success) {
-          this.setOrbCount(player, orbType, this.getOrbCount(player, orbType) - 1);
+          // Decrement orb from its source
+          if (orbSource === "inventory") {
+            const slot = player.inventory[orbSlotIdx]!;
+            const qty = slot.quantity || 1;
+            if (qty <= 1) {
+              updateSchemaFromData(slot, createEmptyItemInstance());
+            } else {
+              slot.quantity = qty - 1;
+            }
+          } else {
+            const orbData = player.vaultItems![orbSlotIdx];
+            const qty = orbData.quantity || 1;
+            if (qty <= 1) {
+              player.vaultItems![orbSlotIdx] = createEmptyItemInstance();
+            } else {
+              player.vaultItems![orbSlotIdx] = { ...orbData, quantity: qty - 1 };
+            }
+            player.vaultDirty = true;
+          }
+
           // Replace the entire schema in the array (not in-place update)
           // so Colyseus sends a clean change to the client
           const newSchema = itemDataToSchema(result.item);
@@ -900,15 +979,70 @@ export class GameRoom extends Room<GameState> {
           } else {
             player.inventory[data.slotIndex] = newSchema;
           }
+
+          // Send updated vault orb counts to client
+          client.send(ServerMessage.CraftingOrbsUpdated, {
+            vaultOrbCounts: this.computeVaultOrbCounts(player),
+          });
         }
       }
     );
 
-    // TESTING: Give 999 of each crafting orb
+    // TESTING: Give 999 of each crafting orb (fills inventory with orb stacks)
     this.onMessage(ClientMessage.ToggleUnlimitedOrbs, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player) return;
-      for (let i = 0; i <= 9; i++) this.setOrbCount(player, i, 999);
+      for (let orbType = 0; orbType <= 9; orbType++) {
+        const orbItemId = makeItemId(ItemCategory.CraftingOrb, orbType, 1);
+        // Find existing stack or empty slot
+        let found = false;
+        for (let i = 0; i < player.inventory.length; i++) {
+          if (player.inventory[i]!.baseItemId === orbItemId) {
+            player.inventory[i]!.quantity = ORB_MAX_STACK;
+            found = true;
+            break;
+          }
+        }
+        if (!found) {
+          for (let i = 0; i < player.inventory.length; i++) {
+            if (player.inventory[i]!.baseItemId === -1) {
+              const orbData = generateOrbInstance(orbType);
+              orbData.quantity = ORB_MAX_STACK;
+              updateSchemaFromData(player.inventory[i]!, orbData);
+              break;
+            }
+          }
+        }
+      }
+    });
+
+    // Crafting table interaction (E key near crafting table)
+    this.onMessage(ClientMessage.OpenCraftingTable, async (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (player.zone !== "nexus") return;
+
+      const dist = distanceBetween(player.x, player.y, CRAFTING_TABLE_X, CRAFTING_TABLE_Y);
+      if (dist > CRAFTING_TABLE_INTERACT_RADIUS) return;
+
+      // Lazy-load vault if not yet loaded (so crafting table can use vault orbs)
+      if (player.vaultItems === null && player.accountId) {
+        try {
+          player.vaultItems = await getAccountVault(player.accountId);
+        } catch (err) {
+          console.error(`Failed to load vault for crafting: ${player.accountId}`, err);
+          player.vaultItems = [];
+        }
+      } else if (player.vaultItems === null) {
+        player.vaultItems = [];
+      }
+      while (player.vaultItems.length < VAULT_SIZE) {
+        player.vaultItems.push(createEmptyItemInstance());
+      }
+
+      client.send(ServerMessage.CraftingOpened, {
+        vaultOrbCounts: this.computeVaultOrbCounts(player),
+      });
     });
 
     // Vault chest interaction (E key near vault chest)
@@ -1141,17 +1275,6 @@ export class GameRoom extends Room<GameState> {
       player.manaPots = character.consumables.manaPots;
       player.portalGems = character.consumables.portalGems;
 
-      // Restore crafting orbs
-      player.orbBlank = character.orbs.blank;
-      player.orbEmber = character.orbs.ember;
-      player.orbShard = character.orbs.shard;
-      player.orbChaos = character.orbs.chaos;
-      player.orbFlux = character.orbs.flux;
-      player.orbVoid = character.orbs.void;
-      player.orbPrism = character.orbs.prism;
-      player.orbForge = character.orbs.forge;
-      player.orbCalibrate = character.orbs.calibrate ?? 0;
-      player.orbDivine = character.orbs.divine ?? 0;
     } else {
       // --- Guest player: ephemeral session (current behavior) ---
       player.name =
@@ -1271,26 +1394,18 @@ export class GameRoom extends Room<GameState> {
         manaPots: player.manaPots,
         portalGems: player.portalGems,
       },
-      orbs: {
-        blank: player.orbBlank,
-        ember: player.orbEmber,
-        shard: player.orbShard,
-        chaos: player.orbChaos,
-        flux: player.orbFlux,
-        void: player.orbVoid,
-        prism: player.orbPrism,
-        forge: player.orbForge,
-        calibrate: player.orbCalibrate,
-        divine: player.orbDivine,
-      },
     };
 
     await saveCharacter(player.characterId, data);
 
-    // Save vault to account (separate from character)
+    // Save vault to account (separate from character — independent try/catch)
     if (player.vaultDirty && player.vaultItems && player.accountId) {
-      await saveAccountVault(player.accountId, player.vaultItems);
-      player.vaultDirty = false;
+      try {
+        await saveAccountVault(player.accountId, player.vaultItems);
+        player.vaultDirty = false;
+      } catch (err) {
+        console.error(`Failed to save vault for account ${player.accountId}:`, err);
+      }
     }
   }
 
@@ -1356,42 +1471,19 @@ export class GameRoom extends Room<GameState> {
     return false;
   }
 
-  /** Add a crafting orb to the player's orb counter. */
-  private addOrbToPlayer(player: Player, orbType: number): void {
-    const current = this.getOrbCount(player, orbType);
-    this.setOrbCount(player, orbType, current + 1);
-  }
-
-  private getOrbCount(player: Player, orbType: number): number {
-    switch (orbType) {
-      case CraftingOrbType.Blank: return player.orbBlank;
-      case CraftingOrbType.Ember: return player.orbEmber;
-      case CraftingOrbType.Shard: return player.orbShard;
-      case CraftingOrbType.Chaos: return player.orbChaos;
-      case CraftingOrbType.Flux: return player.orbFlux;
-      case CraftingOrbType.Void: return player.orbVoid;
-      case CraftingOrbType.Prism: return player.orbPrism;
-      case CraftingOrbType.Forge: return player.orbForge;
-      case CraftingOrbType.Calibrate: return player.orbCalibrate;
-      case CraftingOrbType.Divine: return player.orbDivine;
-      default: return 0;
+  /** Compute orb counts from vault items (inventory orbs are synced via schema). */
+  private computeVaultOrbCounts(player: Player): number[] {
+    const counts = new Array(10).fill(0);
+    if (!player.vaultItems) return counts;
+    for (const item of player.vaultItems) {
+      if (item.baseItemId >= 0 && isCraftingOrbItem(item.baseItemId)) {
+        const orbType = getItemSubtype(item.baseItemId);
+        if (orbType >= 0 && orbType < 10) {
+          counts[orbType] += item.quantity || 1;
+        }
+      }
     }
-  }
-
-  private setOrbCount(player: Player, orbType: number, count: number): void {
-    const val = Math.max(0, Math.min(999, count));
-    switch (orbType) {
-      case CraftingOrbType.Blank: player.orbBlank = val; break;
-      case CraftingOrbType.Ember: player.orbEmber = val; break;
-      case CraftingOrbType.Shard: player.orbShard = val; break;
-      case CraftingOrbType.Chaos: player.orbChaos = val; break;
-      case CraftingOrbType.Flux: player.orbFlux = val; break;
-      case CraftingOrbType.Void: player.orbVoid = val; break;
-      case CraftingOrbType.Prism: player.orbPrism = val; break;
-      case CraftingOrbType.Forge: player.orbForge = val; break;
-      case CraftingOrbType.Calibrate: player.orbCalibrate = val; break;
-      case CraftingOrbType.Divine: player.orbDivine = val; break;
-    }
+    return counts;
   }
 
   private teleportPlayerToNexus(player: Player, client: Client): void {
