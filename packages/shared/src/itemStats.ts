@@ -207,7 +207,7 @@ export const ABILITY_TEMPLATES: Record<number, AbilityTemplate> = {
 // --- Stat Display Names ---
 
 export const STAT_NAMES: Record<number, string> = {
-  [StatType.AttackDamage]: "Attack Damage",
+  [StatType.AttackDamage]: "Weapon Damage",
   [StatType.AttackSpeed]: "Attack Speed",
   [StatType.Health]: "Health",
   [StatType.HealthRegen]: "Health Regen",
@@ -216,7 +216,7 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.Mana]: "Mana",
   [StatType.PhysicalDamageReduction]: "Phys Dmg Reduction",
   [StatType.MagicDamageReduction]: "Magic Dmg Reduction",
-  [StatType.AbilityDamage]: "Ability Power",
+  [StatType.AbilityDamage]: "Ability Damage",
   [StatType.ReducedAbilityCooldown]: "Reduced Ability Cooldown",
   [StatType.IncreasedProjectileSpeed]: "Increased Projectile Speed",
   [StatType.CriticalStrikeChance]: "Critical Strike Chance",

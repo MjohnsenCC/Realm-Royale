@@ -30,7 +30,7 @@ const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility"
   { label: "Crit Multiplier", section: "offensive" },
   { label: "Ability DPS", section: "offensive" },
   { label: "Sustained Ability DPS", section: "offensive" },
-  { label: "Ability Power", section: "offensive" },
+  { label: "Ability Damage", section: "offensive" },
   { label: "Ability Cooldown", section: "offensive" },
   { label: "Ability Mana Cost", section: "offensive" },
   { label: "Max Health", section: "defensive" },
@@ -454,7 +454,7 @@ export class StatsPanel {
       }
     }
 
-    const combinedDPS = weaponDPS + rawAbilityDPS;
+    const combinedDPS = weaponDPS + sustainedAbilityDPS;
 
     // Bonuses (full - base)
     const dmgBonus = fullStats.damage - weaponBaseDamage;
@@ -495,7 +495,7 @@ export class StatsPanel {
     } else {
       this.setStatRow(9, hasAbility ? sustainedAbilityDPS.toFixed(1) : "N/A");
     }
-    // Row 10: Ability Power
+    // Row 10: Ability Damage
     this.setStatRow(10, hasAbility ? String(abilityDmg + fullStats.abilityDamageBonus) : "N/A", hasAbility ? fullStats.abilityDamageBonus : undefined);
     // Row 11: Ability Cooldown
     const effectiveAbilityCooldown = fullStats.abilityCooldownReduction > 0
