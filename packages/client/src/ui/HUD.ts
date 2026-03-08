@@ -851,6 +851,10 @@ export class HUD {
     }
   }
 
+  getConsumableCount(slotIndex: number): number {
+    return this.currentConsumables[slotIndex] ?? 0;
+  }
+
   getConsumableSlotBounds(): { x: number; y: number; w: number; h: number }[] {
     const size = this.consumableSlotSize;
     return this.consumableSlotPositions.map(pos => ({

@@ -165,6 +165,29 @@ export class DragManager {
       this.quickTransferBagToInventory(source.bagId, source.slotIndex, item);
       return;
     }
+
+    // Priority 4: Inventory quick-equip (no special UI open)
+    if (source.type === "inventory") {
+      const category = getItemCategory(item.baseItemId);
+      const inv = this.inventoryUI.getInventory();
+
+      if (category >= 0 && category <= 3) {
+        // Equipment item: swap with equipment slot
+        const eq = this.inventoryUI.getEquipment();
+        const oldEquip = { ...eq[category] };
+        eq[category] = { ...inv[source.slotIndex] };
+        inv[source.slotIndex] = oldEquip;
+        this.inventoryUI.redrawSlots();
+        this.inventoryUI.redrawEquipmentSlots();
+        this.room.send(ClientMessage.EquipItem, { inventorySlot: source.slotIndex });
+      } else if (isConsumableItem(item.baseItemId)) {
+        // Consumable: move to consumable slot
+        inv[source.slotIndex] = createEmptyItemInstance();
+        this.inventoryUI.redrawSlots();
+        this.room.send(ClientMessage.EquipItem, { inventorySlot: source.slotIndex });
+      }
+      return;
+    }
   }
 
   private quickTransferToInventory(vaultSlot: number, item: ItemInstanceData): void {
@@ -293,6 +316,21 @@ export class DragManager {
 
     const inv = this.inventoryUI.getInventory();
     const bagItems = this.lootBagUI.getItems();
+
+    // For consumables, try routing to consumable slot first
+    if (isConsumableItem(item.baseItemId) && this.hud) {
+      const slotIdx = getConsumableSlotIndex(item.baseItemId);
+      const current = this.hud.getConsumableCount(slotIdx);
+      const max = getMaxStack(item.baseItemId);
+      if (current < max) {
+        bagItems[bagSlot] = createEmptyItemInstance();
+        this.lootBagUI.redrawItems();
+        this.room.send(ClientMessage.PickupItem, {
+          bagId, slotIndex: bagSlot, targetConsumableSlot: slotIdx,
+        });
+        return;
+      }
+    }
 
     // For stackable items, try to merge with an existing partial stack first
     if (isStackableItem(item.baseItemId)) {
