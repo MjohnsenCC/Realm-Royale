@@ -19,7 +19,7 @@ import {
   getScaledAbilityStatsRange,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
-import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 
 const ORB_KEYS = [
@@ -106,8 +106,6 @@ export class CraftingUI {
   private orbStartY!: number;
   private columnGap!: number;
   private orbColumnWidth!: number;
-
-  private static readonly LEFT_PANEL_WIDTH_PCT = 0.30;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -402,7 +400,7 @@ export class CraftingUI {
     const margin = Math.round(12 * S);
 
     // Left panel: 30% width
-    const totalPanelW = Math.round(screenW * CraftingUI.LEFT_PANEL_WIDTH_PCT);
+    const totalPanelW = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
     this.orbColumnWidth = Math.round(76 * S);
     this.columnGap = Math.round(8 * S);
     this.statsColumnWidth = totalPanelW - this.columnGap - this.orbColumnWidth;

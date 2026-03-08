@@ -5,7 +5,7 @@ import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
 import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
-import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
 import {
   MINIMAP_WIDTH,
@@ -253,8 +253,8 @@ export class HUD {
     const consRowY = this.eqY + this.slotSize + this.iconGap;
 
     const keyLabels = ["F", "G", ""];
-    const countFontSm = `${Math.round(10 * S)}px`;
-    const keyFontSm = `${Math.round(8 * S)}px`;
+    const countFontSm = `${Math.max(7, Math.round(this.slotSize * 0.28))}px`;
+    const keyFontSm = `${Math.max(6, Math.round(this.slotSize * 0.22))}px`;
 
     for (let i = 0; i < 3; i++) {
       const ix = consRowX + i * (this.slotSize + this.iconGap);
@@ -430,7 +430,7 @@ export class HUD {
     this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), this.invX, this.panelY);
 
     // --- Vault UI (left panel, full height) ---
-    this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip());
+    this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip(), this.slotSize);
 
     // --- Drag Manager ---
     this.dragManager = new DragManager(scene);
@@ -494,7 +494,7 @@ export class HUD {
 
   private computeLayout(screenW: number, screenH: number, S: number): void {
     // HUD panel occupies ~30% of screen width, centered at bottom
-    this.panelW = Math.round(screenW * 0.30);
+    this.panelW = Math.min(Math.round(HUD_REF_WIDTH * S), Math.round(screenW * 0.40));
     this.innerPad = Math.max(4, Math.round(this.panelW * 0.016));
     this.sectionGap = Math.max(4, Math.round(this.panelW * 0.023));
     this.slotGap = Math.max(2, Math.round(this.panelW * 0.008));
@@ -572,13 +572,15 @@ export class HUD {
     const consRowY = this.eqY + this.slotSize + this.iconGap;
     this.consumableSlotSize = this.slotSize;
 
-    const countFontSm = `${Math.round(10 * S)}px`;
-    const keyFontSm = `${Math.round(8 * S)}px`;
+    const countFontSm = `${Math.max(7, Math.round(this.slotSize * 0.28))}px`;
+    const keyFontSm = `${Math.max(6, Math.round(this.slotSize * 0.22))}px`;
     for (let i = 0; i < 3; i++) {
       const ix = consRowX + i * (this.slotSize + this.iconGap);
       this.consumableSlotPositions[i] = { x: ix, y: consRowY };
       this.consumableCountTexts[i].setFontSize(countFontSm);
+      this.consumableCountTexts[i].setPosition(ix + this.slotSize - 2, consRowY + this.slotSize - 2);
       this.consumableKeyTexts[i].setFontSize(keyFontSm);
+      this.consumableKeyTexts[i].setPosition(ix + 2, consRowY + 1);
       this.consumableZones[i].setPosition(ix + this.slotSize / 2, consRowY + this.slotSize / 2);
       this.consumableZones[i].setSize(this.slotSize, this.slotSize);
     }
@@ -615,7 +617,7 @@ export class HUD {
     });
 
     this.lootBagUI.relayout(this.invX, this.panelY);
-    this.vaultUI.relayout();
+    this.vaultUI.relayout(this.slotSize);
 
     this.drawConsumableSlots();
     this.drawHealthBar(100, 100, 0);

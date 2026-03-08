@@ -1,6 +1,8 @@
 import Phaser from "phaser";
 import {
   VAULT_SIZE,
+  VAULT_COLS,
+  VAULT_ROWS,
   getItemCategory,
   getItemSubtype,
   getItemColor,
@@ -9,20 +11,16 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
-import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_GAP = 4;
-const COLS = 5;
-const ROWS = 4;
 const BASE_PADDING = 8;
-const BASE_HEADER = 18;
+const BASE_HEADER = 40;
 
 const VAULT_HEADER_COLOR = "#ddaa55";
 const VAULT_BORDER_COLOR = 0xddaa55;
-
-const LEFT_PANEL_WIDTH_PCT = 0.30;
 
 export class VaultUI {
   private scene: Phaser.Scene;
@@ -58,12 +56,16 @@ export class VaultUI {
   private header!: number;
   private panelWidth!: number;
   private panelHeight!: number;
+  private gridContainerY!: number; // top of the slot container area
+  private gridContainerH!: number; // height of the slot container area
+  private cols!: number; // dynamic columns to fill container
+  private externalSlotSize: number | null = null; // slot size from HUD
 
   // Position: left panel
   private anchorX!: number;
   private anchorY!: number;
 
-  constructor(scene: Phaser.Scene, tooltip: ItemTooltip) {
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, hudSlotSize?: number) {
     this.scene = scene;
     this.tooltip = tooltip;
 
@@ -75,9 +77,10 @@ export class VaultUI {
 
     this.S = getUIScale();
     const S = this.S;
+    this.externalSlotSize = hudSlotSize ?? null;
     this.computeLayout();
 
-    const headerFontSize = `${Math.round(12 * S)}px`;
+    const headerFontSize = `${Math.round(16 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
     const tierFontSize = `${Math.round(7 * S)}px`;
 
@@ -91,6 +94,7 @@ export class VaultUI {
         fontSize: headerFontSize,
         color: VAULT_HEADER_COLOR,
         fontFamily: "monospace",
+        fontStyle: "bold",
       });
     this.container.add(this.headerText);
 
@@ -189,27 +193,44 @@ export class VaultUI {
     const screenH = getScreenHeight();
     const margin = Math.round(12 * S);
 
-    this.panelWidth = Math.round(screenW * LEFT_PANEL_WIDTH_PCT);
+    // Standard panel width (same as stats/crafting panels)
+    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
     this.padding = Math.round(BASE_PADDING * S);
     this.header = Math.round(BASE_HEADER * S);
     this.slotGap = Math.round(BASE_SLOT_GAP * S);
 
-    // Derive slot size to fit COLS columns within panel width
-    this.slotSize = Math.max(16, Math.floor((this.panelWidth - 2 * this.padding - (COLS - 1) * this.slotGap) / COLS));
+    // Use HUD slot size if available, otherwise derive from scale
+    if (this.externalSlotSize !== null) {
+      this.slotSize = this.externalSlotSize;
+    } else {
+      this.slotSize = Math.max(16, Math.round(36 * this.S));
+    }
 
-    this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
+    // Fixed grid dimensions
+    this.cols = VAULT_COLS;
+
+    // Full height panel (top to bottom with margins, same as other panels)
+    this.panelHeight = screenH - margin * 2;
+
+    // Header area, then slot container
+    this.gridContainerY = this.header + this.padding;
+
+    // Grid container height fits exactly VAULT_ROWS rows (not full panel)
+    const gridHeight = VAULT_ROWS * this.slotSize + (VAULT_ROWS - 1) * this.slotGap;
+    this.gridContainerH = gridHeight + this.padding * 2;
 
     // Left panel position
     this.anchorX = margin;
     this.anchorY = margin;
   }
 
-  relayout(): void {
+  relayout(hudSlotSize?: number): void {
     this.S = getUIScale();
+    this.externalSlotSize = hudSlotSize ?? null;
     this.computeLayout();
 
     const S = this.S;
-    const headerFontSize = `${Math.round(12 * S)}px`;
+    const headerFontSize = `${Math.round(16 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
     const tierFontSize = `${Math.round(7 * S)}px`;
 
@@ -281,26 +302,65 @@ export class VaultUI {
     }
   }
 
+  private getSlotPosition(index: number): { x: number; y: number } {
+    const panelX = this.anchorX;
+    const panelY = this.anchorY;
+    const col = index % this.cols;
+    const row = Math.floor(index / this.cols);
+
+    const containerInnerW = this.panelWidth - this.padding * 2;
+    const gridTotalW = this.cols * this.slotSize + (this.cols - 1) * this.slotGap;
+    const gridOffsetX = Math.round((containerInnerW - gridTotalW) / 2);
+    const gridOffsetY = this.padding;
+
+    return {
+      x: panelX + this.padding + gridOffsetX + col * (this.slotSize + this.slotGap),
+      y: panelY + this.gridContainerY + gridOffsetY + row * (this.slotSize + this.slotGap),
+    };
+  }
+
   private redraw(): void {
     const panelX = this.anchorX;
     const panelY = this.anchorY;
 
     this.panelBg.clear();
-    this.panelBg.fillStyle(0x111122, 0.9);
+
+    // Outer panel background
+    this.panelBg.fillStyle(0x111122, 0.92);
     this.panelBg.fillRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
     this.panelBg.lineStyle(2, VAULT_BORDER_COLOR, 1);
     this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
 
+    // Header area with decorative background
+    const headerAreaH = this.header;
+    this.panelBg.fillStyle(0x1a1a33, 0.8);
+    this.panelBg.fillRect(panelX + 2, panelY + 2, this.panelWidth - 4, headerAreaH);
+    // Gold separator line
+    this.panelBg.lineStyle(2, VAULT_BORDER_COLOR, 0.8);
+    this.panelBg.lineBetween(
+      panelX + this.padding, panelY + headerAreaH,
+      panelX + this.panelWidth - this.padding, panelY + headerAreaH
+    );
+
+    // Slot container area (inset rectangle below header)
+    const containerX = panelX + this.padding;
+    const containerY = panelY + this.gridContainerY;
+    const containerW = this.panelWidth - this.padding * 2;
+    const containerH = this.gridContainerH;
+    this.panelBg.fillStyle(0x0a0a1a, 0.5);
+    this.panelBg.fillRect(containerX, containerY, containerW, containerH);
+    this.panelBg.lineStyle(1, 0x333355, 0.6);
+    this.panelBg.strokeRect(containerX, containerY, containerW, containerH);
+
+    // Header text centered
     this.headerText.setText("Vault");
     this.headerText.setColor(VAULT_HEADER_COLOR);
-    this.headerText.setPosition(panelX + this.padding, panelY + 4);
+    this.headerText.setOrigin(0.5, 0.5);
+    this.headerText.setPosition(panelX + this.panelWidth / 2, panelY + this.header / 2);
 
     this.slotGraphics.clear();
     for (let i = 0; i < VAULT_SIZE; i++) {
-      const col = i % COLS;
-      const row = Math.floor(i / COLS);
-      const sx = panelX + this.padding + col * (this.slotSize + this.slotGap);
-      const sy = panelY + this.header + this.padding + row * (this.slotSize + this.slotGap);
+      const { x: sx, y: sy } = this.getSlotPosition(i);
 
       const item = this.currentItems[i];
       const hasItem = item && item.baseItemId >= 0;
@@ -412,18 +472,10 @@ export class VaultUI {
 
   getVaultSlotBounds(): { x: number; y: number; w: number; h: number }[] {
     if (!this.visible) return [];
-    const panelX = this.anchorX;
-    const panelY = this.anchorY;
     const bounds: { x: number; y: number; w: number; h: number }[] = [];
     for (let i = 0; i < VAULT_SIZE; i++) {
-      const col = i % COLS;
-      const row = Math.floor(i / COLS);
-      bounds.push({
-        x: panelX + this.padding + col * (this.slotSize + this.slotGap),
-        y: panelY + this.header + this.padding + row * (this.slotSize + this.slotGap),
-        w: this.slotSize,
-        h: this.slotSize,
-      });
+      const { x, y } = this.getSlotPosition(i);
+      bounds.push({ x, y, w: this.slotSize, h: this.slotSize });
     }
     return bounds;
   }

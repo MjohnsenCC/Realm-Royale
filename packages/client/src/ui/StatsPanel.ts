@@ -16,7 +16,7 @@ import {
   MAX_LEVEL,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
-import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 
 // Stat row definitions
 const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility" }[] = [
@@ -95,8 +95,6 @@ export class StatsPanel {
 
   // Wheel listener reference for cleanup
   private wheelListener: ((e: WheelEvent) => void) | null = null;
-
-  private static readonly LEFT_PANEL_WIDTH_PCT = 0.30;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -253,7 +251,7 @@ export class StatsPanel {
     this.headerH = Math.round(18 * S);
     this.scrollBarWidth = Math.round(4 * S);
 
-    this.panelWidth = Math.round(screenW * StatsPanel.LEFT_PANEL_WIDTH_PCT);
+    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
 
     // Calculate full content height
     const offensiveRows = 13;
@@ -275,10 +273,6 @@ export class StatsPanel {
     this.py = panelMargin;
     this.viewHeight = screenH - panelMargin * 2;
 
-    // Clamp viewHeight to content if content is shorter
-    if (this.contentHeight <= this.viewHeight) {
-      this.viewHeight = this.contentHeight;
-    }
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
   }
 

@@ -1,5 +1,7 @@
 const REFERENCE_WIDTH = 800;
 const REFERENCE_HEIGHT = 600;
+export const PANEL_REF_WIDTH = 280; // 35% of 800 reference width
+export const HUD_REF_WIDTH = 340; // gameplay HUD (wider to fit bars + slots)
 
 let cachedWidth = REFERENCE_WIDTH;
 let cachedHeight = REFERENCE_HEIGHT;
