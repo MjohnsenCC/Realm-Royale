@@ -8,7 +8,7 @@ import {
   EnemyType,
   CraftingOrbType,
 } from "./types";
-import { CONSUMABLE_MAX_STACKS } from "./constants";
+import { PORTAL_GEM_MAX_STACK } from "./constants";
 import {
   ItemInstanceData,
   LOCKED_STATS_BY_CATEGORY,
@@ -571,20 +571,6 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   },
 
   // ===== CONSUMABLES (category=4) =====
-  [makeItemId(4, 0, 1)]: {
-    id: 4001, name: "Health Potion", category: 4, subtype: 0, tier: 1,
-    color: 0xcc3333, tierColor: TIER_COLORS[1],
-    description: "Restores 100 HP.",
-    usageHint: "Press F to use.",
-    consumableStats: { maxStack: 6, healAmount: 100 },
-  },
-  [makeItemId(4, 1, 1)]: {
-    id: 4101, name: "Mana Potion", category: 4, subtype: 1, tier: 1,
-    color: 0x4466cc, tierColor: TIER_COLORS[1],
-    description: "Restores 100 Mana.",
-    usageHint: "Press G to use.",
-    consumableStats: { maxStack: 6, manaAmount: 100 },
-  },
   [makeItemId(4, 2, 1)]: {
     id: 4201, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
     color: 0xaa44ff, tierColor: TIER_COLORS[1],
@@ -617,16 +603,12 @@ export function isCraftingOrbItem(itemId: number): boolean {
   return getItemCategory(itemId) === ItemCategory.CraftingOrb;
 }
 
-export function getConsumableSlotIndex(itemId: number): number {
-  return getItemSubtype(itemId);
-}
-
 export function isStackableItem(itemId: number): boolean {
   return isConsumableItem(itemId) || isCraftingOrbItem(itemId);
 }
 
 export function getMaxStack(itemId: number): number {
-  if (isConsumableItem(itemId)) return CONSUMABLE_MAX_STACKS[getConsumableSlotIndex(itemId)] ?? 1;
+  if (isConsumableItem(itemId)) return PORTAL_GEM_MAX_STACK;
   if (isCraftingOrbItem(itemId)) return ORB_MAX_STACK;
   return 1;
 }
@@ -834,15 +816,11 @@ function makeEquipmentTierGroup(
 
 /** Standard consumable entries for Lowlands+. */
 const CONSUMABLE_ENTRIES: LootTableEntry[] = [
-  { type: "independent", dropChance: 0.02, itemId: makeItemId(4, 0, 1) }, // Health Potion
-  { type: "independent", dropChance: 0.02, itemId: makeItemId(4, 1, 1) }, // Mana Potion
   { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 2, 1) }, // Portal Gem
 ];
 
 /** Reduced consumable entries for minions/spawned adds. */
 const MINION_CONSUMABLE_ENTRIES: LootTableEntry[] = [
-  { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 0, 1) }, // Health Potion
-  { type: "independent", dropChance: 0.01, itemId: makeItemId(4, 1, 1) }, // Mana Potion
   { type: "independent", dropChance: 0.005, itemId: makeItemId(4, 2, 1) }, // Portal Gem
 ];
 

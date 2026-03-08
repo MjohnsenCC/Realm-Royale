@@ -1,5 +1,5 @@
 import * as Colyseus from "colyseus.js";
-import { PlayerInput, ClientMessage, AuthenticatedJoinOptions } from "@rotmg-lite/shared";
+import { PlayerInput, ClientMessage, AuthenticatedJoinOptions, ChatChannel } from "@rotmg-lite/shared";
 import { getServerUrl } from "./ServerConfig";
 
 export class NetworkManager {
@@ -49,14 +49,6 @@ export class NetworkManager {
     this.room?.send(ClientMessage.ZoneReady);
   }
 
-  sendUseHealthPot(): void {
-    this.room?.send(ClientMessage.UseHealthPot);
-  }
-
-  sendUseManaPot(): void {
-    this.room?.send(ClientMessage.UseManaPot);
-  }
-
   sendUsePortalGem(targetX: number, targetY: number): void {
     this.room?.send(ClientMessage.UsePortalGem, { targetX, targetY });
   }
@@ -67,6 +59,10 @@ export class NetworkManager {
 
   sendOpenCraftingTable(): void {
     this.room?.send(ClientMessage.OpenCraftingTable);
+  }
+
+  sendChatMessage(text: string, channel: ChatChannel): void {
+    this.room?.send(ClientMessage.ChatMessage, { text, channel });
   }
 
   getRoom(): Colyseus.Room | null {

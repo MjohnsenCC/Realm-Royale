@@ -9,6 +9,7 @@ import { HUD } from "../ui/HUD";
 import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
+import { ChatUI } from "../ui/ChatUI";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
   HOSTILE_WIDTH,
@@ -79,6 +80,8 @@ import {
   generateVaultMap,
   getItemCategory,
   isCraftingOrbItem,
+  PORTAL_GEM_ID,
+  ChatChannel,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -137,6 +140,7 @@ export class GameScene extends Phaser.Scene {
     U: Phaser.Input.Keyboard.Key;
     P: Phaser.Input.Keyboard.Key;
     T: Phaser.Input.Keyboard.Key;
+    ENTER: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -169,6 +173,7 @@ export class GameScene extends Phaser.Scene {
   private dungeonTooltip!: DungeonTooltip;
   private craftingUI!: CraftingUI;
   private statsPanel!: StatsPanel;
+  private chatUI!: ChatUI;
   private nearCraftingTable: boolean = false;
   private nearVaultChest: boolean = false;
   private vaultOrbCounts: number[] = new Array(10).fill(0);
@@ -186,12 +191,6 @@ export class GameScene extends Phaser.Scene {
 
   // E key (portal interact) cooldown
   private portalInteractCooldown: number = 0;
-
-  // F key (health pot) cooldown
-  private healthPotCooldown: number = 0;
-
-  // G key (mana pot) cooldown
-  private manaPotCooldown: number = 0;
 
   // Dungeon map data (for rendering and client-side prediction)
   private dungeonSeed: number = 0;
@@ -328,6 +327,7 @@ export class GameScene extends Phaser.Scene {
         U: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U),
         P: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P),
         T: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T),
+        ENTER: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
       };
     }
 
@@ -350,6 +350,18 @@ export class GameScene extends Phaser.Scene {
     // Create stats panel
     this.statsPanel = new StatsPanel(this);
     this.hud.setStatsButtonCallback(() => this.toggleStatsPanel());
+
+    // Create chat UI
+    this.chatUI = new ChatUI(this);
+
+    // Listen for chat messages
+    room.onMessage(ServerMessage.ChatMessage, (data: { playerId: string; playerName: string; text: string; channel: ChatChannel }) => {
+      this.chatUI.addMessage(data);
+      const sprite = this.playerSprites.get(data.playerId);
+      if (sprite) {
+        sprite.showChatMessage(data.text);
+      }
+    });
 
     // Create dungeon tooltip (shows portal stats above minimap)
     this.dungeonTooltip = new DungeonTooltip(this);
@@ -1959,8 +1971,15 @@ export class GameScene extends Phaser.Scene {
     let useAbility = false;
 
     if (!this.isDead && !this.isLoadingZone) {
-      // Read input
-      if (this.keys) {
+      // Enter key — open chat (only when not already typing)
+      if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ENTER) && !this.chatUI.isTyping) {
+        this.chatUI.openInput();
+      }
+
+      // Suppress all game input while typing in chat
+      if (this.chatUI.isTyping) {
+        // skip input — leave mx/my/shooting/useAbility at defaults (0/false)
+      } else if (this.keys) {
         if (this.keys.A.isDown) mx -= 1;
         if (this.keys.D.isDown) mx += 1;
         if (this.keys.W.isDown) my -= 1;
@@ -1997,31 +2016,24 @@ export class GameScene extends Phaser.Scene {
           this.portalInteractCooldown = 500;
         }
 
-        // F key — use health potion
-        if (this.healthPotCooldown > 0) {
-          this.healthPotCooldown -= delta;
-        }
-        if (this.keys.F.isDown && this.healthPotCooldown <= 0) {
-          this.network.sendUseHealthPot();
-          this.healthPotCooldown = 500;
-        }
-
-        // G key — use mana potion
-        if (this.manaPotCooldown > 0) {
-          this.manaPotCooldown -= delta;
-        }
-        if (this.keys.G.isDown && this.manaPotCooldown <= 0) {
-          this.network.sendUseManaPot();
-          this.manaPotCooldown = 500;
-        }
-
         // T key — open vault portal with portal gem
         if (Phaser.Input.Keyboard.JustDown(this.keys.T)) {
-          if (
-            (isHostileZone(this.localZone) || isDungeonZone(this.localZone)) &&
-            ((state.players.get(sessionId) as any)?.portalGems ?? 0) > 0
-          ) {
-            this.network.sendUsePortalGemVault();
+          if (isHostileZone(this.localZone) || isDungeonZone(this.localZone)) {
+            // Check if player has portal gems in inventory
+            const localP = state.players.get(sessionId) as any;
+            if (localP) {
+              let hasGem = false;
+              for (let i = 0; i < localP.inventory.length; i++) {
+                const slot = localP.inventory[i];
+                if (slot && slot.baseItemId === PORTAL_GEM_ID && (slot.quantity || 1) > 0) {
+                  hasGem = true;
+                  break;
+                }
+              }
+              if (hasGem) {
+                this.network.sendUsePortalGemVault();
+              }
+            }
           }
         }
 
@@ -2036,29 +2048,31 @@ export class GameScene extends Phaser.Scene {
         }
       }
 
-      // Calculate aim angle
-      if (localSprite) {
+      if (!this.chatUI.isTyping) {
+        // Calculate aim angle
+        if (localSprite) {
+          const pointer = this.input.activePointer;
+          const worldPoint = this.cameras.main.getWorldPoint(
+            pointer.x,
+            pointer.y
+          );
+          aimAngle = Math.atan2(
+            worldPoint.y - localSprite.displayY,
+            worldPoint.x - localSprite.displayX
+          );
+        }
+
+        // Space key — use ability (hostile + dungeons)
+        if (this.keys.SPACE.isDown) {
+          useAbility = true;
+        }
+
+        // Only shoot if not clicking on UI panels and not dragging items
         const pointer = this.input.activePointer;
-        const worldPoint = this.cameras.main.getWorldPoint(
-          pointer.x,
-          pointer.y
-        );
-        aimAngle = Math.atan2(
-          worldPoint.y - localSprite.displayY,
-          worldPoint.x - localSprite.displayX
-        );
+        const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
+        const isDragging = this.hud.dragManager.isDragging();
+        shooting = pointer.isDown && !overUI && !isDragging;
       }
-
-      // Space key — use ability (hostile + dungeons)
-      if (this.keys.SPACE.isDown) {
-        useAbility = true;
-      }
-
-      // Only shoot if not clicking on UI panels and not dragging items
-      const pointer = this.input.activePointer;
-      const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
-      const isDragging = this.hud.dragManager.isDragging();
-      shooting = pointer.isDown && !overUI && !isDragging;
     }
 
     if (localSprite) {
@@ -2418,6 +2432,15 @@ export class GameScene extends Phaser.Scene {
         dpList.push({ x: ps.x, y: ps.y, portalType: ps.portalType });
       });
 
+      // Compute portal gem count from inventory
+      let portalGemCount = 0;
+      for (let i = 0; i < (localPlayer as any).inventory.length; i++) {
+        const slot = (localPlayer as any).inventory[i];
+        if (slot && slot.baseItemId === PORTAL_GEM_ID) {
+          portalGemCount += (slot.quantity || 1);
+        }
+      }
+
       this.hud.update(
         localPlayer.hp as number,
         localPlayer.maxHp as number,
@@ -2431,9 +2454,7 @@ export class GameScene extends Phaser.Scene {
         this.playerSprites,
         this.enemySprites,
         this.localZone,
-        (localPlayer.healthPots as number) ?? 0,
-        (localPlayer.manaPots as number) ?? 0,
-        (localPlayer.portalGems as number) ?? 0,
+        portalGemCount,
         dpList,
         this.currentDungeonMap
       );
@@ -2907,6 +2928,7 @@ export class GameScene extends Phaser.Scene {
     this.statsPanel.relayout();
     this.craftingUI.relayout();
     this.dungeonTooltip.relayout();
+    this.chatUI.relayout();
   }
 
   private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {

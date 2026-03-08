@@ -35,11 +35,6 @@ export class Player extends Schema {
   @type("number") maxMana: number = BASE_MAX_MANA;
   @type("number") cachedSpeed: number = PLAYER_SPEED; // synced for client prediction
 
-  // Consumable dedicated slots
-  @type("int8") healthPots: number = 0;
-  @type("int8") manaPots: number = 0;
-  @type("int8") portalGems: number = 0;
-
   // Synced: last hit info for client damage indicators
   @type("uint8") lastHitDamageType: number = 0; // 0=Physical, 1=Magic
   @type("number") lastHitAmount: number = 0;
@@ -110,4 +105,7 @@ export class Player extends Schema {
   vaultItems: import("@rotmg-lite/shared").ItemInstanceData[] | null = null;
   vaultDirty: boolean = false;
   nearVaultChest: boolean = false;
+
+  // Server-only: chat rate limiting
+  lastChatTime: number = 0;
 }

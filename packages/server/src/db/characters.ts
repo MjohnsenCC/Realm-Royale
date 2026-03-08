@@ -2,23 +2,18 @@ import { getSupabase } from "./supabase";
 import {
   CharacterSummary,
   CharacterData,
-  CharacterConsumables,
   MAX_CHARACTERS_PER_ACCOUNT,
   ItemInstanceData,
   generateItemInstance,
+  generateConsumableInstance,
   generateOrbInstance,
   createEmptyItemInstance,
   ItemCategory,
   WeaponSubtype,
   CraftingOrbType,
   INVENTORY_SIZE,
+  PORTAL_GEM_ID,
 } from "@rotmg-lite/shared";
-
-const DEFAULT_CONSUMABLES: CharacterConsumables = {
-  healthPots: 3,
-  manaPots: 3,
-  portalGems: 5,
-};
 
 /** Legacy orb counter fields from DB. Used for one-time migration to inventory items. */
 interface LegacyCharacterOrbs {
@@ -88,7 +83,39 @@ function generateDefaultEquipment(): ItemInstanceData[] {
 }
 
 function generateDefaultInventory(): ItemInstanceData[] {
-  return Array.from({ length: INVENTORY_SIZE }, () => createEmptyItemInstance());
+  const inv = Array.from({ length: INVENTORY_SIZE }, () => createEmptyItemInstance());
+  // Starting portal gems
+  const portalGem = generateConsumableInstance(PORTAL_GEM_ID);
+  portalGem.quantity = 5;
+  inv[0] = portalGem;
+  return inv;
+}
+
+/** Migrate legacy consumable counters (portalGems) into inventory items. */
+function migrateConsumablesToInventory(
+  inventory: ItemInstanceData[],
+  consumables: { healthPots?: number; manaPots?: number; portalGems?: number } | undefined | null,
+): ItemInstanceData[] {
+  if (!consumables) return inventory;
+  const portalGemCount = consumables.portalGems ?? 0;
+  if (portalGemCount <= 0) return inventory;
+
+  const inv = [...inventory];
+  // Find existing portal gem stack
+  const existingIdx = inv.findIndex(
+    (item) => item.baseItemId === PORTAL_GEM_ID && item.baseItemId >= 0,
+  );
+  if (existingIdx >= 0) {
+    inv[existingIdx] = { ...inv[existingIdx], quantity: (inv[existingIdx].quantity || 1) + portalGemCount };
+  } else {
+    const emptyIdx = inv.findIndex((item) => item.baseItemId < 0);
+    if (emptyIdx >= 0) {
+      const gem = generateConsumableInstance(PORTAL_GEM_ID);
+      gem.quantity = portalGemCount;
+      inv[emptyIdx] = gem;
+    }
+  }
+  return inv;
 }
 
 export async function getCharactersByAccount(
@@ -140,6 +167,12 @@ export async function getCharacter(
     inventory = migrateOrbCountersToInventory(inventory, legacyOrbs);
   }
 
+  // Migrate legacy consumable counters (portalGems) into inventory items (one-time)
+  const legacyConsumables = data.consumables as { healthPots?: number; manaPots?: number; portalGems?: number } | undefined;
+  if (legacyConsumables && (legacyConsumables.portalGems ?? 0) > 0) {
+    inventory = migrateConsumablesToInventory(inventory, legacyConsumables);
+  }
+
   return {
     id: data.id,
     accountId: data.account_id,
@@ -148,7 +181,6 @@ export async function getCharacter(
     xp: data.xp,
     equipment: data.equipment as ItemInstanceData[],
     inventory,
-    consumables: data.consumables as CharacterConsumables,
   };
 }
 
@@ -180,7 +212,6 @@ export async function createCharacter(
       xp: 0,
       equipment,
       inventory,
-      consumables: DEFAULT_CONSUMABLES,
     })
     .select("*")
     .single();
@@ -197,7 +228,6 @@ export async function createCharacter(
     xp: data.xp,
     equipment: data.equipment as ItemInstanceData[],
     inventory: data.inventory as ItemInstanceData[],
-    consumables: data.consumables as CharacterConsumables,
   };
 }
 
@@ -206,7 +236,6 @@ export interface CharacterSaveData {
   xp: number;
   equipment: ItemInstanceData[];
   inventory: ItemInstanceData[];
-  consumables: CharacterConsumables;
 }
 
 export async function saveCharacter(
@@ -220,7 +249,7 @@ export async function saveCharacter(
     xp: data.xp,
     equipment: data.equipment,
     inventory: data.inventory,
-    consumables: data.consumables,
+    consumables: {}, // Clear legacy consumable counters (portal gems now stored as inventory items)
     orbs: {}, // Clear legacy orb counters (orbs now stored as inventory items)
     last_played: new Date().toISOString(),
   };

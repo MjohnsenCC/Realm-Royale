@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { ItemCategory, WeaponSubtype, ConsumableSubtype, CraftingOrbType } from "@rotmg-lite/shared";
+import { ItemCategory, WeaponSubtype, CraftingOrbType } from "@rotmg-lite/shared";
 import { TIER_COLORS, ORB_DEFINITIONS } from "@rotmg-lite/shared";
 
 /**
@@ -85,27 +85,16 @@ export function drawItemIcon(
     g.fillStyle(color, 1);
     g.fillCircle(cx, cy - half * 0.45, half * 0.15);
   } else if (category === ItemCategory.Consumable) {
-    if (subtype === ConsumableSubtype.HealthPot || subtype === ConsumableSubtype.ManaPot) {
-      // Potion bottle
-      const bw = size * 0.35;
-      const bh = size * 0.55;
-      g.fillRect(cx - bw / 2, cy - bh / 2 + size * 0.05, bw, bh);
-      g.strokeRect(cx - bw / 2, cy - bh / 2 + size * 0.05, bw, bh);
-      // Neck
-      g.fillRect(cx - bw / 4, cy - bh / 2 - size * 0.12, bw / 2, size * 0.17);
-      g.strokeRect(cx - bw / 4, cy - bh / 2 - size * 0.12, bw / 2, size * 0.17);
-    } else if (subtype === ConsumableSubtype.PortalGem) {
-      // Gem: diamond shape
-      const gh = half * 0.7;
-      g.beginPath();
-      g.moveTo(cx, cy - gh);
-      g.lineTo(cx + gh * 0.6, cy);
-      g.lineTo(cx, cy + gh);
-      g.lineTo(cx - gh * 0.6, cy);
-      g.closePath();
-      g.fillPath();
-      g.strokePath();
-    }
+    // Portal Gem: diamond shape
+    const gh = half * 0.7;
+    g.beginPath();
+    g.moveTo(cx, cy - gh);
+    g.lineTo(cx + gh * 0.6, cy);
+    g.lineTo(cx, cy + gh);
+    g.lineTo(cx - gh * 0.6, cy);
+    g.closePath();
+    g.fillPath();
+    g.strokePath();
   } else if (category === ItemCategory.CraftingOrb) {
     // Crafting orb: circle with inner glow
     const orbColor = ORB_DEFINITIONS[subtype]?.color ?? color;

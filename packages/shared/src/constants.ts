@@ -146,13 +146,12 @@ export const VAULT_CRAFTING_TABLE_X = 14 * TILE_SIZE; // 560 — right side of v
 export const VAULT_CRAFTING_TABLE_Y = 6 * TILE_SIZE; // 240 — upper area (same height as chest)
 
 // Consumables
-export const HEALTH_POT_MAX_STACK = 6;
-export const MANA_POT_MAX_STACK = 6;
 export const PORTAL_GEM_MAX_STACK = 20;
-export const HEALTH_POT_HEAL = 100;
-export const MANA_POT_RESTORE = 100;
-export const HEALTH_POT_ID = 4001; // makeItemId(4, 0, 1): category=4, subtype=0, tier=1
-export const MANA_POT_ID = 4101; // makeItemId(4, 1, 1): category=4, subtype=1, tier=1
 export const PORTAL_GEM_ID = 4201; // makeItemId(4, 2, 1): category=4, subtype=2, tier=1
-export const CONSUMABLE_MAX_STACKS = [HEALTH_POT_MAX_STACK, MANA_POT_MAX_STACK, PORTAL_GEM_MAX_STACK];
 export const PORTAL_GEM_INVULN_MS = 2000; // 2s invulnerability after portal gem teleport
+
+// Chat
+export const CHAT_MAX_LENGTH = 150;
+export const CHAT_RATE_LIMIT_MS = 500;
+export const CHAT_BUBBLE_DURATION_MS = 5000;
+export const CHAT_LOG_MAX = 50;

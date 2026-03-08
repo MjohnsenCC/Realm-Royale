@@ -5,13 +5,8 @@ import {
   getItemSubtype,
   getItemColor,
   ItemCategory,
-  isConsumableItem,
   isStackableItem,
   getMaxStack,
-  getConsumableSlotIndex,
-  HEALTH_POT_ID,
-  MANA_POT_ID,
-  PORTAL_GEM_ID,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
@@ -27,11 +22,10 @@ export type DragSource =
   | { type: "bag"; bagId: string; slotIndex: number }
   | { type: "inventory"; slotIndex: number }
   | { type: "equipment"; slotIndex: number }
-  | { type: "consumable"; slotIndex: number }
   | { type: "vault"; slotIndex: number };
 
 export interface DropTarget {
-  type: "inventory" | "equipment" | "ground" | "crafting" | "consumable" | "vault";
+  type: "inventory" | "equipment" | "ground" | "crafting" | "vault";
   slotIndex?: number;
 }
 
@@ -43,7 +37,6 @@ interface SlotBounds {
 }
 
 const DRAG_THRESHOLD = 5;
-const CONSUMABLE_ITEM_IDS = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
 
 export class DragManager {
   private scene: Phaser.Scene;
@@ -180,11 +173,6 @@ export class DragManager {
         this.inventoryUI.redrawSlots();
         this.inventoryUI.redrawEquipmentSlots();
         this.room.send(ClientMessage.EquipItem, { inventorySlot: source.slotIndex });
-      } else if (isConsumableItem(item.baseItemId)) {
-        // Consumable: move to consumable slot
-        inv[source.slotIndex] = createEmptyItemInstance();
-        this.inventoryUI.redrawSlots();
-        this.room.send(ClientMessage.EquipItem, { inventorySlot: source.slotIndex });
       }
       return;
     }
@@ -317,21 +305,6 @@ export class DragManager {
     const inv = this.inventoryUI.getInventory();
     const bagItems = this.lootBagUI.getItems();
 
-    // For consumables, try routing to consumable slot first
-    if (isConsumableItem(item.baseItemId) && this.hud) {
-      const slotIdx = getConsumableSlotIndex(item.baseItemId);
-      const current = this.hud.getConsumableCount(slotIdx);
-      const max = getMaxStack(item.baseItemId);
-      if (current < max) {
-        bagItems[bagSlot] = createEmptyItemInstance();
-        this.lootBagUI.redrawItems();
-        this.room.send(ClientMessage.PickupItem, {
-          bagId, slotIndex: bagSlot, targetConsumableSlot: slotIdx,
-        });
-        return;
-      }
-    }
-
     // For stackable items, try to merge with an existing partial stack first
     if (isStackableItem(item.baseItemId)) {
       const maxStack = getMaxStack(item.baseItemId);
@@ -396,8 +369,6 @@ export class DragManager {
         this.lootBagUI.setDragSourceSlot(this.source.slotIndex);
       } else if (this.source.type === "equipment") {
         this.inventoryUI.setDragSourceEqSlot(this.source.slotIndex);
-      } else if (this.source.type === "consumable") {
-        this.hud?.setDragSourceConsumableSlot(this.source.slotIndex);
       } else if (this.source.type === "vault") {
         this.vaultUI?.setDragSourceSlot(this.source.slotIndex);
       }
@@ -449,7 +420,6 @@ export class DragManager {
     this.vaultUI?.setDragActive(false);
     this.vaultUI?.setDragSourceSlot(-1);
     this.hud?.setDragActive(false);
-    this.hud?.setDragSourceConsumableSlot(-1);
     this.resetState();
   }
 
@@ -531,16 +501,6 @@ export class DragManager {
       }
     }
 
-    // Check consumable slots
-    if (this.hud) {
-      const consBounds = this.hud.getConsumableSlotBounds();
-      for (let i = 0; i < consBounds.length; i++) {
-        if (this.hitTest(px, py, consBounds[i])) {
-          return { type: "consumable", slotIndex: i };
-        }
-      }
-    }
-
     // Check vault slots
     if (this.vaultUI?.isVisible()) {
       const vaultBounds = this.vaultUI.getVaultSlotBounds();
@@ -559,8 +519,8 @@ export class DragManager {
       }
     }
 
-    // Check ground drop — inventory, equipment, or consumable source
-    if (this.source?.type === "inventory" || this.source?.type === "equipment" || this.source?.type === "consumable") {
+    // Check ground drop — inventory or equipment source
+    if (this.source?.type === "inventory" || this.source?.type === "equipment") {
       const panel = this.panelBoundsGetter();
       if (py < panel.y && !this.lootBagUI.isOverPanel(px, py) && !(this.vaultUI?.isOverPanel(px, py))) {
         return { type: "ground" };
@@ -582,18 +542,11 @@ export class DragManager {
         const category = getItemCategory(item.baseItemId);
         return category >= 0 && category < 4 && category === target.slotIndex;
       }
-      if (target.type === "consumable" && target.slotIndex !== undefined) {
-        return isConsumableItem(item.baseItemId) && getConsumableSlotIndex(item.baseItemId) === target.slotIndex;
-      }
       return false;
     }
 
     if (source.type === "bag") {
       if (target.type === "inventory") return true;
-      // Bag to consumable slot: item must be the correct consumable
-      if (target.type === "consumable" && target.slotIndex !== undefined) {
-        return isConsumableItem(item.baseItemId) && getConsumableSlotIndex(item.baseItemId) === target.slotIndex;
-      }
       // Bag to equipment: category must match equipment slot
       if (target.type === "equipment") {
         const category = getItemCategory(item.baseItemId);
@@ -615,10 +568,6 @@ export class DragManager {
       }
       if (target.type === "vault") {
         return true;
-      }
-      // Inventory to consumable slot: item must match the slot
-      if (target.type === "consumable" && target.slotIndex !== undefined) {
-        return isConsumableItem(item.baseItemId) && getConsumableSlotIndex(item.baseItemId) === target.slotIndex;
       }
       // Inventory to crafting: equipment (select) or crafting orb (add to counter)
       if (target.type === "crafting") {
@@ -642,22 +591,6 @@ export class DragManager {
       if (target.type === "crafting") {
         return true;
       }
-    }
-
-    if (source.type === "consumable") {
-      if (target.type === "inventory") {
-        return true; // Move one consumable to inventory
-      }
-      if (target.type === "ground") {
-        return true; // Drop one consumable on ground
-      }
-      if (target.type === "consumable") {
-        return target.slotIndex !== source.slotIndex; // No self-drop
-      }
-      if (target.type === "vault") {
-        return true; // Move consumable to vault
-      }
-      return false;
     }
 
     return false;
@@ -688,8 +621,6 @@ export class DragManager {
       this.craftingUI?.setHighlighted(true);
     } else if (target.type === "vault" && target.slotIndex !== undefined) {
       this.vaultUI?.setHighlightedVaultSlot(target.slotIndex);
-    } else if (target.type === "consumable" && target.slotIndex !== undefined) {
-      this.hud?.setHighlightedConsumableSlot(target.slotIndex);
     }
   }
 
@@ -698,7 +629,6 @@ export class DragManager {
     this.inventoryUI.setHighlightedEqSlot(-1);
     this.craftingUI?.setHighlighted(false);
     this.vaultUI?.setHighlightedVaultSlot(-1);
-    this.hud?.setHighlightedConsumableSlot(-1);
     this.currentHighlight = null;
   }
 
@@ -730,17 +660,6 @@ export class DragManager {
         slotIndex: source.slotIndex,
         targetSlot: target.slotIndex,
       });
-    } else if (source.type === "bag" && target.type === "consumable") {
-      // Bag directly to consumable slot
-      const bagItems = this.lootBagUI.getItems();
-      bagItems[source.slotIndex] = createEmptyItemInstance();
-      this.lootBagUI.redrawItems();
-
-      this.room.send(ClientMessage.PickupItem, {
-        bagId: (source as { type: "bag"; bagId: string; slotIndex: number }).bagId,
-        slotIndex: source.slotIndex,
-        targetConsumableSlot: target.slotIndex,
-      });
     } else if (source.type === "inventory" && target.type === "equipment") {
       // Optimistic: swap inventory item with equipment slot
       const category = getItemCategory(inv[source.slotIndex].baseItemId);
@@ -749,14 +668,6 @@ export class DragManager {
       inv[source.slotIndex] = oldEquip;
       this.inventoryUI.redrawSlots();
       this.inventoryUI.redrawEquipmentSlots();
-
-      this.room.send(ClientMessage.EquipItem, {
-        inventorySlot: source.slotIndex,
-      });
-    } else if (source.type === "inventory" && target.type === "consumable") {
-      // Inventory to consumable slot: send EquipItem (server handles consumable routing)
-      inv[source.slotIndex] = createEmptyItemInstance();
-      this.inventoryUI.redrawSlots();
 
       this.room.send(ClientMessage.EquipItem, {
         inventorySlot: source.slotIndex,
@@ -991,17 +902,6 @@ export class DragManager {
         fromSource: "vault", fromSlot: source.slotIndex,
         toSource: "equipment", toSlot: target.slotIndex,
       });
-    } else if (source.type === "vault" && target.type === "consumable") {
-      // Vault -> Consumable slot
-      if (this.vaultUI) {
-        const vaultItems = this.vaultUI.getItems();
-        vaultItems[source.slotIndex] = createEmptyItemInstance();
-        this.vaultUI.redrawItems();
-      }
-      this.room.send(ClientMessage.MoveVaultToConsumable, {
-        vaultSlot: source.slotIndex,
-        consumableSlot: target.slotIndex,
-      });
     } else if (source.type === "equipment" && target.type === "vault") {
       // Equipment -> Vault: store equipment in vault
       if (this.vaultUI) {
@@ -1046,35 +946,6 @@ export class DragManager {
         bagId: (source as { type: "bag"; bagId: string; slotIndex: number }).bagId,
         slotIndex: source.slotIndex,
         targetEquipmentSlot: target.slotIndex,
-      });
-    } else if (source.type === "consumable" && target.type === "inventory") {
-      // Move one consumable from slot to inventory (stacks if target has same consumable)
-      const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-      const consumableId = consumableIds[source.slotIndex];
-      const targetSlot = target.slotIndex;
-      if (targetSlot !== undefined && inv[targetSlot] && inv[targetSlot].baseItemId === consumableId) {
-        // Optimistic stack
-        const maxStack = getMaxStack(consumableId);
-        const toQty = inv[targetSlot].quantity || 1;
-        if (toQty < maxStack) {
-          inv[targetSlot].quantity = toQty + 1;
-          this.inventoryUI.redrawSlots();
-        }
-      }
-      this.room.send(ClientMessage.MoveConsumableToInventory, {
-        consumableSlot: source.slotIndex,
-        targetSlot: target.slotIndex,
-      });
-    } else if (source.type === "consumable" && target.type === "vault") {
-      // Move one consumable from slot to vault
-      this.room.send(ClientMessage.MoveConsumableToVault, {
-        consumableSlot: source.slotIndex,
-        targetVaultSlot: target.slotIndex,
-      });
-    } else if (source.type === "consumable" && target.type === "ground") {
-      // Drop one consumable on ground
-      this.room.send(ClientMessage.DropConsumable, {
-        consumableSlot: source.slotIndex,
       });
     }
   }

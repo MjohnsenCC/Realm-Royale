@@ -282,8 +282,6 @@ export type AbilitySubtype =
 
 // Consumable subtypes
 export const ConsumableSubtype = {
-  HealthPot: 0,
-  ManaPot: 1,
   PortalGem: 2,
 } as const;
 export type ConsumableSubtype =
@@ -349,6 +347,7 @@ export const ServerMessage = {
   VaultPortalClosed: "vaultPortalClosed",
   CraftingOpened: "craftingOpened",
   CraftingOrbsUpdated: "craftingOrbsUpdated",
+  ChatMessage: "chatMessage",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -362,21 +361,18 @@ export const ClientMessage = {
   UseAbility: "useAbility",
   InteractPortal: "interactPortal",
   ZoneReady: "zoneReady",
-  UseHealthPot: "useHealthPot",
-  UseManaPot: "useManaPot",
   UsePortalGem: "usePortalGem",
   UseCraftingOrb: "useCraftingOrb",
   ToggleUnlimitedOrbs: "toggleUnlimitedOrbs",
   SwapInventory: "swapInventory",
   UnequipItem: "unequipItem",
-  DropConsumable: "dropConsumable",
-  MoveConsumableToInventory: "moveConsumableToInventory",
-  MoveConsumableToVault: "moveConsumableToVault",
-  MoveVaultToConsumable: "moveVaultToConsumable",
   OpenVault: "openVault",
   VaultMoveItem: "vaultMoveItem",
   UsePortalGemVault: "usePortalGemVault",
   StackConsumables: "stackConsumables",
   OpenCraftingTable: "openCraftingTable",
+  ChatMessage: "chatMessage",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
+
+export type ChatChannel = "global" | "local";

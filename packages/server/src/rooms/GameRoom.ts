@@ -85,13 +85,7 @@ import {
   isCraftingOrbItem,
   isStackableItem,
   getMaxStack,
-  getConsumableSlotIndex,
-  CONSUMABLE_MAX_STACKS,
-  HEALTH_POT_ID,
-  MANA_POT_ID,
   PORTAL_GEM_ID,
-  HEALTH_POT_HEAL,
-  MANA_POT_RESTORE,
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
   PORTAL_GEM_INVULN_MS,
@@ -114,6 +108,9 @@ import {
   determineBagRarity,
   LOOT_DAMAGE_THRESHOLD,
   isAuthenticatedJoin,
+  CHAT_MAX_LENGTH,
+  CHAT_RATE_LIMIT_MS,
+  ChatChannel,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
@@ -440,25 +437,8 @@ export class GameRoom extends Room<GameState> {
         const itemData = schemaToItemData(bagItem.item);
         const itemId = itemData.baseItemId;
 
-        // Direct pickup to consumable slot (bag → consumable slot drag)
-        if (data.targetConsumableSlot !== undefined && isConsumableItem(itemId)) {
-          const expectedSlot = getConsumableSlotIndex(itemId);
-          if (expectedSlot !== data.targetConsumableSlot) return;
-          const slotIdx = expectedSlot;
-          const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
-          const current = this.getConsumableCount(player, slotIdx);
-          const qty = itemData.quantity || 1;
-          const canAdd = Math.min(qty, maxStack - current);
-          if (canAdd <= 0) return;
-          this.setConsumableCount(player, slotIdx, current + canAdd);
-          if (canAdd < qty) {
-            bagItem.item.quantity = qty - canAdd;
-          } else {
-            updateSchemaFromData(bagItem.item, createEmptyItemInstance());
-          }
-        }
         // Direct pickup to equipment slot (bag → equipment drag)
-        else if (data.targetEquipmentSlot !== undefined) {
+        if (data.targetEquipmentSlot !== undefined) {
           const eqSlot = data.targetEquipmentSlot;
           if (eqSlot < 0 || eqSlot >= EQUIPMENT_SLOTS) return;
           if (isConsumableItem(itemId) || isCraftingOrbItem(itemId)) return;
@@ -599,26 +579,8 @@ export class GameRoom extends Room<GameState> {
         if (!invItem || invItem.baseItemId === -1) return;
         const itemId = invItem.baseItemId;
 
-        // Consumable: move from inventory to dedicated slot
-        if (isConsumableItem(itemId)) {
-          const slotIdx = getConsumableSlotIndex(itemId);
-          const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
-          const current = this.getConsumableCount(player, slotIdx);
-          const qty = invItem.quantity || 1;
-          const canAdd = Math.min(qty, maxStack - current);
-          if (canAdd <= 0) return;
-          this.setConsumableCount(player, slotIdx, current + canAdd);
-          if (canAdd < qty) {
-            // Partial transfer: keep remainder in inventory
-            invItem.quantity = qty - canAdd;
-          } else {
-            updateSchemaFromData(invItem, createEmptyItemInstance());
-          }
-          return;
-        }
-
-        // Crafting orbs stay in inventory (used at crafting table)
-        if (isCraftingOrbItem(itemId)) return;
+        // Consumables and crafting orbs stay in inventory
+        if (isConsumableItem(itemId) || isCraftingOrbItem(itemId)) return;
 
         const category = getItemCategory(itemId);
         if (category < 0 || category >= EQUIPMENT_SLOTS) return;
@@ -714,197 +676,6 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
-    // Listen for drop consumable from dedicated slot (drops one)
-    this.onMessage(
-      ClientMessage.DropConsumable,
-      (client, data: { consumableSlot: number }) => {
-        const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive) return;
-
-        const slot = data.consumableSlot;
-        if (slot < 0 || slot > 2) return;
-        const count = this.getConsumableCount(player, slot);
-        if (count <= 0) return;
-
-        // Decrement counter
-        this.setConsumableCount(player, slot, count - 1);
-
-        // Create consumable item instance
-        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-        const itemData = generateConsumableInstance(consumableIds[slot]);
-
-        // Drop to open bag or spawn new bag
-        if (player.openBagId) {
-          const openBag = this.state.lootBags.get(player.openBagId);
-          if (openBag) {
-            const emptySlot = openBag.items.findIndex((item) => item.item.baseItemId === -1);
-            if (emptySlot !== -1) {
-              updateSchemaFromData(openBag.items[emptySlot]!.item, itemData);
-              return;
-            }
-          }
-        }
-        this.spawnLootBag(player.x, player.y, BagRarity.Green, [itemData], player.zone);
-      }
-    );
-
-    // Listen for move consumable from dedicated slot to vault
-    this.onMessage(
-      ClientMessage.MoveConsumableToVault,
-      (client, data: { consumableSlot: number; targetVaultSlot?: number }) => {
-        const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive) return;
-        if (!isVaultZone(player.zone) || !player.vaultItems) return;
-
-        const slot = data.consumableSlot;
-        if (slot < 0 || slot > 2) return;
-        const count = this.getConsumableCount(player, slot);
-        if (count <= 0) return;
-
-        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-        const consumableId = consumableIds[slot];
-        const maxStack = CONSUMABLE_MAX_STACKS[slot];
-        const vaultSlot = data.targetVaultSlot;
-
-        // Check if target vault slot has the same consumable and can stack
-        if (vaultSlot !== undefined && vaultSlot >= 0 && vaultSlot < player.vaultItems.length) {
-          const targetItem = player.vaultItems[vaultSlot];
-          if (targetItem.baseItemId === consumableId) {
-            const currentQty = targetItem.quantity || 1;
-            if (currentQty < maxStack) {
-              this.setConsumableCount(player, slot, count - 1);
-              player.vaultItems[vaultSlot] = { ...targetItem, quantity: currentQty + 1 };
-              player.vaultDirty = true;
-              client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
-              return;
-            }
-          }
-          // Target slot is empty: place new item there
-          if (targetItem.baseItemId === -1) {
-            this.setConsumableCount(player, slot, count - 1);
-            player.vaultItems[vaultSlot] = generateConsumableInstance(consumableId);
-            player.vaultDirty = true;
-            client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
-            return;
-          }
-        }
-
-        // Fallback: find first empty vault slot
-        const emptyIdx = player.vaultItems.findIndex((item) => item.baseItemId === -1);
-        if (emptyIdx === -1) return;
-        this.setConsumableCount(player, slot, count - 1);
-        player.vaultItems[emptyIdx] = generateConsumableInstance(consumableId);
-        player.vaultDirty = true;
-        client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
-      }
-    );
-
-    // Listen for move vault item to consumable slot
-    this.onMessage(
-      ClientMessage.MoveVaultToConsumable,
-      (client, data: { vaultSlot: number; consumableSlot: number }) => {
-        const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive) return;
-        if (!isVaultZone(player.zone) || !player.vaultItems) return;
-
-        const { vaultSlot, consumableSlot } = data;
-        if (vaultSlot < 0 || vaultSlot >= player.vaultItems.length) return;
-        if (consumableSlot < 0 || consumableSlot > 2) return;
-
-        const vaultItem = player.vaultItems[vaultSlot];
-        if (vaultItem.baseItemId < 0 || !isConsumableItem(vaultItem.baseItemId)) return;
-        if (getConsumableSlotIndex(vaultItem.baseItemId) !== consumableSlot) return;
-
-        const maxStack = CONSUMABLE_MAX_STACKS[consumableSlot];
-        const current = this.getConsumableCount(player, consumableSlot);
-        const qty = vaultItem.quantity || 1;
-        const canAdd = Math.min(qty, maxStack - current);
-        if (canAdd <= 0) return;
-
-        this.setConsumableCount(player, consumableSlot, current + canAdd);
-        if (canAdd < qty) {
-          player.vaultItems[vaultSlot] = { ...vaultItem, quantity: qty - canAdd };
-        } else {
-          player.vaultItems[vaultSlot] = createEmptyItemInstance();
-        }
-
-        player.vaultDirty = true;
-        client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
-      }
-    );
-
-    // Listen for move consumable from dedicated slot to inventory
-    this.onMessage(
-      ClientMessage.MoveConsumableToInventory,
-      (client, data: { consumableSlot: number; targetSlot?: number }) => {
-        const player = this.state.players.get(client.sessionId);
-        if (!player || !player.alive) return;
-
-        const slot = data.consumableSlot;
-        if (slot < 0 || slot > 2) return;
-        const count = this.getConsumableCount(player, slot);
-        if (count <= 0) return;
-
-        const consumableIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-        const consumableId = consumableIds[slot];
-        const maxStack = CONSUMABLE_MAX_STACKS[slot];
-
-        // Check if target slot has the same consumable and can stack
-        if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length) {
-          const targetItem = player.inventory[data.targetSlot]!;
-          if (targetItem.baseItemId === consumableId) {
-            const currentQty = targetItem.quantity || 1;
-            if (currentQty < maxStack) {
-              this.setConsumableCount(player, slot, count - 1);
-              const updated = schemaToItemData(targetItem);
-              updated.quantity = currentQty + 1;
-              updateSchemaFromData(targetItem, updated);
-              return;
-            }
-          }
-        }
-
-        // Find empty inventory slot, preferring the target slot
-        let emptyInvSlot = -1;
-        if (data.targetSlot !== undefined && data.targetSlot >= 0 && data.targetSlot < player.inventory.length && player.inventory[data.targetSlot]!.baseItemId === -1) {
-          emptyInvSlot = data.targetSlot;
-        } else {
-          for (let i = 0; i < player.inventory.length; i++) {
-            if (player.inventory[i]!.baseItemId === -1) {
-              emptyInvSlot = i;
-              break;
-            }
-          }
-        }
-        if (emptyInvSlot === -1) return;
-
-        // Decrement counter, place item in inventory
-        this.setConsumableCount(player, slot, count - 1);
-        const itemData = generateConsumableInstance(consumableId);
-        updateSchemaFromData(player.inventory[emptyInvSlot]!, itemData);
-      }
-    );
-
-    // Listen for health potion use (F key)
-    this.onMessage(ClientMessage.UseHealthPot, (client) => {
-      const player = this.state.players.get(client.sessionId);
-      if (!player || !player.alive) return;
-      if (player.healthPots <= 0) return;
-      if (player.hp >= player.maxHp) return;
-      player.healthPots--;
-      player.hp = Math.min(player.maxHp, player.hp + HEALTH_POT_HEAL);
-    });
-
-    // Listen for mana potion use (G key)
-    this.onMessage(ClientMessage.UseManaPot, (client) => {
-      const player = this.state.players.get(client.sessionId);
-      if (!player || !player.alive) return;
-      if (player.manaPots <= 0) return;
-      if (player.mana >= player.maxMana) return;
-      player.manaPots--;
-      player.mana = Math.min(player.maxMana, player.mana + MANA_POT_RESTORE);
-    });
-
     // Listen for portal gem use (right-click minimap → teleport)
     this.onMessage(
       ClientMessage.UsePortalGem,
@@ -912,14 +683,13 @@ export class GameRoom extends Room<GameState> {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
         if (!isHostileZone(player.zone)) return;
-        if (player.portalGems <= 0) return;
         const { targetX, targetY } = data;
         if (
           typeof targetX !== "number" || typeof targetY !== "number" ||
           targetX < 0 || targetX >= HOSTILE_WIDTH ||
           targetY < 0 || targetY >= HOSTILE_HEIGHT
         ) return;
-        player.portalGems--;
+        if (!this.consumePortalGem(player)) return;
         player.x = targetX;
         player.y = targetY;
         player.invulnerable = true;
@@ -934,9 +704,8 @@ export class GameRoom extends Room<GameState> {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return;
       if (!isHostileZone(player.zone) && !isDungeonZone(player.zone)) return;
-      if (player.portalGems <= 0) return;
       if (player.portalGemPortalActive) return; // already have one open
-      player.portalGems--;
+      if (!this.consumePortalGem(player)) return;
       player.portalGemReturnX = player.x;
       player.portalGemReturnY = player.y;
       player.portalGemReturnZone = player.zone;
@@ -1267,6 +1036,44 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Chat message
+    this.onMessage(
+      ClientMessage.ChatMessage,
+      (client, data: { text: string; channel: ChatChannel }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const text = typeof data.text === "string" ? data.text.trim() : "";
+        if (text.length === 0 || text.length > CHAT_MAX_LENGTH) return;
+
+        const channel: ChatChannel =
+          data.channel === "local" ? "local" : "global";
+
+        const now = Date.now();
+        if (now - player.lastChatTime < CHAT_RATE_LIMIT_MS) return;
+        player.lastChatTime = now;
+
+        const payload = {
+          playerId: player.id,
+          playerName: player.name,
+          text,
+          channel,
+        };
+
+        if (channel === "global") {
+          this.broadcast(ServerMessage.ChatMessage, payload);
+        } else {
+          // Local: send only to players in the same zone
+          this.state.players.forEach((p) => {
+            if (p.zone === player.zone) {
+              const c = this.clients.getById(p.id);
+              if (c) c.send(ServerMessage.ChatMessage, payload);
+            }
+          });
+        }
+      }
+    );
+
     // Spawn permanent test portals in nexus (bottom area)
     this.spawnNexusTestPortals();
 
@@ -1318,11 +1125,6 @@ export class GameRoom extends Room<GameState> {
         }
       }
 
-      // Restore consumables
-      player.healthPots = character.consumables.healthPots;
-      player.manaPots = character.consumables.manaPots;
-      player.portalGems = character.consumables.portalGems;
-
     } else {
       // --- Guest player: ephemeral session (current behavior) ---
       player.name =
@@ -1336,10 +1138,10 @@ export class GameRoom extends Room<GameState> {
       updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, 0, 1, false));
       updateSchemaFromData(player.equipment[ItemCategory.Ring]!, generateItemInstance(ItemCategory.Ring, 0, 1, false));
 
-      // Starting consumables
-      player.healthPots = 3;
-      player.manaPots = 3;
-      player.portalGems = 5;
+      // Starting portal gems in inventory
+      const startGem = generateConsumableInstance(PORTAL_GEM_ID);
+      startGem.quantity = 5;
+      updateSchemaFromData(player.inventory[0]!, startGem);
     }
 
     // Common: always spawn at nexus
@@ -1437,11 +1239,6 @@ export class GameRoom extends Room<GameState> {
       xp: player.xp,
       equipment,
       inventory,
-      consumables: {
-        healthPots: player.healthPots,
-        manaPots: player.manaPots,
-        portalGems: player.portalGems,
-      },
     };
 
     await saveCharacter(player.characterId, data);
@@ -1493,29 +1290,20 @@ export class GameRoom extends Room<GameState> {
     this.state.dungeonPortals.set(voidPortal.id, voidPortal);
   }
 
-  private getConsumableCount(player: Player, slotIndex: number): number {
-    if (slotIndex === 0) return player.healthPots;
-    if (slotIndex === 1) return player.manaPots;
-    return player.portalGems;
-  }
-
-  private setConsumableCount(player: Player, slotIndex: number, count: number): void {
-    if (slotIndex === 0) player.healthPots = count;
-    else if (slotIndex === 1) player.manaPots = count;
-    else player.portalGems = count;
-  }
-
-  /** Try to add a consumable to dedicated slot. */
-  private addConsumableToPlayer(player: Player, itemId: number): boolean {
-    const slotIdx = getConsumableSlotIndex(itemId);
-    const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
-
-    const current = this.getConsumableCount(player, slotIdx);
-    if (current < maxStack) {
-      this.setConsumableCount(player, slotIdx, current + 1);
-      return true;
+  /** Consume one portal gem from the player's inventory. Returns true if successful. */
+  private consumePortalGem(player: Player): boolean {
+    for (let i = 0; i < player.inventory.length; i++) {
+      const slot = player.inventory[i]!;
+      if (slot.baseItemId === PORTAL_GEM_ID && (slot.quantity || 1) > 0) {
+        const qty = slot.quantity || 1;
+        if (qty <= 1) {
+          updateSchemaFromData(slot, createEmptyItemInstance());
+        } else {
+          slot.quantity = qty - 1;
+        }
+        return true;
+      }
     }
-
     return false;
   }
 

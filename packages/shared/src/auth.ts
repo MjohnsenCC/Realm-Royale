@@ -10,12 +10,6 @@ export interface CharacterSummary {
   lastPlayed: string;
 }
 
-export interface CharacterConsumables {
-  healthPots: number;
-  manaPots: number;
-  portalGems: number;
-}
-
 export interface CharacterData {
   id: string;
   accountId: string;
@@ -24,7 +18,6 @@ export interface CharacterData {
   xp: number;
   equipment: ItemInstanceData[];
   inventory: ItemInstanceData[];
-  consumables: CharacterConsumables;
 }
 
 // --- Auth Join Options ---

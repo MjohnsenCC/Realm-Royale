@@ -6,7 +6,6 @@ import { LootBagUI } from "./LootBagUI";
 import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
 import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UIScale";
-import { drawItemIcon } from "./ItemIcons";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -41,15 +40,9 @@ import {
   VAULT_RETURN_PORTAL_X,
   VAULT_RETURN_PORTAL_Y,
   PortalType,
-  ItemCategory,
-  ConsumableSubtype,
-  HEALTH_POT_ID,
-  MANA_POT_ID,
-  PORTAL_GEM_ID,
-  createEmptyItemInstance,
   isBossEnemy,
 } from "@rotmg-lite/shared";
-import type { ItemInstanceData, DungeonMapData } from "@rotmg-lite/shared";
+import type { DungeonMapData } from "@rotmg-lite/shared";
 
 export class HUD {
   private scene: Phaser.Scene;
@@ -95,17 +88,11 @@ export class HUD {
   private playerCountText: Phaser.GameObjects.Text;
 
 
-  // Consumable slots (below equipment)
-  private consumableGraphics: Phaser.GameObjects.Graphics;
-  private consumableCountTexts: Phaser.GameObjects.Text[] = [];
-  private consumableKeyTexts: Phaser.GameObjects.Text[] = [];
-  private consumableSlotPositions: { x: number; y: number }[] = [];
-  private consumableZones: Phaser.GameObjects.Zone[] = [];
-  private consumableSlotSize: number = 0;
-  private currentConsumables: [number, number, number] = [0, 0, 0];
+  // Drag state
   private dragActive: boolean = false;
-  private dragSourceConsumableSlot: number = -1;
-  private highlightedConsumableSlot: number = -1;
+
+  // Portal gem (count tracked for minimap teleport check)
+  private portalGemCount: number = 0;
 
   // Portal gem targeting
   private portalGemCallback: ((worldX: number, worldY: number) => void) | null = null;
@@ -130,6 +117,7 @@ export class HUD {
   private minimapZoom: number;
   private minimapZoomInBtn!: Phaser.GameObjects.Text;
   private minimapZoomOutBtn!: Phaser.GameObjects.Text;
+  private fullscreenBtn!: Phaser.GameObjects.Text;
   private exploredTiles: Uint8Array | null = null;
   private exploredDungeonZone: string = "";
 
@@ -245,104 +233,6 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(102);
 
-    // --- Consumable slots (below equipment slots, same size as regular slots) ---
-    this.consumableGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.consumableSlotSize = this.slotSize;
-    const eqW = 4 * this.slotSize + 3 * this.slotGap;
-    const consRowW = 3 * this.slotSize + 2 * this.iconGap;
-    const consRowX = this.eqX + Math.round((eqW - consRowW) / 2);
-    const consRowY = this.eqY + this.slotSize + this.iconGap;
-
-    const keyLabels = ["F", "G", ""];
-    const countFontSm = `${Math.max(7, Math.round(this.slotSize * 0.28))}px`;
-    const keyFontSm = `${Math.max(6, Math.round(this.slotSize * 0.22))}px`;
-
-    for (let i = 0; i < 3; i++) {
-      const ix = consRowX + i * (this.slotSize + this.iconGap);
-      this.consumableSlotPositions.push({ x: ix, y: consRowY });
-
-      // Count text (bottom-right)
-      const countText = scene.add
-        .text(ix + this.slotSize - 2, consRowY + this.slotSize - 2, "", {
-          fontSize: countFontSm,
-          color: "#ffffff",
-          fontFamily: "monospace",
-        })
-        .setOrigin(1, 1)
-        .setScrollFactor(0)
-        .setDepth(103);
-      this.consumableCountTexts.push(countText);
-
-      // Key label (top-left)
-      const keyText = scene.add
-        .text(ix + 2, consRowY + 1, keyLabels[i], {
-          fontSize: keyFontSm,
-          color: "#aaaaaa",
-          fontFamily: "monospace",
-        })
-        .setOrigin(0, 0)
-        .setScrollFactor(0)
-        .setDepth(103);
-      this.consumableKeyTexts.push(keyText);
-    }
-
-    // Consumable slot interactive zones (tooltip + drag source)
-    const consumableItemIds = [HEALTH_POT_ID, MANA_POT_ID, PORTAL_GEM_ID];
-    for (let i = 0; i < 3; i++) {
-      const pos = this.consumableSlotPositions[i];
-      const zone = scene.add
-        .zone(pos.x + this.slotSize / 2, pos.y + this.slotSize / 2, this.slotSize, this.slotSize)
-        .setScrollFactor(0)
-        .setDepth(104)
-        .setInteractive({ useHandCursor: true });
-
-      // Drag source: pointerdown starts drag
-      zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-        if (pointer.leftButtonDown() && this.currentConsumables[i] > 0 && this.dragManager) {
-          const itemId = consumableItemIds[i];
-          const fakeItem: ItemInstanceData = {
-            baseItemId: itemId,
-            instanceTier: 1,
-            isUT: false,
-            lockedStat1Type: -1,
-            lockedStat1Tier: 0,
-            lockedStat1Roll: 0,
-            lockedStat2Type: -1,
-            lockedStat2Tier: 0,
-            lockedStat2Roll: 0,
-            openStats: [],
-            forgeProtectedSlot: -1,
-            forgeProtectedSlot2: -1,
-            quantity: 0,
-          };
-          this.dragManager.onSlotPointerDown(
-            { type: "consumable", slotIndex: i },
-            fakeItem,
-            pointer.x,
-            pointer.y
-          );
-        }
-      });
-
-      // Tooltips (show even when empty to indicate slot purpose)
-      zone.on("pointerover", () => {
-        if (this.dragActive) return;
-        const ptr = this.scene.input.activePointer;
-        this.inventoryUI.getTooltip().showById(consumableItemIds[i], ptr.x, ptr.y);
-      });
-      zone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        if (this.dragActive) return;
-        this.inventoryUI.getTooltip().showById(consumableItemIds[i], pointer.x, pointer.y);
-      });
-      zone.on("pointerout", () => {
-        this.inventoryUI.getTooltip().hide();
-      });
-
-      this.consumableZones.push(zone);
-    }
-
-    this.drawConsumableSlots();
-
     // --- Minimap (top-right) ---
     this.minimapBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapBiomeGraphics = scene.add.graphics().setScrollFactor(0).setDepth(100);
@@ -415,6 +305,44 @@ export class HUD {
       this.minimapZoom = Math.max(this.minimapZoom / 2, 1);
       this.invalidateMinimapCache();
       localStorage.setItem("minimapZoom", String(this.minimapZoom));
+    });
+
+    // Fullscreen toggle button (below minimap)
+    this.fullscreenBtn = scene.add
+      .text(0, 0, "[ ]", {
+        fontSize: btnFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setOrigin(1, 0)
+      .setScrollFactor(0)
+      .setDepth(102)
+      .setInteractive({ useHandCursor: true });
+
+    this.fullscreenBtn.setPosition(
+      initMmX + this.mmWidth,
+      initMmY + this.mmHeight + Math.round(4 * S)
+    );
+
+    this.fullscreenBtn.on("pointerover", () =>
+      this.fullscreenBtn.setColor("#44ffaa")
+    );
+    this.fullscreenBtn.on("pointerout", () =>
+      this.fullscreenBtn.setColor("#aaaaaa")
+    );
+    this.fullscreenBtn.on("pointerdown", () => {
+      if (this.scene.scale.isFullscreen) {
+        this.scene.scale.stopFullscreen();
+      } else {
+        this.scene.scale.startFullscreen();
+      }
+    });
+
+    this.scene.scale.on("enterfullscreen", () => {
+      this.fullscreenBtn.setText("[■]");
+    });
+    this.scene.scale.on("leavefullscreen", () => {
+      this.fullscreenBtn.setText("[ ]");
     });
 
     // --- Inventory UI ---
@@ -512,7 +440,7 @@ export class HUD {
     this.slotSize = Math.max(16, Math.floor((halfW - 3 * this.slotGap) / 4));
 
     const eqW = 4 * this.slotSize + 3 * this.slotGap;
-    const eqSectionH = this.slotSize + this.iconGap + this.slotSize;
+    const eqSectionH = this.slotSize;
     const invH = 2 * this.slotSize + this.slotGap;
     this.barsH = 3 * this.barHeight + 2 * this.barGap;
     // Stats button sits below bars inside the panel
@@ -564,26 +492,6 @@ export class HUD {
     this.zoneText.setFontSize(zoneFontSize);
     this.playerCountText.setFontSize(countFontSize);
 
-    // Update consumable slot positions
-    const consRowW = 3 * this.slotSize + 2 * this.iconGap;
-    const eqW = 4 * this.slotSize + 3 * this.slotGap;
-    const consRowX = this.eqX + Math.round((eqW - consRowW) / 2);
-    const consRowY = this.eqY + this.slotSize + this.iconGap;
-    this.consumableSlotSize = this.slotSize;
-
-    const countFontSm = `${Math.max(7, Math.round(this.slotSize * 0.28))}px`;
-    const keyFontSm = `${Math.max(6, Math.round(this.slotSize * 0.22))}px`;
-    for (let i = 0; i < 3; i++) {
-      const ix = consRowX + i * (this.slotSize + this.iconGap);
-      this.consumableSlotPositions[i] = { x: ix, y: consRowY };
-      this.consumableCountTexts[i].setFontSize(countFontSm);
-      this.consumableCountTexts[i].setPosition(ix + this.slotSize - 2, consRowY + this.slotSize - 2);
-      this.consumableKeyTexts[i].setFontSize(keyFontSm);
-      this.consumableKeyTexts[i].setPosition(ix + 2, consRowY + 1);
-      this.consumableZones[i].setPosition(ix + this.slotSize / 2, consRowY + this.slotSize / 2);
-      this.consumableZones[i].setSize(this.slotSize, this.slotSize);
-    }
-
     // Update stats button
     const statsBtnY = this.barsY + this.barsH + this.statsBtnGap;
     const statsBtnSize = this.statsBtnSize;
@@ -601,6 +509,7 @@ export class HUD {
     const btnFontSize = `${Math.round(14 * S)}px`;
     this.minimapZoomInBtn.setFontSize(btnFontSize);
     this.minimapZoomOutBtn.setFontSize(btnFontSize);
+    this.fullscreenBtn.setFontSize(btnFontSize);
 
     // Invalidate minimap cache on resize
     this.invalidateMinimapCache();
@@ -618,7 +527,6 @@ export class HUD {
     this.lootBagUI.relayout(this.invX, this.panelY, this.slotSize);
     this.vaultUI.relayout(this.slotSize);
 
-    this.drawConsumableSlots();
     this.drawHealthBar(100, 100, 0);
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
@@ -720,9 +628,7 @@ export class HUD {
     players: Map<string, PlayerSprite>,
     enemies: Map<string, EnemySprite>,
     zone: string,
-    healthPots: number = 0,
-    manaPots: number = 0,
-    portalGems: number = 0,
+    portalGemCount: number = 0,
     dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
     dungeonMap: DungeonMapData | null = null
   ): void {
@@ -761,16 +667,8 @@ export class HUD {
     this.zoneText.setX(this.scene.scale.width / 2);
     this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
 
-    // Update consumable slot display
-    const newConsumables: [number, number, number] = [healthPots, manaPots, portalGems];
-    if (
-      newConsumables[0] !== this.currentConsumables[0] ||
-      newConsumables[1] !== this.currentConsumables[1] ||
-      newConsumables[2] !== this.currentConsumables[2]
-    ) {
-      this.currentConsumables = newConsumables;
-      this.drawConsumableSlots();
-    }
+    // Track portal gem count for minimap teleport check
+    this.portalGemCount = portalGemCount;
 
     // Draw minimap
     this.drawMinimap(localX, localY, players, enemies, zone, dungeonPortals, dungeonMap);
@@ -782,87 +680,8 @@ export class HUD {
     this.minimapBiomeGraphics.clear();
   }
 
-  private drawConsumableSlots(): void {
-    this.consumableGraphics.clear();
-    const size = this.consumableSlotSize;
-    const colors = [0xcc3333, 0x4466cc, 0xaa44ff];
-    const subtypes = [ConsumableSubtype.HealthPot, ConsumableSubtype.ManaPot, ConsumableSubtype.PortalGem];
-
-    for (let i = 0; i < 3; i++) {
-      const pos = this.consumableSlotPositions[i];
-      const count = this.currentConsumables[i];
-      const isDragSource = this.dragSourceConsumableSlot === i;
-      const isHighlighted = this.highlightedConsumableSlot === i;
-
-      // Background
-      this.consumableGraphics.fillStyle(count > 0 ? colors[i] : 0x222233, count > 0 ? 0.3 : 0.6);
-      this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
-
-      // Drag source overlay (dim)
-      if (isDragSource) {
-        this.consumableGraphics.fillStyle(0x000000, 0.5);
-        this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
-      }
-
-      // Drop target highlight (green)
-      if (isHighlighted) {
-        this.consumableGraphics.fillStyle(0x44ff44, 0.25);
-        this.consumableGraphics.fillRect(pos.x, pos.y, size, size);
-      }
-
-      // Icon (always show using drawItemIcon)
-      const cx = pos.x + size / 2;
-      const cy = pos.y + size / 2;
-      const iconSize = size * 0.55;
-      const iconColor = count > 0 ? colors[i] : (colors[i] & 0x7f7f7f); // dimmer when empty
-      drawItemIcon(this.consumableGraphics, cx, cy - size * 0.05, iconSize, ItemCategory.Consumable, subtypes[i], iconColor);
-
-      // Border
-      const borderColor = isHighlighted ? 0x44ff44 : (count > 0 ? colors[i] : 0x333344);
-      const borderAlpha = isHighlighted ? 0.8 : 0.8;
-      this.consumableGraphics.lineStyle(1, borderColor, borderAlpha);
-      this.consumableGraphics.strokeRect(pos.x, pos.y, size, size);
-
-      // Count text
-      this.consumableCountTexts[i].setText(count > 0 ? `${count}` : "");
-    }
-  }
-
-  // --- Drag & drop support for consumable slots ---
-
   setDragActive(active: boolean): void {
     this.dragActive = active;
-    if (!active) {
-      this.dragSourceConsumableSlot = -1;
-      this.highlightedConsumableSlot = -1;
-      this.drawConsumableSlots();
-    }
-  }
-
-  setDragSourceConsumableSlot(slot: number): void {
-    this.dragSourceConsumableSlot = slot;
-    this.drawConsumableSlots();
-  }
-
-  setHighlightedConsumableSlot(slot: number): void {
-    if (this.highlightedConsumableSlot !== slot) {
-      this.highlightedConsumableSlot = slot;
-      this.drawConsumableSlots();
-    }
-  }
-
-  getConsumableCount(slotIndex: number): number {
-    return this.currentConsumables[slotIndex] ?? 0;
-  }
-
-  getConsumableSlotBounds(): { x: number; y: number; w: number; h: number }[] {
-    const size = this.consumableSlotSize;
-    return this.consumableSlotPositions.map(pos => ({
-      x: pos.x,
-      y: pos.y,
-      w: size,
-      h: size,
-    }));
   }
 
   setStatsButtonCallback(cb: () => void): void {
@@ -874,7 +693,7 @@ export class HUD {
 
     this.scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
       if (!pointer.rightButtonDown()) return;
-      if (this.currentConsumables[2] <= 0) return;
+      if (this.portalGemCount <= 0) return;
 
       // Check if click is within minimap bounds
       if (
@@ -1133,6 +952,12 @@ export class HUD {
     this.minimapZoomInBtn.setPosition(
       this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
       mmY + this.mmHeight - btnPad
+    );
+
+    // Reposition fullscreen button below minimap
+    this.fullscreenBtn.setPosition(
+      mmX + this.mmWidth,
+      mmY + this.mmHeight + Math.round(4 * this.S)
     );
 
     // Reposition player count inside bottom-left corner of minimap

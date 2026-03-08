@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { PLAYER_RADIUS, PLAYER_MAX_HP } from "@rotmg-lite/shared";
+import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
 
 interface DamageText {
@@ -26,6 +26,7 @@ export class PlayerSprite {
   private hitFlashTimer: number = 0;
   private lastHp: number = PLAYER_MAX_HP;
   private damageTexts: DamageText[] = [];
+  private chatBubble: { text: Phaser.GameObjects.Text; elapsed: number } | null = null;
 
   // True predicted/reconciled position (used by prediction, reconciliation, aim)
   public x: number = 0;
@@ -118,6 +119,25 @@ export class PlayerSprite {
     this.hpBarFill.fillRect(xOffset, yOffset, barWidth * ratio, barHeight);
   }
 
+  showChatMessage(msg: string): void {
+    if (this.chatBubble) {
+      this.chatBubble.text.destroy();
+      this.chatBubble = null;
+    }
+    const dx = this._isLocal ? this.displayX : this.x;
+    const dy = this._isLocal ? this.displayY : this.y;
+    const text = this.scene.add.text(dx, dy - PLAYER_RADIUS - 38, msg, {
+      fontFamily: "monospace",
+      fontSize: "11px",
+      color: "#ffffff",
+      wordWrap: { width: 150 },
+      align: "center",
+    });
+    text.setOrigin(0.5, 1);
+    text.setDepth(999);
+    this.chatBubble = { text, elapsed: 0 };
+  }
+
   showDamage(amount: number, isMagic: boolean): void {
     const dx = this._isLocal ? this.displayX : this.x;
     const dy = this._isLocal ? this.displayY : this.y;
@@ -199,6 +219,20 @@ export class PlayerSprite {
       this.drawBody(this._isLocal ? 0x4488ff : 0x44cc44);
     }
 
+    // Animate chat bubble
+    if (this.chatBubble) {
+      this.chatBubble.elapsed += delta;
+      this.chatBubble.text.setPosition(dx, dy - PLAYER_RADIUS - 38);
+      const fadeStart = CHAT_BUBBLE_DURATION_MS - 1000;
+      if (this.chatBubble.elapsed > fadeStart) {
+        this.chatBubble.text.setAlpha(1 - (this.chatBubble.elapsed - fadeStart) / 1000);
+      }
+      if (this.chatBubble.elapsed >= CHAT_BUBBLE_DURATION_MS) {
+        this.chatBubble.text.destroy();
+        this.chatBubble = null;
+      }
+    }
+
     // Animate floating damage texts
     for (let i = this.damageTexts.length - 1; i >= 0; i--) {
       const dt = this.damageTexts[i];
@@ -267,5 +301,9 @@ export class PlayerSprite {
     this.hpBarFill.destroy();
     for (const dt of this.damageTexts) dt.text.destroy();
     this.damageTexts.length = 0;
+    if (this.chatBubble) {
+      this.chatBubble.text.destroy();
+      this.chatBubble = null;
+    }
   }
 }
