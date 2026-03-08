@@ -12,8 +12,6 @@ import {
   getSelectedServerId,
   setSelectedServerId,
 } from "../network/ServerConfig";
-import { getUISize, setUISize, UISize } from "../ui/UIScale";
-
 export class CharacterSelectScene extends Phaser.Scene {
   private characters: CharacterSummary[] = [];
   private statusText!: Phaser.GameObjects.Text;
@@ -625,58 +623,5 @@ export class CharacterSelectScene extends Phaser.Scene {
       serverButtons.push(btn);
     }
 
-    // Separator
-    const sepY = serverBtnY + 18;
-    panel.lineStyle(1, 0x444466, 0.3);
-    panel.beginPath();
-    panel.moveTo(panelX + 20, sepY);
-    panel.lineTo(panelX + panelW - 20, sepY);
-    panel.strokePath();
-
-    // UI Scale
-    const scaleLabelY = sepY + 12;
-    this.add
-      .text(cx, scaleLabelY, "UI SCALE", {
-        fontSize: "10px",
-        color: "#667788",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5)
-      .setDepth(6);
-
-    const scaleBtnY = scaleLabelY + 20;
-    const uiSizes: UISize[] = ["small", "medium", "large"];
-    const sizeLabels = ["Small", "Medium", "Large"];
-    const currentSize = getUISize();
-    const sizeButtons: Phaser.GameObjects.Text[] = [];
-    const totalBtnWidth = 180;
-    const btnSpacing = totalBtnWidth / uiSizes.length;
-    const startX = cx - totalBtnWidth / 2 + btnSpacing / 2;
-
-    for (let i = 0; i < uiSizes.length; i++) {
-      const btn = this.add
-        .text(startX + i * btnSpacing, scaleBtnY, sizeLabels[i], {
-          fontSize: "16px",
-          color: uiSizes[i] === currentSize ? "#4488ff" : "#555566",
-          fontFamily: "monospace",
-        })
-        .setOrigin(0.5)
-        .setDepth(6)
-        .setInteractive({ useHandCursor: true });
-
-      btn.on("pointerdown", () => {
-        setUISize(uiSizes[i]);
-        for (let j = 0; j < sizeButtons.length; j++) {
-          sizeButtons[j].setColor(j === i ? "#4488ff" : "#555566");
-        }
-      });
-      btn.on("pointerover", () => {
-        if (getUISize() !== uiSizes[i]) btn.setColor("#8888aa");
-      });
-      btn.on("pointerout", () => {
-        btn.setColor(getUISize() === uiSizes[i] ? "#4488ff" : "#555566");
-      });
-      sizeButtons.push(btn);
-    }
   }
 }

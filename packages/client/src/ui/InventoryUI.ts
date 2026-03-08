@@ -28,6 +28,8 @@ export interface InventoryUIConfig {
   eqY: number;
   invX: number;
   invY: number;
+  slotSize: number;
+  slotGap: number;
 }
 
 export class InventoryUI {
@@ -90,8 +92,8 @@ export class InventoryUI {
 
     this.S = getUIScale();
     const S = this.S;
-    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
-    this.slotGap = Math.round(BASE_SLOT_GAP * S);
+    this.slotSize = config.slotSize;
+    this.slotGap = config.slotGap;
 
     this.eqX = config.eqX;
     this.eqY = config.eqY;
@@ -576,6 +578,50 @@ export class InventoryUI {
       });
     }
     return bounds;
+  }
+
+  relayout(config: InventoryUIConfig): void {
+    this.S = getUIScale();
+    const S = this.S;
+    this.slotSize = config.slotSize;
+    this.slotGap = config.slotGap;
+
+    this.eqX = config.eqX;
+    this.eqY = config.eqY;
+    this.invX = config.invX;
+    this.invY = config.invY;
+
+    const slotFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+
+    // Reposition equipment slots
+    for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+      const sx = this.eqX + i * (this.slotSize + this.slotGap);
+      const sy = this.eqY;
+      this.eqSlotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.eqSlotZones[i].setSize(this.slotSize, this.slotSize);
+      this.eqItemTexts[i].setFontSize(slotFontSize);
+      this.eqItemTexts[i].setWordWrapWidth(this.slotSize - 4);
+      this.eqTierTexts[i].setFontSize(tierFontSize);
+    }
+
+    // Reposition inventory slots
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      const col = i % COLS;
+      const row = Math.floor(i / COLS);
+      const sx = this.invX + col * (this.slotSize + this.slotGap);
+      const sy = this.invY + row * (this.slotSize + this.slotGap);
+      this.slotZones[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.slotZones[i].setSize(this.slotSize, this.slotSize);
+      this.itemTexts[i].setFontSize(slotFontSize);
+      this.itemTexts[i].setWordWrapWidth(this.slotSize - 4);
+      this.tierTexts[i].setFontSize(tierFontSize);
+      this.qtyTexts[i].setFontSize(tierFontSize);
+    }
+
+    this.drawSlots();
+    this.drawEquipmentSlots();
+    this.tooltip.relayout();
   }
 
   getEqSlotBounds(): { x: number; y: number; w: number; h: number }[] {

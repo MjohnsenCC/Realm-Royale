@@ -9,7 +9,7 @@ import { HUD } from "../ui/HUD";
 import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
-import { getUIScale } from "../ui/UIScale";
+import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
@@ -291,6 +291,15 @@ export class GameScene extends Phaser.Scene {
     this.localZone = "nexus";
     this.currentDungeonMap = this.nexusMap; // enable wall collision in nexus
 
+    // Initialize dynamic UI scaling from current screen dimensions
+    updateScreenDimensions(this.scale.width, this.scale.height);
+
+    // Listen for resize events
+    this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
+      updateScreenDimensions(gameSize.width, gameSize.height);
+      this.relayoutUI();
+    });
+
     // Draw ground for current zone
     this.groundGraphics = this.add.graphics().setDepth(-1);
     this.portalGraphics = this.add.graphics();
@@ -483,6 +492,7 @@ export class GameScene extends Phaser.Scene {
 
     // Vault messages
     room.onMessage(ServerMessage.VaultOpened, (data: { items: ItemInstanceData[] }) => {
+      this.closeLeftPanels("vault");
       this.hud.vaultUI.show(data.items);
     });
     room.onMessage(ServerMessage.VaultClosed, () => {
@@ -2814,10 +2824,7 @@ export class GameScene extends Phaser.Scene {
   private openCraftingUIFromServer(state: DecodedState, sessionId: string): void {
     if (this.craftingUI.isVisible()) return; // already open
 
-    // Close stats panel if open (mutual exclusion)
-    if (this.statsPanel.isVisible()) {
-      this.statsPanel.hide();
-    }
+    this.closeLeftPanels("crafting");
 
     const orbCounts = this.computeOrbCounts(state, sessionId);
     this.craftingUI.show(orbCounts);
@@ -2846,14 +2853,24 @@ export class GameScene extends Phaser.Scene {
     return counts;
   }
 
+  private relayoutUI(): void {
+    this.hud.relayout();
+    this.statsPanel.relayout();
+    this.craftingUI.relayout();
+    this.dungeonTooltip.relayout();
+  }
+
+  private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {
+    if (except !== "stats" && this.statsPanel.isVisible()) this.statsPanel.hide();
+    if (except !== "vault" && this.hud.vaultUI.isVisible()) this.hud.vaultUI.hide();
+    if (except !== "crafting" && this.craftingUI.isVisible()) this.craftingUI.hide();
+  }
+
   private toggleStatsPanel(): void {
     if (this.statsPanel.isVisible()) {
       this.statsPanel.hide();
     } else {
-      // Close crafting UI if open (mutual exclusion)
-      if (this.craftingUI.isVisible()) {
-        this.craftingUI.hide();
-      }
+      this.closeLeftPanels("stats");
       this.statsPanel.show();
     }
   }

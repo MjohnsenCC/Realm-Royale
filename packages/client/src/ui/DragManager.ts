@@ -339,6 +339,9 @@ export class DragManager {
         const category = getItemCategory(item.baseItemId);
         return category >= 0 && category < 4 && category === target.slotIndex;
       }
+      if (target.type === "consumable" && target.slotIndex !== undefined) {
+        return isConsumableItem(item.baseItemId) && getConsumableSlotIndex(item.baseItemId) === target.slotIndex;
+      }
       return false;
     }
 
@@ -744,6 +747,17 @@ export class DragManager {
       this.room.send(ClientMessage.VaultMoveItem, {
         fromSource: "vault", fromSlot: source.slotIndex,
         toSource: "equipment", toSlot: target.slotIndex,
+      });
+    } else if (source.type === "vault" && target.type === "consumable") {
+      // Vault -> Consumable slot
+      if (this.vaultUI) {
+        const vaultItems = this.vaultUI.getItems();
+        vaultItems[source.slotIndex] = createEmptyItemInstance();
+        this.vaultUI.redrawItems();
+      }
+      this.room.send(ClientMessage.MoveVaultToConsumable, {
+        vaultSlot: source.slotIndex,
+        consumableSlot: target.slotIndex,
       });
     } else if (source.type === "equipment" && target.type === "vault") {
       // Equipment -> Vault: store equipment in vault

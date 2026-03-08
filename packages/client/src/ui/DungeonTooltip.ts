@@ -246,4 +246,29 @@ export class DungeonTooltip {
   isVisible(): boolean {
     return this.visible;
   }
+
+  relayout(): void {
+    this.S = getUIScale();
+    const S = this.S;
+    this.tooltipWidth = Math.round(220 * S);
+    this.padding = Math.round(8 * S);
+
+    const nameFontSize = `${Math.round(13 * S)}px`;
+    const statFontSize = `${Math.round(11 * S)}px`;
+    const modFontSize = `${Math.round(10 * S)}px`;
+
+    this.nameText.setFontSize(nameFontSize);
+    this.nameText.setWordWrapWidth(this.tooltipWidth - this.padding * 2);
+    this.difficultyText.setFontSize(`${Math.round(10 * S)}px`);
+    this.rarityText.setFontSize(statFontSize);
+    this.quantityText.setFontSize(statFontSize);
+    for (const t of this.modifierTexts) {
+      t.setFontSize(modFontSize);
+      t.setWordWrapWidth(this.tooltipWidth - this.padding * 2);
+    }
+    this.shiftHintText.setFontSize(`${Math.round(9 * S)}px`);
+
+    // Hide on relayout
+    this.hide();
+  }
 }

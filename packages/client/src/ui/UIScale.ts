@@ -1,25 +1,28 @@
-export type UISize = "small" | "medium" | "large";
+const REFERENCE_WIDTH = 800;
+const REFERENCE_HEIGHT = 600;
 
-const SCALE_MAP: Record<UISize, number> = {
-  small: 1.0,
-  medium: 1.5,
-  large: 2.0,
-};
+let cachedWidth = REFERENCE_WIDTH;
+let cachedHeight = REFERENCE_HEIGHT;
+let cachedScale = 1.0;
 
-const STORAGE_KEY = "uiSize";
-
-export function getUISize(): UISize {
-  const stored = localStorage.getItem(STORAGE_KEY);
-  if (stored === "small" || stored === "medium" || stored === "large") {
-    return stored;
-  }
-  return "medium";
-}
-
-export function setUISize(size: UISize): void {
-  localStorage.setItem(STORAGE_KEY, size);
+/** Call once at scene creation and on every resize event */
+export function updateScreenDimensions(width: number, height: number): void {
+  cachedWidth = width;
+  cachedHeight = height;
+  cachedScale = Math.max(
+    0.75,
+    Math.min(Math.min(width / REFERENCE_WIDTH, height / REFERENCE_HEIGHT), 3.0)
+  );
 }
 
 export function getUIScale(): number {
-  return SCALE_MAP[getUISize()];
+  return cachedScale;
+}
+
+export function getScreenWidth(): number {
+  return cachedWidth;
+}
+
+export function getScreenHeight(): number {
+  return cachedHeight;
 }

@@ -643,6 +643,63 @@ export class ItemTooltip {
   hide(): void {
     this.container.setVisible(false);
   }
+
+  relayout(): void {
+    this.S = getUIScale();
+    const S = this.S;
+    this.tooltipWidth = Math.round(BASE_TOOLTIP_WIDTH * S);
+    this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
+
+    const nameFontSize = `${Math.round(12 * S)}px`;
+    const tierFontSize = `${Math.round(10 * S)}px`;
+    const statsFontSize = `${Math.round(10 * S)}px`;
+    const descFontSize = `${Math.round(9 * S)}px`;
+    const cx = this.tooltipWidth / 2;
+    const wrapWidth = this.tooltipWidth - this.tooltipPadding * 2;
+
+    this.nameText.setX(cx);
+    this.nameText.setFontSize(nameFontSize);
+    this.nameText.setWordWrapWidth(wrapWidth);
+
+    this.tierText.setX(cx);
+    this.tierText.setFontSize(tierFontSize);
+
+    this.statsText.setX(cx);
+    this.statsText.setFontSize(statsFontSize);
+    this.statsText.setWordWrapWidth(wrapWidth);
+
+    this.dividerAboveLockedText.setX(cx);
+    this.dividerAboveLockedText.setFontSize(statsFontSize);
+    this.lockedStatsText.setX(cx);
+    this.lockedStatsText.setFontSize(statsFontSize);
+    this.lockedStatsText.setWordWrapWidth(wrapWidth);
+    this.dividerBelowLockedText.setX(cx);
+    this.dividerBelowLockedText.setFontSize(statsFontSize);
+    this.openStatsText.setX(cx);
+    this.openStatsText.setFontSize(statsFontSize);
+    this.openStatsText.setWordWrapWidth(wrapWidth);
+    this.hiddenStatsText.setX(cx);
+    this.hiddenStatsText.setFontSize(statsFontSize);
+    this.hiddenStatsText.setWordWrapWidth(wrapWidth);
+    this.shiftHintText.setX(cx);
+    this.shiftHintText.setFontSize(`${Math.round(9 * S)}px`);
+
+    this.descText.setX(cx);
+    this.descText.setFontSize(descFontSize);
+    this.descText.setWordWrapWidth(wrapWidth);
+
+    const tierLabelFontSize = `${Math.round(8 * S)}px`;
+    for (const entry of this.statPool) {
+      entry.tier.setX(cx);
+      entry.tier.setFontSize(tierLabelFontSize);
+      entry.stat.setX(cx);
+      entry.stat.setFontSize(statsFontSize);
+      entry.stat.setWordWrapWidth(wrapWidth);
+    }
+
+    // Hide tooltip on relayout (it will re-show on next hover)
+    this.hide();
+  }
 }
 
 function formatStatValue(val: number): string {

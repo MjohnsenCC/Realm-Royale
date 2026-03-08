@@ -19,7 +19,7 @@ import {
   getScaledAbilityStatsRange,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
-import { getUIScale } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 
 const ORB_KEYS = [
@@ -88,22 +88,26 @@ export class CraftingUI {
 
   // Layout
   private S: number;
-  private px: number;
-  private py: number;
-  private panelWidth: number;
-  private panelHeight: number;
-  private statsColumnWidth: number;
-  private itemSlotCx: number;
-  private itemSlotCy: number;
-  private itemSlotSize: number;
+  private px!: number;
+  private py!: number;
+  private panelWidth!: number;
+  private panelHeight!: number;
+  private statsColumnWidth!: number;
+  private itemSlotCx!: number;
+  private itemSlotCy!: number;
+  private itemSlotSize!: number;
 
   // Orb slot layout (stored for redraw)
-  private orbSlotW: number;
-  private orbSlotH: number;
-  private orbGapX: number;
-  private orbGapY: number;
-  private orbStartX: number;
-  private orbStartY: number;
+  private orbSlotW!: number;
+  private orbSlotH!: number;
+  private orbGapX!: number;
+  private orbGapY!: number;
+  private orbStartX!: number;
+  private orbStartY!: number;
+  private columnGap!: number;
+  private orbColumnWidth!: number;
+
+  private static readonly LEFT_PANEL_WIDTH_PCT = 0.30;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -111,21 +115,7 @@ export class CraftingUI {
     const S = this.S;
     const pad = Math.round(12 * S);
 
-    const statsColumnWidth = Math.round(260 * S);
-    const orbColumnWidth = Math.round(76 * S);
-    const columnGap = Math.round(8 * S);
-    this.statsColumnWidth = statsColumnWidth;
-    this.panelWidth = statsColumnWidth + columnGap + orbColumnWidth;
-    this.panelHeight = Math.round(380 * S);
-
-    const screenW = scene.scale.width;
-    const screenH = scene.scale.height;
-    this.px = Math.round(screenW / 2 - this.panelWidth / 2);
-    // Clamp vertically so the panel never overlaps the bottom HUD
-    const hudTopY = Math.round(screenH - 130 * S);
-    const centeredY = Math.round(screenH / 2 - this.panelHeight / 2);
-    const maxAllowedY = hudTopY - this.panelHeight - Math.round(8 * S);
-    this.py = Math.max(Math.round(8 * S), Math.min(centeredY, maxAllowedY));
+    this.computeLayout();
 
     const titleFontSize = `${Math.round(13 * S)}px`;
     const nameFontSize = `${Math.round(12 * S)}px`;
@@ -150,7 +140,7 @@ export class CraftingUI {
 
     // --- Title ---
     this.titleText = scene.add
-      .text(this.px + statsColumnWidth / 2, this.py + pad, "Crafting", {
+      .text(this.px + this.statsColumnWidth / 2, this.py + pad, "Crafting", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily: "monospace",
@@ -163,7 +153,7 @@ export class CraftingUI {
     // --- Placeholder text ---
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText = scene.add
-      .text(this.px + statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
+      .text(this.px + this.statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
         fontSize: `${Math.round(9 * S)}px`,
         color: "#666688",
         fontFamily: "monospace",
@@ -175,11 +165,11 @@ export class CraftingUI {
 
     // --- Central item slot ---
     this.itemSlotSize = Math.round(44 * S);
-    this.itemSlotCx = this.px + Math.round(statsColumnWidth / 2);
+    this.itemSlotCx = this.px + Math.round(this.statsColumnWidth / 2);
     this.itemSlotCy = placeholderY + Math.round(14 * S) + Math.round(this.itemSlotSize / 2);
 
-    const cx = this.px + statsColumnWidth / 2;
-    const wrapWidth = statsColumnWidth - pad * 2;
+    const cx = this.px + this.statsColumnWidth / 2;
+    const wrapWidth = this.statsColumnWidth - pad * 2;
 
     // Item name (below slot)
     const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(6 * S);
@@ -363,8 +353,8 @@ export class CraftingUI {
     const orbRows = Math.ceil(ORB_KEYS.length / ORB_COLS);
     const totalGridH = orbRows * this.orbSlotH + (orbRows - 1) * this.orbGapY;
     const totalGridW = ORB_COLS * this.orbSlotW;
-    const rightColumnX = this.px + statsColumnWidth + columnGap;
-    this.orbStartX = rightColumnX + Math.round((orbColumnWidth - totalGridW) / 2);
+    const rightColumnX = this.px + this.statsColumnWidth + this.columnGap;
+    this.orbStartX = rightColumnX + Math.round((this.orbColumnWidth - totalGridW) / 2);
     this.orbStartY = this.py + Math.round((this.panelHeight - totalGridH) / 2);
 
     for (let i = 0; i < ORB_KEYS.length; i++) {
@@ -402,6 +392,121 @@ export class CraftingUI {
 
     // Start hidden
     this.setAllVisible(false);
+  }
+
+  private computeLayout(): void {
+    const S = this.S;
+    const screenW = getScreenWidth();
+    const screenH = getScreenHeight();
+    const pad = Math.round(12 * S);
+    const margin = Math.round(12 * S);
+
+    // Left panel: 30% width
+    const totalPanelW = Math.round(screenW * CraftingUI.LEFT_PANEL_WIDTH_PCT);
+    this.orbColumnWidth = Math.round(76 * S);
+    this.columnGap = Math.round(8 * S);
+    this.statsColumnWidth = totalPanelW - this.columnGap - this.orbColumnWidth;
+    this.panelWidth = totalPanelW;
+    this.panelHeight = screenH - margin * 2;
+
+    // Left side, top to bottom
+    this.px = margin;
+    this.py = margin;
+
+    // Item slot
+    this.itemSlotSize = Math.round(44 * S);
+    this.itemSlotCx = this.px + Math.round(this.statsColumnWidth / 2);
+    const placeholderY = this.py + pad + Math.round(22 * S);
+    this.itemSlotCy = placeholderY + Math.round(14 * S) + Math.round(this.itemSlotSize / 2);
+
+    // Orb slot sizes
+    this.orbSlotW = Math.round(56 * S);
+    this.orbSlotH = Math.round(32 * S);
+    this.orbGapX = Math.round(4 * S);
+    this.orbGapY = Math.round(4 * S);
+
+    const orbRows = Math.ceil(ORB_KEYS.length / ORB_COLS);
+    const totalGridH = orbRows * this.orbSlotH + (orbRows - 1) * this.orbGapY;
+    const totalGridW = ORB_COLS * this.orbSlotW;
+    const rightColumnX = this.px + this.statsColumnWidth + this.columnGap;
+    this.orbStartX = rightColumnX + Math.round((this.orbColumnWidth - totalGridW) / 2);
+    this.orbStartY = this.py + Math.round((this.panelHeight - totalGridH) / 2);
+  }
+
+  relayout(): void {
+    this.S = getUIScale();
+    this.computeLayout();
+
+    const S = this.S;
+    const pad = Math.round(12 * S);
+
+    // Reposition title
+    this.titleText.setPosition(this.px + this.statsColumnWidth / 2, this.py + pad);
+    this.titleText.setFontSize(`${Math.round(13 * S)}px`);
+
+    // Reposition placeholder
+    const placeholderY = this.py + pad + Math.round(22 * S);
+    this.placeholderText.setPosition(this.px + this.statsColumnWidth / 2, placeholderY);
+    this.placeholderText.setFontSize(`${Math.round(9 * S)}px`);
+
+    // Update text positions
+    const cx = this.px + this.statsColumnWidth / 2;
+    const wrapWidth = this.statsColumnWidth - pad * 2;
+    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(6 * S);
+    this.itemNameText.setPosition(cx, nameY);
+    this.itemNameText.setFontSize(`${Math.round(12 * S)}px`);
+    this.itemNameText.setWordWrapWidth(wrapWidth);
+
+    const tierY = nameY + Math.round(16 * S);
+    this.tierText.setPosition(cx, tierY);
+    this.tierText.setFontSize(`${Math.round(10 * S)}px`);
+
+    this.dividerAboveLockedText.setX(cx);
+    this.lockedStatsText.setX(cx);
+    this.lockedStatsText.setWordWrapWidth(wrapWidth);
+    this.dividerBelowLockedText.setX(cx);
+    this.openStatsText.setX(cx);
+    this.openStatsText.setWordWrapWidth(wrapWidth);
+    this.hiddenStatsText.setX(cx);
+    this.hiddenStatsText.setWordWrapWidth(wrapWidth);
+    this.shiftHintText.setX(cx);
+
+    const statsFontSize = `${Math.round(10 * S)}px`;
+    this.dividerAboveLockedText.setFontSize(statsFontSize);
+    this.lockedStatsText.setFontSize(statsFontSize);
+    this.dividerBelowLockedText.setFontSize(statsFontSize);
+    this.openStatsText.setFontSize(statsFontSize);
+    this.hiddenStatsText.setFontSize(statsFontSize);
+
+    for (const entry of this.statPool) {
+      entry.tier.setX(cx);
+      entry.tier.setFontSize(`${Math.round(8 * S)}px`);
+      entry.stat.setX(cx);
+      entry.stat.setFontSize(statsFontSize);
+      entry.stat.setWordWrapWidth(wrapWidth);
+    }
+
+    // Reposition orb zones and count texts
+    const smallFontSize = `${Math.round(8 * S)}px`;
+    for (let i = 0; i < ORB_KEYS.length; i++) {
+      const col = i % ORB_COLS;
+      const row = Math.floor(i / ORB_COLS);
+      const sx = this.orbStartX + col * (this.orbSlotW + this.orbGapX);
+      const sy = this.orbStartY + row * (this.orbSlotH + this.orbGapY);
+      this.orbZones[i].setPosition(sx + this.orbSlotW / 2, sy + this.orbSlotH / 2);
+      this.orbZones[i].setSize(this.orbSlotW, this.orbSlotH);
+      this.orbCountTexts[i].setPosition(sx + this.orbSlotW - Math.round(2 * S), sy + this.orbSlotH - Math.round(2 * S));
+      this.orbCountTexts[i].setFontSize(smallFontSize);
+    }
+
+    // Reposition orb info texts
+    const orbInfoWidth = Math.round(160 * S);
+    this.orbInfoNameText.setWordWrapWidth(orbInfoWidth - Math.round(16 * S));
+    this.orbInfoNameText.setFontSize(`${Math.round(11 * S)}px`);
+    this.orbInfoDescText.setWordWrapWidth(orbInfoWidth - Math.round(16 * S));
+    this.orbInfoDescText.setFontSize(`${Math.round(9 * S)}px`);
+
+    if (this.visible) this.redraw();
   }
 
   setRoom(room: any): void {

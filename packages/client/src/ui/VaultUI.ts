@@ -9,11 +9,10 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
-import { getUIScale } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import type { DragManager } from "./DragManager";
 
-const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
 const COLS = 5;
 const ROWS = 4;
@@ -22,6 +21,8 @@ const BASE_HEADER = 18;
 
 const VAULT_HEADER_COLOR = "#ddaa55";
 const VAULT_BORDER_COLOR = 0xddaa55;
+
+const LEFT_PANEL_WIDTH_PCT = 0.30;
 
 export class VaultUI {
   private scene: Phaser.Scene;
@@ -51,18 +52,18 @@ export class VaultUI {
 
   // Scaled dimensions
   private S: number;
-  private slotSize: number;
-  private slotGap: number;
-  private padding: number;
-  private header: number;
-  private panelWidth: number;
-  private panelHeight: number;
+  private slotSize!: number;
+  private slotGap!: number;
+  private padding!: number;
+  private header!: number;
+  private panelWidth!: number;
+  private panelHeight!: number;
 
-  // Position: above the unified panel, aligned with inventory section
-  private anchorX: number;
-  private anchorY: number;
+  // Position: left panel
+  private anchorX!: number;
+  private anchorY!: number;
 
-  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invSectionX: number, unifiedPanelY: number) {
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip) {
     this.scene = scene;
     this.tooltip = tooltip;
 
@@ -74,15 +75,7 @@ export class VaultUI {
 
     this.S = getUIScale();
     const S = this.S;
-    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
-    this.slotGap = Math.round(BASE_SLOT_GAP * S);
-    this.padding = Math.round(BASE_PADDING * S);
-    this.header = Math.round(BASE_HEADER * S);
-    this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
-    this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
-
-    this.anchorX = invSectionX - this.padding;
-    this.anchorY = unifiedPanelY - this.panelHeight - Math.round(8 * S);
+    this.computeLayout();
 
     const headerFontSize = `${Math.round(12 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
@@ -188,6 +181,49 @@ export class VaultUI {
     }
 
     this.setVisible(false);
+  }
+
+  private computeLayout(): void {
+    const S = this.S;
+    const screenW = getScreenWidth();
+    const screenH = getScreenHeight();
+    const margin = Math.round(12 * S);
+
+    this.panelWidth = Math.round(screenW * LEFT_PANEL_WIDTH_PCT);
+    this.padding = Math.round(BASE_PADDING * S);
+    this.header = Math.round(BASE_HEADER * S);
+    this.slotGap = Math.round(BASE_SLOT_GAP * S);
+
+    // Derive slot size to fit COLS columns within panel width
+    this.slotSize = Math.max(16, Math.floor((this.panelWidth - 2 * this.padding - (COLS - 1) * this.slotGap) / COLS));
+
+    this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
+
+    // Left panel position
+    this.anchorX = margin;
+    this.anchorY = margin;
+  }
+
+  relayout(): void {
+    this.S = getUIScale();
+    this.computeLayout();
+
+    const S = this.S;
+    const headerFontSize = `${Math.round(12 * S)}px`;
+    const slotFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+
+    this.headerText.setFontSize(headerFontSize);
+
+    for (let i = 0; i < VAULT_SIZE; i++) {
+      this.itemTexts[i].setFontSize(slotFontSize);
+      this.itemTexts[i].setWordWrapWidth(this.slotSize - 4);
+      this.tierTexts[i].setFontSize(tierFontSize);
+      this.qtyTexts[i].setFontSize(tierFontSize);
+      this.slotZones[i].setSize(this.slotSize, this.slotSize);
+    }
+
+    if (this.visible) this.redraw();
   }
 
   setRoom(room: any): void {

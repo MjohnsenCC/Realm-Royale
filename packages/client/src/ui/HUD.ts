@@ -5,7 +5,7 @@ import { InventoryUI } from "./InventoryUI";
 import { LootBagUI } from "./LootBagUI";
 import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
-import { getUIScale } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
 import {
   MINIMAP_WIDTH,
@@ -43,17 +43,17 @@ export class HUD {
   private S: number;
 
   // Scaled dimensions
-  private barWidth: number;
-  private barHeight: number;
-  private barGap: number;
-  private mmWidth: number;
-  private mmHeight: number;
+  private barWidth!: number;
+  private barHeight!: number;
+  private barGap!: number;
+  private mmWidth!: number;
+  private mmHeight!: number;
 
   // Unified panel dimensions
-  private panelX: number;
-  private panelY: number;
-  private panelW: number;
-  private panelH: number;
+  private panelX!: number;
+  private panelY!: number;
+  private panelW!: number;
+  private panelH!: number;
 
   // Unified panel background
   private panelBg: Phaser.GameObjects.Graphics;
@@ -131,8 +131,22 @@ export class HUD {
   private onStatsButtonClick: (() => void) | null = null;
 
   // Section origins (stored for bar drawing)
-  private barsX: number;
-  private barsY: number;
+  private barsX!: number;
+  private barsY!: number;
+
+  // Layout cache (used by computeLayout and relayout)
+  private slotSize: number = 0;
+  private slotGap: number = 0;
+  private innerPad: number = 0;
+  private sectionGap: number = 0;
+  private iconGap: number = 0;
+  private eqX: number = 0;
+  private eqY: number = 0;
+  private invX: number = 0;
+  private invY: number = 0;
+  private barsH: number = 0;
+  private statsBtnSize: number = 0;
+  private statsBtnGap: number = 0;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -140,51 +154,12 @@ export class HUD {
     this.S = getUIScale();
     const S = this.S;
 
-    // Scaled bar dimensions
-    this.barWidth = Math.round(160 * S);
-    this.barHeight = Math.round(16 * S);
-    this.barGap = Math.round(3 * S);
-    this.mmWidth = Math.round(MINIMAP_WIDTH * S * 1.25);
-    this.mmHeight = Math.round(MINIMAP_HEIGHT * S * 1.25);
-
-    // Slot dimensions
-    const slotSize = Math.round(36 * S);
-    const slotGap = Math.round(4 * S);
-    const sectionGap = Math.round(12 * S);
-    const innerPad = Math.round(8 * S);
-    const iconGap = Math.round(4 * S);
-
-    // Section dimensions
-    const barsW = this.barWidth;
-    const barsH = 3 * this.barHeight + 2 * this.barGap;
-
-    const eqW = 4 * slotSize + 3 * slotGap;
-    const eqSectionH = slotSize + iconGap + slotSize;
-
-    const invW = 4 * slotSize + 3 * slotGap;
-    const invH = 2 * slotSize + slotGap;
-
-    const maxH = Math.max(barsH, eqSectionH, invH);
-
-    // Unified panel
-    this.panelW = innerPad + barsW + sectionGap + eqW + sectionGap + invW + innerPad;
-    this.panelH = innerPad + maxH + innerPad;
+    // Compute panel layout from 30% of screen width
     const screenW = scene.scale.width;
     const screenH = scene.scale.height;
-    this.panelX = Math.round(screenW / 2 - this.panelW / 2);
-    this.panelY = Math.round(screenH - this.panelH - Math.round(12 * S));
+    this.computeLayout(screenW, screenH, S);
 
-    // Section origins
-    this.barsX = this.panelX + innerPad;
-    this.barsY = this.panelY + innerPad;
-
-    const eqX = this.barsX + barsW + sectionGap;
-    const eqY = this.panelY + innerPad;
-
-    const invX = eqX + eqW + sectionGap;
-    const invY = this.panelY + innerPad;
-
-    const barFontSize = `${Math.round(11 * S)}px`;
+    const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
     const zoneFontSize = `${Math.round(18 * S)}px`;
     const countFontSize = `${Math.round(14 * S)}px`;
     const hintFontSize = `${Math.round(11 * S)}px`;
@@ -271,22 +246,23 @@ export class HUD {
 
     // --- Consumable slots (below equipment slots, same size as regular slots) ---
     this.consumableGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.consumableSlotSize = slotSize;
-    const consRowW = 3 * slotSize + 2 * iconGap;
-    const consRowX = eqX + Math.round((eqW - consRowW) / 2);
-    const consRowY = eqY + slotSize + iconGap;
+    this.consumableSlotSize = this.slotSize;
+    const eqW = 4 * this.slotSize + 3 * this.slotGap;
+    const consRowW = 3 * this.slotSize + 2 * this.iconGap;
+    const consRowX = this.eqX + Math.round((eqW - consRowW) / 2);
+    const consRowY = this.eqY + this.slotSize + this.iconGap;
 
     const keyLabels = ["F", "G", ""];
     const countFontSm = `${Math.round(10 * S)}px`;
     const keyFontSm = `${Math.round(8 * S)}px`;
 
     for (let i = 0; i < 3; i++) {
-      const ix = consRowX + i * (slotSize + iconGap);
+      const ix = consRowX + i * (this.slotSize + this.iconGap);
       this.consumableSlotPositions.push({ x: ix, y: consRowY });
 
       // Count text (bottom-right)
       const countText = scene.add
-        .text(ix + slotSize - 2, consRowY + slotSize - 2, "", {
+        .text(ix + this.slotSize - 2, consRowY + this.slotSize - 2, "", {
           fontSize: countFontSm,
           color: "#ffffff",
           fontFamily: "monospace",
@@ -314,7 +290,7 @@ export class HUD {
     for (let i = 0; i < 3; i++) {
       const pos = this.consumableSlotPositions[i];
       const zone = scene.add
-        .zone(pos.x + slotSize / 2, pos.y + slotSize / 2, slotSize, slotSize)
+        .zone(pos.x + this.slotSize / 2, pos.y + this.slotSize / 2, this.slotSize, this.slotSize)
         .setScrollFactor(0)
         .setDepth(104)
         .setInteractive({ useHandCursor: true });
@@ -442,17 +418,19 @@ export class HUD {
 
     // --- Inventory UI ---
     this.inventoryUI = new InventoryUI(scene, {
-      eqX,
-      eqY,
-      invX,
-      invY,
+      eqX: this.eqX,
+      eqY: this.eqY,
+      invX: this.invX,
+      invY: this.invY,
+      slotSize: this.slotSize,
+      slotGap: this.slotGap,
     });
 
     // --- Loot Bag UI (above unified panel, aligned with inventory section) ---
-    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
+    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), this.invX, this.panelY);
 
-    // --- Vault UI (above unified panel, aligned with inventory section) ---
-    this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip(), invX, this.panelY);
+    // --- Vault UI (left panel, full height) ---
+    this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip());
 
     // --- Drag Manager ---
     this.dragManager = new DragManager(scene);
@@ -476,11 +454,9 @@ export class HUD {
     this.drawLvlBar(0, 1);
 
     // --- Stats button (below bars, small square) ---
-    const statsBtnGap = Math.round(6 * S);
-    const statsBtnY = this.barsY + barsH + statsBtnGap;
-    const statsBtnSize = Math.round(20 * S);
-    const statsBtnH = statsBtnSize;
-    const statsBtnW = statsBtnSize;
+    const statsBtnY = this.barsY + this.barsH + this.statsBtnGap;
+    const statsBtnH = this.statsBtnSize;
+    const statsBtnW = this.statsBtnSize;
     const statsBtnX = this.barsX;
 
     this.statsButton = scene.add.graphics().setScrollFactor(0).setDepth(101);
@@ -491,7 +467,7 @@ export class HUD {
 
     this.statsButtonText = scene.add
       .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "P", {
-        fontSize: `${Math.round(10 * S)}px`,
+        fontSize: `${Math.max(8, Math.round(this.statsBtnSize * 0.6))}px`,
         color: "#aaaaaa",
         fontFamily: "monospace",
       })
@@ -514,6 +490,137 @@ export class HUD {
     this.statsButtonZone.on("pointerdown", () => {
       if (this.onStatsButtonClick) this.onStatsButtonClick();
     });
+  }
+
+  private computeLayout(screenW: number, screenH: number, S: number): void {
+    // HUD panel occupies ~30% of screen width, centered at bottom
+    this.panelW = Math.round(screenW * 0.30);
+    this.innerPad = Math.max(4, Math.round(this.panelW * 0.016));
+    this.sectionGap = Math.max(4, Math.round(this.panelW * 0.023));
+    this.slotGap = Math.max(2, Math.round(this.panelW * 0.008));
+    this.iconGap = Math.max(2, Math.round(this.panelW * 0.008));
+
+    // Bars take ~28% of panel width
+    this.barWidth = Math.round(this.panelW * 0.28);
+    this.barHeight = Math.max(10, Math.round(this.panelW * 0.032));
+    this.barGap = Math.max(2, Math.round(this.panelW * 0.006));
+
+    // Remaining space split between equipment (4 slots) and inventory (4 cols)
+    const availableW = this.panelW - 2 * this.innerPad - this.barWidth - 2 * this.sectionGap;
+    const halfW = Math.floor(availableW / 2);
+    this.slotSize = Math.max(16, Math.floor((halfW - 3 * this.slotGap) / 4));
+
+    const eqW = 4 * this.slotSize + 3 * this.slotGap;
+    const eqSectionH = this.slotSize + this.iconGap + this.slotSize;
+    const invH = 2 * this.slotSize + this.slotGap;
+    this.barsH = 3 * this.barHeight + 2 * this.barGap;
+    // Stats button sits below bars inside the panel
+    this.statsBtnSize = Math.max(12, this.barHeight);
+    this.statsBtnGap = this.barGap;
+    const barsSectionH = this.barsH + this.statsBtnGap + this.statsBtnSize;
+    const maxH = Math.max(barsSectionH, eqSectionH, invH);
+
+    this.panelH = this.innerPad + maxH + this.innerPad;
+    this.panelX = Math.round(screenW / 2 - this.panelW / 2);
+    this.panelY = Math.round(screenH - this.panelH - Math.round(12 * S));
+
+    this.barsX = this.panelX + this.innerPad;
+    this.barsY = this.panelY + this.innerPad;
+
+    this.eqX = this.barsX + this.barWidth + this.sectionGap;
+    this.eqY = this.panelY + this.innerPad;
+
+    this.invX = this.eqX + eqW + this.sectionGap;
+    this.invY = this.panelY + this.innerPad;
+
+    // Minimap scales with S
+    this.mmWidth = Math.round(MINIMAP_WIDTH * S * 1.25);
+    this.mmHeight = Math.round(MINIMAP_HEIGHT * S * 1.25);
+  }
+
+  relayout(): void {
+    const screenW = this.scene.scale.width;
+    const screenH = this.scene.scale.height;
+    this.S = getUIScale();
+    const S = this.S;
+    this.computeLayout(screenW, screenH, S);
+
+    const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
+    const zoneFontSize = `${Math.round(18 * S)}px`;
+    const countFontSize = `${Math.round(14 * S)}px`;
+    const hintFontSize = `${Math.round(11 * S)}px`;
+
+    // Update panel background
+    this.panelBg.clear();
+    this.panelBg.fillStyle(0x222222, 0.85);
+    this.panelBg.fillRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+    this.panelBg.lineStyle(1, 0x555555, 0.8);
+    this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+
+    // Update text font sizes
+    this.hpText.setFontSize(barFontSize);
+    this.manaText.setFontSize(barFontSize);
+    this.lvlText.setFontSize(barFontSize);
+    this.zoneText.setFontSize(zoneFontSize);
+    this.playerCountText.setFontSize(countFontSize);
+    this.qHintText.setFontSize(hintFontSize);
+
+    // Update consumable slot positions
+    const consRowW = 3 * this.slotSize + 2 * this.iconGap;
+    const eqW = 4 * this.slotSize + 3 * this.slotGap;
+    const consRowX = this.eqX + Math.round((eqW - consRowW) / 2);
+    const consRowY = this.eqY + this.slotSize + this.iconGap;
+    this.consumableSlotSize = this.slotSize;
+
+    const countFontSm = `${Math.round(10 * S)}px`;
+    const keyFontSm = `${Math.round(8 * S)}px`;
+    for (let i = 0; i < 3; i++) {
+      const ix = consRowX + i * (this.slotSize + this.iconGap);
+      this.consumableSlotPositions[i] = { x: ix, y: consRowY };
+      this.consumableCountTexts[i].setFontSize(countFontSm);
+      this.consumableKeyTexts[i].setFontSize(keyFontSm);
+      this.consumableZones[i].setPosition(ix + this.slotSize / 2, consRowY + this.slotSize / 2);
+      this.consumableZones[i].setSize(this.slotSize, this.slotSize);
+    }
+
+    // Update stats button
+    const statsBtnY = this.barsY + this.barsH + this.statsBtnGap;
+    const statsBtnSize = this.statsBtnSize;
+    this.statsButton.clear();
+    this.statsButton.fillStyle(0x333344, 0.7);
+    this.statsButton.fillRoundedRect(this.barsX, statsBtnY, statsBtnSize, statsBtnSize, 3);
+    this.statsButton.lineStyle(1, 0x555566, 0.8);
+    this.statsButton.strokeRoundedRect(this.barsX, statsBtnY, statsBtnSize, statsBtnSize, 3);
+    this.statsButtonText.setPosition(this.barsX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.statsButtonText.setFontSize(`${Math.max(8, Math.round(statsBtnSize * 0.6))}px`);
+    this.statsButtonZone.setPosition(this.barsX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.statsButtonZone.setSize(statsBtnSize, statsBtnSize);
+
+    // Update minimap zoom button font sizes
+    const btnFontSize = `${Math.round(14 * S)}px`;
+    this.minimapZoomInBtn.setFontSize(btnFontSize);
+    this.minimapZoomOutBtn.setFontSize(btnFontSize);
+
+    // Invalidate minimap cache on resize
+    this.invalidateMinimapCache();
+
+    // Relayout sub-UIs
+    this.inventoryUI.relayout({
+      eqX: this.eqX,
+      eqY: this.eqY,
+      invX: this.invX,
+      invY: this.invY,
+      slotSize: this.slotSize,
+      slotGap: this.slotGap,
+    });
+
+    this.lootBagUI.relayout(this.invX, this.panelY);
+    this.vaultUI.relayout();
+
+    this.drawConsumableSlots();
+    this.drawHealthBar(100, 100, 0);
+    this.drawManaBar(100, 100);
+    this.drawLvlBar(0, 1);
   }
 
   private drawHealthBar(hp: number, maxHp: number, hpRegen: number): void {
@@ -540,8 +647,8 @@ export class HUD {
 
     const regenStr = hpRegen > 0 ? ` (+${hpRegen})` : "";
     this.hpText.setText(`HP: ${Math.ceil(hp)} / ${maxHp}${regenStr}`);
-    this.hpText.setPosition(x + this.barWidth / 2, y + 2);
-    this.hpText.setOrigin(0.5, 0);
+    this.hpText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
+    this.hpText.setOrigin(0.5, 0.5);
   }
 
   private drawManaBar(mana: number, maxMana: number): void {
@@ -565,8 +672,8 @@ export class HUD {
     );
 
     this.manaText.setText(`MP: ${Math.ceil(mana)} / ${maxMana}`);
-    this.manaText.setPosition(x + this.barWidth / 2, y + 2);
-    this.manaText.setOrigin(0.5, 0);
+    this.manaText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
+    this.manaText.setOrigin(0.5, 0.5);
   }
 
   private drawLvlBar(xp: number, level: number): void {
@@ -595,8 +702,8 @@ export class HUD {
     );
 
     this.lvlText.setText(`LVL ${level} (${xpProgress}/${xpNeeded})`);
-    this.lvlText.setPosition(x + this.barWidth / 2, y + 2);
-    this.lvlText.setOrigin(0.5, 0);
+    this.lvlText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
+    this.lvlText.setOrigin(0.5, 0.5);
   }
 
   update(

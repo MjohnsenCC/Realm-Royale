@@ -16,7 +16,7 @@ import {
   MAX_LEVEL,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
-import { getUIScale } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 
 // Stat row definitions
 const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility" }[] = [
@@ -49,13 +49,13 @@ export class StatsPanel {
   private S: number;
 
   // Panel outer position & visible size (the clipped viewport)
-  private px: number;
-  private py: number;
-  private panelWidth: number;
-  private viewHeight: number;
+  private px!: number;
+  private py!: number;
+  private panelWidth!: number;
+  private viewHeight!: number;
 
   // Full content height (may exceed viewHeight)
-  private contentHeight: number;
+  private contentHeight!: number;
 
   // Panel background (drawn at panel position, not scrolled)
   private panelBg: Phaser.GameObjects.Graphics;
@@ -77,10 +77,10 @@ export class StatsPanel {
   private scrollBarThumb: Phaser.GameObjects.Graphics;
 
   // Layout constants (pre-scaled)
-  private pad: number;
-  private lineH: number;
-  private sectionGap: number;
-  private headerH: number;
+  private pad!: number;
+  private lineH!: number;
+  private sectionGap!: number;
+  private headerH!: number;
 
   // Separator Y positions relative to content container
   private separatorYs: number[] = [];
@@ -88,7 +88,7 @@ export class StatsPanel {
   // Scroll state
   private scrollY = 0;
   private maxScrollY = 0;
-  private scrollBarWidth: number;
+  private scrollBarWidth!: number;
 
   // Mask for clipping
   private maskGraphics: Phaser.GameObjects.Graphics;
@@ -96,54 +96,14 @@ export class StatsPanel {
   // Wheel listener reference for cleanup
   private wheelListener: ((e: WheelEvent) => void) | null = null;
 
+  private static readonly LEFT_PANEL_WIDTH_PCT = 0.30;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.S = getUIScale();
     const S = this.S;
 
-    this.pad = Math.round(12 * S);
-    this.lineH = Math.round(16 * S);
-    this.sectionGap = Math.round(10 * S);
-    this.headerH = Math.round(18 * S);
-    this.scrollBarWidth = Math.round(4 * S);
-
-    this.panelWidth = Math.round(260 * S);
-
-    // Calculate full content height
-    const offensiveRows = 13;
-    const defensiveRows = 6;
-    const utilityRows = 2;
-    const totalRows = offensiveRows + defensiveRows + utilityRows;
-    this.contentHeight =
-      this.pad +
-      this.headerH + // title
-      this.lineH + // hint
-      2 + // separator
-      3 * (this.sectionGap + this.headerH + 2) + // 3 section headers + separators
-      totalRows * this.lineH +
-      this.pad;
-
-    // Position: left side, from top down to just above the HUD panel
-    // HUD panel Y = screenH - panelH - 12*S
-    // panelH = innerPad + maxH + innerPad where innerPad=8*S, maxH = max(barsH, eqSectionH, invH)
-    // eqSectionH = 36*S + 4*S + 36*S = 76*S  (the tallest section)
-    // So panelH = 8*S + 76*S + 8*S = 92*S
-    // HUD top Y = screenH - 92*S - 12*S = screenH - 104*S
-    const screenH = scene.scale.height;
-    const hudPanelH = Math.round(92 * S);
-    const hudMargin = Math.round(12 * S);
-    const hudTopY = screenH - hudPanelH - hudMargin;
-    const panelMargin = Math.round(12 * S);
-
-    this.px = panelMargin;
-    this.py = panelMargin;
-    this.viewHeight = hudTopY - panelMargin - panelMargin; // gap above HUD
-
-    // Clamp viewHeight to content if content is shorter
-    if (this.contentHeight <= this.viewHeight) {
-      this.viewHeight = this.contentHeight;
-    }
-    this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
+    this.computeLayout();
 
     // --- Panel background (fixed, not scrolled) ---
     this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(250);
@@ -280,6 +240,128 @@ export class StatsPanel {
 
     // Start hidden
     this.setAllVisible(false);
+  }
+
+  private computeLayout(): void {
+    const S = this.S;
+    const screenW = getScreenWidth();
+    const screenH = getScreenHeight();
+
+    this.pad = Math.round(12 * S);
+    this.lineH = Math.round(16 * S);
+    this.sectionGap = Math.round(10 * S);
+    this.headerH = Math.round(18 * S);
+    this.scrollBarWidth = Math.round(4 * S);
+
+    this.panelWidth = Math.round(screenW * StatsPanel.LEFT_PANEL_WIDTH_PCT);
+
+    // Calculate full content height
+    const offensiveRows = 13;
+    const defensiveRows = 6;
+    const utilityRows = 2;
+    const totalRows = offensiveRows + defensiveRows + utilityRows;
+    this.contentHeight =
+      this.pad +
+      this.headerH + // title
+      this.lineH + // hint
+      2 + // separator
+      3 * (this.sectionGap + this.headerH + 2) + // 3 section headers + separators
+      totalRows * this.lineH +
+      this.pad;
+
+    // Left panel: full height from margin to margin
+    const panelMargin = Math.round(12 * S);
+    this.px = panelMargin;
+    this.py = panelMargin;
+    this.viewHeight = screenH - panelMargin * 2;
+
+    // Clamp viewHeight to content if content is shorter
+    if (this.contentHeight <= this.viewHeight) {
+      this.viewHeight = this.contentHeight;
+    }
+    this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
+  }
+
+  relayout(): void {
+    this.S = getUIScale();
+    this.computeLayout();
+
+    const S = this.S;
+    const labelFontSize = `${Math.round(10 * S)}px`;
+    const valueFontSize = `${Math.round(10 * S)}px`;
+    const headerFontSize = `${Math.round(11 * S)}px`;
+    const titleFontSize = `${Math.round(14 * S)}px`;
+    const hintFontSize = `${Math.round(9 * S)}px`;
+
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(2 * S);
+    const labelX = this.pad;
+    const valueX = contentW - this.pad;
+    const bonusOffsetX = Math.round(70 * S);
+    const centerX = contentW / 2;
+
+    // Update title and hint positions
+    this.titleText.setPosition(centerX, this.pad);
+    this.titleText.setFontSize(titleFontSize);
+    this.hintText.setPosition(centerX, this.pad + this.headerH);
+    this.hintText.setFontSize(hintFontSize);
+
+    // Rebuild row Y positions
+    let curY = this.pad + this.headerH + this.lineH;
+    this.separatorYs = [];
+    this.separatorYs.push(curY);
+    curY += 2;
+
+    let currentSection = "";
+    let headerIdx = 0;
+    const sectionNames: Record<string, string> = {
+      offensive: "OFFENSIVE",
+      defensive: "DEFENSIVE",
+      utility: "UTILITY",
+    };
+
+    for (let i = 0; i < STAT_ROWS.length; i++) {
+      const row = STAT_ROWS[i];
+
+      if (row.section !== currentSection) {
+        currentSection = row.section;
+        curY += this.sectionGap;
+
+        if (headerIdx < this.sectionHeaders.length) {
+          this.sectionHeaders[headerIdx].setPosition(labelX, curY);
+          this.sectionHeaders[headerIdx].setFontSize(headerFontSize);
+          headerIdx++;
+        }
+
+        curY += this.headerH;
+        this.separatorYs.push(curY);
+        curY += 2;
+      }
+
+      this.statLabelTexts[i].setPosition(labelX, curY);
+      this.statLabelTexts[i].setFontSize(labelFontSize);
+      this.statValueTexts[i].setPosition(valueX - bonusOffsetX, curY);
+      this.statValueTexts[i].setFontSize(valueFontSize);
+      this.statBonusTexts[i].setPosition(valueX, curY);
+      this.statBonusTexts[i].setFontSize(valueFontSize);
+
+      curY += this.lineH;
+    }
+
+    // Rebuild mask
+    this.maskGraphics.clear();
+    this.maskGraphics.fillStyle(0xffffff);
+    this.maskGraphics.fillRect(this.px, this.py, this.panelWidth, this.viewHeight);
+    // Recreate geometry mask
+    const mask = this.maskGraphics.createGeometryMask();
+    this.contentContainer.setMask(mask);
+
+    this.scrollY = 0;
+
+    if (this.visible) {
+      this.drawBackground();
+      this.drawSeparators();
+      this.applyScroll();
+    }
   }
 
   show(): void {

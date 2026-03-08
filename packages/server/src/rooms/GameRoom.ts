@@ -442,8 +442,18 @@ export class GameRoom extends Room<GameState> {
         if (data.targetConsumableSlot !== undefined && isConsumableItem(itemId)) {
           const expectedSlot = getConsumableSlotIndex(itemId);
           if (expectedSlot !== data.targetConsumableSlot) return;
-          if (!this.addConsumableToPlayer(player, itemId)) return;
-          updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+          const slotIdx = expectedSlot;
+          const maxStack = CONSUMABLE_MAX_STACKS[slotIdx];
+          const current = this.getConsumableCount(player, slotIdx);
+          const qty = itemData.quantity || 1;
+          const canAdd = Math.min(qty, maxStack - current);
+          if (canAdd <= 0) return;
+          this.setConsumableCount(player, slotIdx, current + canAdd);
+          if (canAdd < qty) {
+            bagItem.item.quantity = qty - canAdd;
+          } else {
+            updateSchemaFromData(bagItem.item, createEmptyItemInstance());
+          }
         }
         // Direct pickup to equipment slot (bag → equipment drag)
         else if (data.targetEquipmentSlot !== undefined) {
@@ -782,6 +792,40 @@ export class GameRoom extends Room<GameState> {
         if (emptyIdx === -1) return;
         this.setConsumableCount(player, slot, count - 1);
         player.vaultItems[emptyIdx] = generateConsumableInstance(consumableId);
+        player.vaultDirty = true;
+        client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
+      }
+    );
+
+    // Listen for move vault item to consumable slot
+    this.onMessage(
+      ClientMessage.MoveVaultToConsumable,
+      (client, data: { vaultSlot: number; consumableSlot: number }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+        if (!isVaultZone(player.zone) || !player.vaultItems) return;
+
+        const { vaultSlot, consumableSlot } = data;
+        if (vaultSlot < 0 || vaultSlot >= player.vaultItems.length) return;
+        if (consumableSlot < 0 || consumableSlot > 2) return;
+
+        const vaultItem = player.vaultItems[vaultSlot];
+        if (vaultItem.baseItemId < 0 || !isConsumableItem(vaultItem.baseItemId)) return;
+        if (getConsumableSlotIndex(vaultItem.baseItemId) !== consumableSlot) return;
+
+        const maxStack = CONSUMABLE_MAX_STACKS[consumableSlot];
+        const current = this.getConsumableCount(player, consumableSlot);
+        const qty = vaultItem.quantity || 1;
+        const canAdd = Math.min(qty, maxStack - current);
+        if (canAdd <= 0) return;
+
+        this.setConsumableCount(player, consumableSlot, current + canAdd);
+        if (canAdd < qty) {
+          player.vaultItems[vaultSlot] = { ...vaultItem, quantity: qty - canAdd };
+        } else {
+          player.vaultItems[vaultSlot] = createEmptyItemInstance();
+        }
+
         player.vaultDirty = true;
         client.send(ServerMessage.VaultUpdated, { items: player.vaultItems });
       }

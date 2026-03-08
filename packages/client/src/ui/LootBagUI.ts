@@ -414,6 +414,36 @@ export class LootBagUI {
     return bounds;
   }
 
+  relayout(invSectionX: number, unifiedPanelY: number): void {
+    this.S = getUIScale();
+    const S = this.S;
+    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
+    this.slotGap = Math.round(BASE_SLOT_GAP * S);
+    this.padding = Math.round(BASE_PADDING * S);
+    this.header = Math.round(BASE_HEADER * S);
+    this.panelWidth = COLS * this.slotSize + (COLS - 1) * this.slotGap + this.padding * 2;
+    this.panelHeight = ROWS * this.slotSize + (ROWS - 1) * this.slotGap + this.padding * 2 + this.header;
+
+    this.anchorX = invSectionX - this.padding;
+    this.anchorY = unifiedPanelY - this.panelHeight - Math.round(8 * S);
+
+    const slotFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+    const headerFontSize = `${Math.round(12 * S)}px`;
+
+    this.headerText.setFontSize(headerFontSize);
+
+    for (let i = 0; i < BAG_SIZE; i++) {
+      this.slotZones[i].setSize(this.slotSize, this.slotSize);
+      this.itemTexts[i].setFontSize(slotFontSize);
+      this.itemTexts[i].setWordWrapWidth(this.slotSize - 4);
+      this.tierTexts[i].setFontSize(tierFontSize);
+      this.qtyTexts[i].setFontSize(tierFontSize);
+    }
+
+    if (this.visible) this.redraw();
+  }
+
   isOverPanel(screenX: number, screenY: number): boolean {
     if (!this.visible) return false;
     const panelX = this.anchorX;

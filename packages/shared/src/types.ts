@@ -372,6 +372,7 @@ export const ClientMessage = {
   DropConsumable: "dropConsumable",
   MoveConsumableToInventory: "moveConsumableToInventory",
   MoveConsumableToVault: "moveConsumableToVault",
+  MoveVaultToConsumable: "moveVaultToConsumable",
   OpenVault: "openVault",
   VaultMoveItem: "vaultMoveItem",
   UsePortalGemVault: "usePortalGemVault",
