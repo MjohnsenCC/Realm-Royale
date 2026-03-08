@@ -2381,6 +2381,12 @@ export class GameScene extends Phaser.Scene {
       const currentXp = localPlayer.xp as number;
       const currentLevel = (localPlayer.level as number) ?? 1;
 
+      // Collect dungeon portal positions for minimap icons
+      const dpList: Array<{ x: number; y: number; portalType: number }> = [];
+      this.dungeonPortalSprites.forEach((ps) => {
+        dpList.push({ x: ps.x, y: ps.y, portalType: ps.portalType });
+      });
+
       this.hud.update(
         localPlayer.hp as number,
         localPlayer.maxHp as number,
@@ -2396,7 +2402,9 @@ export class GameScene extends Phaser.Scene {
         this.localZone,
         (localPlayer.healthPots as number) ?? 0,
         (localPlayer.manaPots as number) ?? 0,
-        (localPlayer.portalGems as number) ?? 0
+        (localPlayer.portalGems as number) ?? 0,
+        dpList,
+        this.currentDungeonMap
       );
 
       // Update stats panel if visible

@@ -24,9 +24,23 @@ import {
   getDifficultyAt,
   computePlayerStats,
   generateNexusMap,
+  generateVaultMap,
   DungeonTile,
   isHostileZone,
   isVaultZone,
+  REALM_PORTAL_1_X,
+  REALM_PORTAL_1_Y,
+  REALM_PORTAL_2_X,
+  REALM_PORTAL_2_Y,
+  VAULT_PORTAL_X,
+  VAULT_PORTAL_Y,
+  CRAFTING_TABLE_X,
+  CRAFTING_TABLE_Y,
+  VAULT_CHEST_X,
+  VAULT_CHEST_Y,
+  VAULT_RETURN_PORTAL_X,
+  VAULT_RETURN_PORTAL_Y,
+  PortalType,
   ItemCategory,
   ConsumableSubtype,
   HEALTH_POT_ID,
@@ -34,7 +48,7 @@ import {
   PORTAL_GEM_ID,
   createEmptyItemInstance,
 } from "@rotmg-lite/shared";
-import type { ItemInstanceData } from "@rotmg-lite/shared";
+import type { ItemInstanceData, DungeonMapData } from "@rotmg-lite/shared";
 
 export class HUD {
   private scene: Phaser.Scene;
@@ -79,8 +93,6 @@ export class HUD {
   // Player count
   private playerCountText: Phaser.GameObjects.Text;
 
-  // Q hint
-  private qHintText: Phaser.GameObjects.Text;
 
   // Consumable slots (below equipment)
   private consumableGraphics: Phaser.GameObjects.Graphics;
@@ -162,7 +174,6 @@ export class HUD {
     const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
     const zoneFontSize = `${Math.round(18 * S)}px`;
     const countFontSize = `${Math.round(14 * S)}px`;
-    const hintFontSize = `${Math.round(11 * S)}px`;
 
     // --- Unified panel background ---
     this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
@@ -218,31 +229,18 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(100);
 
-    // --- Player count (below minimap) ---
+    // --- Player count (inside minimap, bottom-left) ---
     const mmPad = Math.round(16 * S);
-    const mmBottomY = mmPad + this.mmHeight + Math.round(4 * S);
+    const btnPadInit = Math.round(3 * S);
     this.playerCountText = scene.add
-      .text(screenW - mmPad - this.mmWidth / 2, mmBottomY, `Players: 0/${MAX_PLAYERS}`, {
+      .text(screenW - mmPad - this.mmWidth + btnPadInit, mmPad + this.mmHeight - btnPadInit, `Players: 0/${MAX_PLAYERS}`, {
         fontSize: countFontSize,
         color: "#aaaaaa",
         fontFamily: "monospace",
       })
-      .setOrigin(0.5, 0)
+      .setOrigin(0, 1)
       .setScrollFactor(0)
-      .setDepth(100);
-
-    // --- Q hint (below zone text) ---
-    const hintY = 15 + Math.round(23 * S);
-    this.qHintText = scene.add
-      .text(screenW / 2, hintY, "Q: Nexus  |  SPACE: Ability  |  E: Portal  |  F: HP Pot  |  G: MP Pot  |  P: Stats", {
-        fontSize: hintFontSize,
-        color: "#888888",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(100)
-      .setVisible(false);
+      .setDepth(102);
 
     // --- Consumable slots (below equipment slots, same size as regular slots) ---
     this.consumableGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
@@ -548,7 +546,6 @@ export class HUD {
     const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
     const zoneFontSize = `${Math.round(18 * S)}px`;
     const countFontSize = `${Math.round(14 * S)}px`;
-    const hintFontSize = `${Math.round(11 * S)}px`;
 
     // Update panel background
     this.panelBg.clear();
@@ -563,7 +560,6 @@ export class HUD {
     this.lvlText.setFontSize(barFontSize);
     this.zoneText.setFontSize(zoneFontSize);
     this.playerCountText.setFontSize(countFontSize);
-    this.qHintText.setFontSize(hintFontSize);
 
     // Update consumable slot positions
     const consRowW = 3 * this.slotSize + 2 * this.iconGap;
@@ -723,7 +719,9 @@ export class HUD {
     zone: string,
     healthPots: number = 0,
     manaPots: number = 0,
-    portalGems: number = 0
+    portalGems: number = 0,
+    dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
+    dungeonMap: DungeonMapData | null = null
   ): void {
     // Compute hpRegen from equipment
     const equipment = this.inventoryUI.getEquipment();
@@ -736,11 +734,9 @@ export class HUD {
     if (zone === "nexus") {
       this.zoneText.setText("Nexus (Safe Zone)");
       this.zoneText.setColor("#44aa66");
-      this.qHintText.setVisible(false);
     } else if (isVaultZone(zone)) {
       this.zoneText.setText("Vault");
       this.zoneText.setColor("#ddaa55");
-      this.qHintText.setVisible(true);
     } else if (isDungeonZone(zone)) {
       const dungeonType = getDungeonTypeFromZone(zone);
       const dungeonVisual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
@@ -748,7 +744,6 @@ export class HUD {
       this.zoneText.setText(dungeonName);
       const color = dungeonType === 0 ? "#ff4400" : "#6600cc";
       this.zoneText.setColor(color);
-      this.qHintText.setVisible(true);
     } else {
       const mapData = getRealmMap();
       if (mapData) {
@@ -759,13 +754,9 @@ export class HUD {
         this.zoneText.setText("Hostile");
       }
       this.zoneText.setColor("#e94560");
-      this.qHintText.setVisible(true);
     }
     this.zoneText.setX(this.scene.scale.width / 2);
-    this.qHintText.setX(this.scene.scale.width / 2);
     this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
-    const mmPad = Math.round(16 * this.S);
-    this.playerCountText.setX(this.scene.scale.width - mmPad - this.mmWidth / 2);
 
     // Update consumable slot display
     const newConsumables: [number, number, number] = [healthPots, manaPots, portalGems];
@@ -779,7 +770,7 @@ export class HUD {
     }
 
     // Draw minimap
-    this.drawMinimap(localX, localY, players, enemies, zone);
+    this.drawMinimap(localX, localY, players, enemies, zone, dungeonPortals, dungeonMap);
   }
 
   private invalidateMinimapCache(): void {
@@ -958,14 +949,16 @@ export class HUD {
     localY: number,
     players: Map<string, PlayerSprite>,
     enemies: Map<string, EnemySprite>,
-    zone: string
+    zone: string,
+    dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
+    dungeonMap: DungeonMapData | null = null
   ): void {
     const zoneDims = getZoneDimensions(zone);
     const mapW = zoneDims.width;
     const mapH = zoneDims.height;
 
     // Compute visible region based on zoom
-    const zoom = zone === "nexus" ? 1 : this.minimapZoom;
+    const zoom = zone === "nexus" || isVaultZone(zone) ? 1 : this.minimapZoom;
     const visibleW = mapW / zoom;
     const visibleH = mapH / zoom;
     const viewX = Math.max(0, Math.min(localX - visibleW / 2, mapW - visibleW));
@@ -1010,10 +1003,24 @@ export class HUD {
         }
       }
       this.minimapBiomeGraphics.setVisible(true);
-    } else if (zone === "nexus") {
+    } else if (zone === "nexus" || isVaultZone(zone)) {
       if (!canUseCache) {
         this.minimapBiomeGraphics.clear();
-        this.renderMinimapNexus(mmX, mmY, viewX, viewY, visibleW, visibleH);
+        const tileMap = zone === "nexus" ? generateNexusMap() : generateVaultMap();
+        this.renderMinimapTiles(tileMap, mmX, mmY, viewX, viewY, visibleW, visibleH);
+        if (zoom === 1) {
+          this.minimapBiomeCached = true;
+          this.minimapBiomeCachedZone = zone;
+        }
+      }
+      this.minimapBiomeGraphics.setVisible(true);
+    } else if (isDungeonZone(zone) && dungeonMap) {
+      if (!canUseCache) {
+        this.minimapBiomeGraphics.clear();
+        const dungeonType = getDungeonTypeFromZone(zone);
+        const visual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
+        const fillColor = visual ? visual.groundFill : 0x2a4a2a;
+        this.renderMinimapTiles(dungeonMap, mmX, mmY, viewX, viewY, visibleW, visibleH, fillColor);
         if (zoom === 1) {
           this.minimapBiomeCached = true;
           this.minimapBiomeCachedZone = zone;
@@ -1052,6 +1059,8 @@ export class HUD {
       this.minimapDots.fillCircle(dx, dy, isLocal ? 3 : 2);
     });
 
+    // Landmark icons
+    this.drawMinimapIcons(mmX, mmY, viewX, viewY, scaleX, scaleY, zone, dungeonPortals);
 
     // Reposition zoom buttons inside bottom-right corner of minimap
     const btnPad = Math.round(3 * this.S);
@@ -1064,10 +1073,13 @@ export class HUD {
       mmY + this.mmHeight - btnPad
     );
 
-    // Hide zoom buttons in nexus (full map always shown)
-    const inNexus = zone === "nexus";
-    this.minimapZoomInBtn.setVisible(!inNexus);
-    this.minimapZoomOutBtn.setVisible(!inNexus);
+    // Reposition player count inside bottom-left corner of minimap
+    this.playerCountText.setPosition(mmX + btnPad, mmY + this.mmHeight - btnPad);
+
+    // Hide zoom buttons in nexus/vault (full map always shown)
+    const hideZoom = zone === "nexus" || isVaultZone(zone);
+    this.minimapZoomInBtn.setVisible(!hideZoom);
+    this.minimapZoomOutBtn.setVisible(!hideZoom);
   }
 
   private renderMinimapBiomes(
@@ -1135,15 +1147,16 @@ export class HUD {
     return true;
   }
 
-  private renderMinimapNexus(
+  private renderMinimapTiles(
+    mapData: { tiles: Uint8Array; width: number; height: number },
     mmX: number,
     mmY: number,
     viewX: number,
     viewY: number,
     viewW: number,
-    viewH: number
+    viewH: number,
+    fillColor: number = 0x2a4a2a
   ): void {
-    const mapData = generateNexusMap();
     const { tiles, width, height } = mapData;
     const ts = TILE_SIZE;
     const scaleX = this.mmWidth / viewW;
@@ -1165,10 +1178,106 @@ export class HUD {
         const sw = ts * scaleX;
         const sh = ts * scaleY;
 
-        this.minimapBiomeGraphics.fillStyle(0x2a4a2a, 0.9);
+        this.minimapBiomeGraphics.fillStyle(fillColor, 0.9);
         this.minimapBiomeGraphics.fillRect(sx, sy, Math.ceil(sw), Math.ceil(sh));
       }
     }
+  }
+
+  /** Draw landmark icons on the minimap */
+  private drawMinimapIcons(
+    mmX: number, mmY: number,
+    viewX: number, viewY: number,
+    scaleX: number, scaleY: number,
+    zone: string,
+    dungeonPortals: Array<{ x: number; y: number; portalType: number }>
+  ): void {
+    const g = this.minimapDots;
+    const r = 5; // icon radius in screen pixels
+
+    // Helper to convert world coords to minimap screen coords, returns null if out of bounds
+    const toScreen = (wx: number, wy: number): { sx: number; sy: number } | null => {
+      const sx = mmX + (wx - viewX) * scaleX;
+      const sy = mmY + (wy - viewY) * scaleY;
+      if (sx < mmX - r || sx > mmX + this.mmWidth + r || sy < mmY - r || sy > mmY + this.mmHeight + r) return null;
+      return { sx, sy };
+    };
+
+    if (zone === "nexus") {
+      // Realm portals (purple)
+      for (const [px, py] of [[REALM_PORTAL_1_X, REALM_PORTAL_1_Y], [REALM_PORTAL_2_X, REALM_PORTAL_2_Y]]) {
+        const p = toScreen(px, py);
+        if (p) this.drawMinimapPortalIcon(g, p.sx, p.sy, 0xaa66ff, r);
+      }
+
+      // Vault portal (gold)
+      const vp = toScreen(VAULT_PORTAL_X, VAULT_PORTAL_Y);
+      if (vp) this.drawMinimapPortalIcon(g, vp.sx, vp.sy, 0xddaa55, r);
+
+      // Crafting table (anvil)
+      const ct = toScreen(CRAFTING_TABLE_X, CRAFTING_TABLE_Y);
+      if (ct) this.drawMinimapCraftingIcon(g, ct.sx, ct.sy, r);
+    } else if (isVaultZone(zone)) {
+      // Vault chest
+      const vc = toScreen(VAULT_CHEST_X, VAULT_CHEST_Y);
+      if (vc) this.drawMinimapChestIcon(g, vc.sx, vc.sy, r);
+
+      // Return portal (blue)
+      const rp = toScreen(VAULT_RETURN_PORTAL_X, VAULT_RETURN_PORTAL_Y);
+      if (rp) this.drawMinimapPortalIcon(g, rp.sx, rp.sy, 0x4488ff, r);
+    }
+
+    // Dungeon portals (hostile zones only, visible when zoomed in)
+    if (isHostileZone(zone) && this.minimapZoom >= 2) {
+      for (const dp of dungeonPortals) {
+        const p = toScreen(dp.x, dp.y);
+        if (!p) continue;
+        let color = 0xffffff;
+        if (dp.portalType === PortalType.InfernalPitEntrance) color = 0xff4400;
+        else if (dp.portalType === PortalType.VoidSanctumEntrance) color = 0x6600cc;
+        else if (dp.portalType === PortalType.DungeonExit) color = 0x44ff44;
+        this.drawMinimapPortalIcon(g, p.sx, p.sy, color, r);
+      }
+    }
+  }
+
+  /** Portal icon: outer ring + filled center dot */
+  private drawMinimapPortalIcon(
+    g: Phaser.GameObjects.Graphics, sx: number, sy: number, color: number, r: number
+  ): void {
+    g.lineStyle(1.5, color, 0.9);
+    g.strokeCircle(sx, sy, r);
+    g.fillStyle(color, 0.8);
+    g.fillCircle(sx, sy, r * 0.4);
+  }
+
+  /** Crafting table icon: gold rectangle with circle on top (anvil) */
+  private drawMinimapCraftingIcon(
+    g: Phaser.GameObjects.Graphics, sx: number, sy: number, r: number
+  ): void {
+    const w = r * 1.6;
+    const h = r * 1.2;
+    g.fillStyle(0xddaa55, 0.85);
+    g.fillRect(sx - w / 2, sy - h / 2 + 1, w, h);
+    g.lineStyle(1, 0xaa8844, 0.9);
+    g.strokeRect(sx - w / 2, sy - h / 2 + 1, w, h);
+    g.fillStyle(0xffcc66, 0.9);
+    g.fillCircle(sx, sy - h / 2 - 1, r * 0.35);
+  }
+
+  /** Vault chest icon: brown box with gold clasp */
+  private drawMinimapChestIcon(
+    g: Phaser.GameObjects.Graphics, sx: number, sy: number, r: number
+  ): void {
+    const w = r * 1.6;
+    const h = r * 1.2;
+    g.fillStyle(0x553311, 0.85);
+    g.fillRect(sx - w / 2, sy - h / 2, w, h);
+    g.lineStyle(1, 0x886633, 0.9);
+    g.strokeRect(sx - w / 2, sy - h / 2, w, h);
+    // Clasp
+    g.fillStyle(0xddaa55, 0.9);
+    g.fillCircle(sx, sy, r * 0.3);
   }
 
   /** Returns true if coordinates are over the unified HUD panel or loot bag */

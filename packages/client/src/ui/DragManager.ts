@@ -210,7 +210,8 @@ export class DragManager {
 
   private createGhost(item: ItemInstanceData): void {
     const S = getUIScale();
-    const ghostSize = Math.round(36 * S);
+    const slotSize = Math.round(36 * S);
+    const iconSize = slotSize * 0.55;
 
     this.ghostGraphics = this.scene.add
       .graphics()
@@ -218,27 +219,16 @@ export class DragManager {
       .setDepth(500)
       .setAlpha(0.8);
 
-    this.ghostGraphics.fillStyle(0x444444, 0.6);
-    this.ghostGraphics.fillRect(-ghostSize / 2, -ghostSize / 2, ghostSize, ghostSize);
-
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
     const color = getItemColor(item);
-    const iconSize = ghostSize * 0.55;
-    drawItemIcon(this.ghostGraphics, 0, -ghostSize * 0.05, iconSize, category, subtype, color);
+    drawItemIcon(this.ghostGraphics, 0, -slotSize * 0.05, iconSize, category, subtype, color);
 
-    // Border color: use slot color for consumables, tier-based for others
-    const isConsumable = category === ItemCategory.Consumable;
-    const consumableColors = [0xcc3333, 0x4466cc, 0xaa44ff];
-    const borderColor = isConsumable ? consumableColors[subtype] ?? 0x666666 : getSlotBorderColor(item.isUT ? 13 : item.instanceTier);
-    this.ghostGraphics.lineStyle(2, borderColor, 1);
-    this.ghostGraphics.strokeRect(-ghostSize / 2, -ghostSize / 2, ghostSize, ghostSize);
-
-    // Tier label: skip for consumables/orbs
-    if (category !== ItemCategory.Consumable && category !== ItemCategory.CraftingOrb) {
-      const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
+    // Stack quantity label for stackable items only
+    if (isStackableItem(item.baseItemId)) {
+      const qty = item.quantity || 1;
       this.ghostTierText = this.scene.add
-        .text(0, 0, tierLabel, {
+        .text(0, 0, `x${qty}`, {
           fontSize: `${Math.round(7 * S)}px`,
           color: "#ffffff",
           fontFamily: "monospace",

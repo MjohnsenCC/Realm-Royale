@@ -1637,7 +1637,9 @@ export class GameRoom extends Room<GameState> {
           ? this.dungeonSystem.getDungeonMap(player.zone)
           : player.zone === "nexus"
             ? this.nexusMap
-            : undefined;
+            : isVaultZone(player.zone)
+              ? generateVaultMap()
+              : undefined;
 
         for (const input of player.pendingInputs) {
           // Terrain speed modifiers in hostile zone
