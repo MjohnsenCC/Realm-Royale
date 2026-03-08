@@ -5,7 +5,6 @@ import {
   getItemCategory,
   getItemSubtype,
   getItemInstanceName,
-  getItemColor,
   ItemCategory,
   StatType,
   STAT_NAMES,
@@ -16,14 +15,15 @@ import {
   getScaledWeaponStatsRange,
   getScaledAbilityStatsRange,
   ORB_DEFINITIONS,
-  TIER_COLORS,
+  ORB_MAX_STACK,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
 import { getSlotBorderColor } from "./ItemIcons";
 
-const BASE_TOOLTIP_WIDTH = 180;
+const BASE_TOOLTIP_WIDTH = 220;
 const BASE_TOOLTIP_PADDING = 8;
+const BASE_BANNER_HEIGHT = 22;
 
 export class ItemTooltip {
   private scene: Phaser.Scene;
@@ -46,6 +46,7 @@ export class ItemTooltip {
   private S: number;
   private tooltipWidth: number;
   private tooltipPadding: number;
+  private bannerHeight: number;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -54,10 +55,12 @@ export class ItemTooltip {
     const S = this.S;
     this.tooltipWidth = Math.round(BASE_TOOLTIP_WIDTH * S);
     this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
+    this.bannerHeight = Math.round(BASE_BANNER_HEIGHT * S);
 
     const nameFontSize = `${Math.round(12 * S)}px`;
     const tierFontSize = `${Math.round(10 * S)}px`;
     const statsFontSize = `${Math.round(10 * S)}px`;
+    const tieredStatFontSize = `${Math.round(9 * S)}px`;
     const descFontSize = `${Math.round(9 * S)}px`;
     const cx = this.tooltipWidth / 2;
     const wrapWidth = this.tooltipWidth - this.tooltipPadding * 2;
@@ -72,18 +75,18 @@ export class ItemTooltip {
     this.container.add(this.bg);
 
     this.nameText = scene.add
-      .text(cx, this.tooltipPadding, "", {
+      .text(cx, this.bannerHeight / 2, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
         fontStyle: "bold",
         align: "center",
       })
-      .setOrigin(0.5, 0)
+      .setOrigin(0.5, 0.5)
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.nameText);
 
-    const tierY = this.tooltipPadding + Math.round(16 * S);
+    const tierY = this.bannerHeight + Math.round(4 * S);
     this.tierText = scene.add
       .text(cx, tierY, "", {
         fontSize: tierFontSize,
@@ -108,9 +111,9 @@ export class ItemTooltip {
     this.container.add(this.statsText);
 
     this.dividerAboveLockedText = scene.add
-      .text(cx, 0, "────────────", {
-        fontSize: statsFontSize,
-        color: "#ffffff",
+      .text(cx, 0, "────────────────", {
+        fontSize: descFontSize,
+        color: "#555566",
         fontFamily: "monospace",
         align: "center",
       })
@@ -119,10 +122,10 @@ export class ItemTooltip {
 
     this.lockedStatsText = scene.add
       .text(cx, statsY, "", {
-        fontSize: statsFontSize,
+        fontSize: tieredStatFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -130,9 +133,9 @@ export class ItemTooltip {
     this.container.add(this.lockedStatsText);
 
     this.dividerBelowLockedText = scene.add
-      .text(cx, 0, "────────────", {
-        fontSize: statsFontSize,
-        color: "#ffffff",
+      .text(cx, 0, "────────────────", {
+        fontSize: descFontSize,
+        color: "#555566",
         fontFamily: "monospace",
         align: "center",
       })
@@ -141,10 +144,10 @@ export class ItemTooltip {
 
     this.openStatsText = scene.add
       .text(cx, statsY, "", {
-        fontSize: statsFontSize,
-        color: "#88ccff",
+        fontSize: tieredStatFontSize,
+        color: "#4488ff",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -153,10 +156,10 @@ export class ItemTooltip {
 
     this.hiddenStatsText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
+        fontSize: tieredStatFontSize,
         color: "#aaffaa",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -171,7 +174,8 @@ export class ItemTooltip {
         fontStyle: "italic",
         align: "center",
       })
-      .setOrigin(0.5, 0);
+      .setOrigin(0.5, 0)
+      .setWordWrapWidth(wrapWidth);
     this.container.add(this.shiftHintText);
 
     // Pool of tier label + stat line pairs for detailed mode
@@ -190,7 +194,7 @@ export class ItemTooltip {
 
       const statLabel = scene.add
         .text(cx, 0, "", {
-          fontSize: statsFontSize,
+          fontSize: tieredStatFontSize,
           color: "#ffffff",
           fontFamily: "monospace",
           align: "center",
@@ -226,7 +230,7 @@ export class ItemTooltip {
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
     const S = this.S;
-    const statsStartY = this.tooltipPadding + Math.round(32 * S);
+    const tierY = this.bannerHeight + Math.round(4 * S);
 
     // For UT items and consumables, fall back to static ITEM_DEFS display
     if (item.isUT || category === ItemCategory.Consumable) {
@@ -241,13 +245,22 @@ export class ItemTooltip {
     }
 
     // --- Tiered item display ---
+    // Reset reusable text state
+    this.descText.setColor("#888899");
+    this.statsText.setColor("#aaffaa");
+
     const itemName = getItemInstanceName(item);
     this.nameText.setText(itemName);
     this.nameText.setColor("#ffffff");
+    this.nameText.setY(this.bannerHeight / 2);
 
     const tierLabel = `T${item.instanceTier} ${getCategoryName(category)}`;
     this.tierText.setText(tierLabel);
     this.tierText.setColor("#aaaaaa");
+    this.tierText.setY(tierY);
+
+    // Reduced gap below tier text to compensate for font metrics padding
+    const statsStartY = tierY + this.tierText.height + Math.round(2 * S);
 
     // Clear base stats text (no longer used for tiered items)
     this.statsText.setText("");
@@ -276,8 +289,6 @@ export class ItemTooltip {
         lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
       }
       lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
-      // Range is hidden (shift only)
-      hiddenLines.push(`Range: ${ws.range}`);
     } else if (category === ItemCategory.Ability) {
       const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
       if (shiftHeld && item.lockedStat1Tier > 0) {
@@ -294,10 +305,6 @@ export class ItemTooltip {
         lockedLines.push(`Mana Cost: ${as.manaCost}`);
       }
       lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
-      // Range, cooldown, and piercing are hidden (shift only)
-      hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);
-      hiddenLines.push(`Range: ${as.range}`);
-      if (as.piercing) hiddenLines.push(`Piercing: Yes`);
     } else {
       // Armor and Ring: use rolled locked stat bonuses
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
@@ -368,7 +375,7 @@ export class ItemTooltip {
 
       // Divider above locked stats
       if (lockedLines.length > 0) {
-        this.dividerAboveLockedText.setText("────────────");
+        this.dividerAboveLockedText.setText("────────────────");
         this.dividerAboveLockedText.setY(currentY);
         currentY += this.dividerAboveLockedText.height + 2;
       } else {
@@ -397,7 +404,7 @@ export class ItemTooltip {
 
       // Divider below locked stats
       if (lockedLines.length > 0) {
-        this.dividerBelowLockedText.setText("────────────");
+        this.dividerBelowLockedText.setText("────────────────");
         this.dividerBelowLockedText.setY(currentY);
         currentY += this.dividerBelowLockedText.height + 2;
       } else {
@@ -412,7 +419,7 @@ export class ItemTooltip {
         entry.tier.setVisible(true);
         currentY += entry.tier.height + 1;
         entry.stat.setText(openLines[i]);
-        entry.stat.setColor(openForgeProtected[i] ? "#ffaa00" : "#88ccff");
+        entry.stat.setColor(openForgeProtected[i] ? "#ffaa00" : "#4488ff");
         entry.stat.setY(currentY);
         entry.stat.setVisible(true);
         currentY += entry.stat.height + 2;
@@ -421,7 +428,7 @@ export class ItemTooltip {
     } else {
       // --- Simple mode: use multi-line text objects, no tiers ---
       if (lockedLines.length > 0) {
-        this.dividerAboveLockedText.setText("────────────");
+        this.dividerAboveLockedText.setText("────────────────");
         this.dividerAboveLockedText.setY(currentY);
         currentY += this.dividerAboveLockedText.height + 2;
       } else {
@@ -435,7 +442,7 @@ export class ItemTooltip {
       }
 
       if (lockedLines.length > 0) {
-        this.dividerBelowLockedText.setText("────────────");
+        this.dividerBelowLockedText.setText("────────────────");
         this.dividerBelowLockedText.setY(currentY);
         currentY += this.dividerBelowLockedText.height + 2;
       } else {
@@ -466,15 +473,8 @@ export class ItemTooltip {
       this.hiddenStatsText.setVisible(false);
     }
 
-    // === SHIFT hint ===
-    const hasHiddenContent = hiddenLines.length > 0 || lockedLines.length > 0 || openStatCount > 0;
-    if (!shiftHeld && hasHiddenContent) {
-      this.shiftHintText.setY(currentY + 10);
-      this.shiftHintText.setVisible(true);
-      currentY += 10 + this.shiftHintText.height;
-    } else {
-      this.shiftHintText.setVisible(false);
-    }
+    // Hide shift hint for tiered items
+    this.shiftHintText.setVisible(false);
 
     const statsBottom = currentY + 4;
     this.descText.setY(statsBottom);
@@ -482,7 +482,8 @@ export class ItemTooltip {
 
     const totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
     const borderTier = item.isUT ? 13 : item.instanceTier;
-    this.drawBgAndPosition(totalHeight, getSlotBorderColor(borderTier), screenX, screenY);
+    const bannerColor = item.isUT ? 0xffaa00 : 0x666688;
+    this.drawBgAndPosition(totalHeight, getSlotBorderColor(borderTier), bannerColor, screenX, screenY);
   }
 
   /** Show tooltip for a static item by ID (consumables, UT items). */
@@ -497,22 +498,35 @@ export class ItemTooltip {
       return;
     }
 
+    // Consumables use the same layout as crafting orbs
+    if (def.consumableStats) {
+      this.showConsumable(def, screenX, screenY);
+      return;
+    }
+
     const S = this.S;
-    const statsStartY = this.tooltipPadding + Math.round(32 * S);
+    const tierY = this.bannerHeight + Math.round(4 * S);
+
+    // Reset reusable text state
+    this.descText.setColor("#888899");
+    this.statsText.setColor("#aaffaa");
+    this.shiftHintText.setText("[SHIFT] for more info");
+    this.shiftHintText.setColor("#888888");
+    this.shiftHintText.setFontStyle("italic");
 
     // Name
     this.nameText.setText(def.name);
     this.nameText.setColor("#ffffff");
+    this.nameText.setY(this.bannerHeight / 2);
 
-    // Tier + category
-    if (def.consumableStats) {
-      this.tierText.setText(getCategoryName(def.category));
-      this.tierText.setColor("#aaaaaa");
-    } else {
-      const tierLabel = def.tier === 13 ? "UT" : `T${def.tier}`;
-      this.tierText.setText(`${tierLabel} ${getCategoryName(def.category)}`);
-      this.tierText.setColor(def.tier === 13 ? "#ffaa00" : "#aaaaaa");
-    }
+    // Tier + category (UT items)
+    const tierLabel = def.tier === 13 ? "UT" : `T${def.tier}`;
+    this.tierText.setText(`${tierLabel} ${getCategoryName(def.category)}`);
+    this.tierText.setColor(def.tier === 13 ? "#ffaa00" : "#aaaaaa");
+    this.tierText.setY(tierY);
+
+    // Reduced gap below tier text to compensate for font metrics padding
+    const statsStartY = tierY + this.tierText.height + Math.round(2 * S);
 
     // Stats
     const statsLines: string[] = [];
@@ -548,14 +562,6 @@ export class ItemTooltip {
       if (r.maxHpBonus) statsLines.push(`+${r.maxHpBonus} Max HP`);
       if (r.maxManaBonus) statsLines.push(`+${r.maxManaBonus} Max Mana`);
       if (r.projSpeedBonus) statsLines.push(`+${r.projSpeedBonus} Proj Speed`);
-    } else if (def.consumableStats) {
-      if (def.consumableStats.healAmount) {
-        statsLines.push(`Heals: ${def.consumableStats.healAmount} HP`);
-      }
-      if (def.consumableStats.manaAmount) {
-        statsLines.push(`Restores: ${def.consumableStats.manaAmount} Mana`);
-      }
-      statsLines.push(`Max Stack: ${def.consumableStats.maxStack}`);
     }
     this.statsText.setText(statsLines.join("\n"));
     this.statsText.setY(statsStartY);
@@ -576,7 +582,60 @@ export class ItemTooltip {
     this.descText.setText(def.description);
 
     const totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
-    this.drawBgAndPosition(totalHeight, getSlotBorderColor(def.tier), screenX, screenY);
+    const bannerColor = def.tier === 13 ? 0xffaa00 : 0x666688;
+    this.drawBgAndPosition(totalHeight, getSlotBorderColor(def.tier), bannerColor, screenX, screenY);
+  }
+
+  private showConsumable(def: (typeof ITEM_DEFS)[number], screenX: number, screenY: number): void {
+    const S = this.S;
+    const tierY = this.bannerHeight + Math.round(4 * S);
+
+    // Name (white — banner provides color)
+    this.nameText.setText(def.name);
+    this.nameText.setColor("#ffffff");
+    this.nameText.setY(this.bannerHeight / 2);
+
+    // No category text
+    this.tierText.setText("");
+    this.tierText.setY(tierY);
+
+    // Stack size
+    this.statsText.setText(`Stack Size: ${def.consumableStats!.maxStack}`);
+    this.statsText.setColor("#aaaaaa");
+    this.statsText.setY(tierY);
+
+    // Clear tiered-only text elements
+    this.dividerAboveLockedText.setText("");
+    this.lockedStatsText.setText("");
+    this.dividerBelowLockedText.setText("");
+    this.openStatsText.setText("");
+    this.hiddenStatsText.setText("");
+    this.hiddenStatsText.setVisible(false);
+    for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
+
+    // Description (blue)
+    const statsBottom = tierY + this.statsText.height + Math.round(4 * S);
+    this.descText.setColor("#4488ff");
+    this.descText.setY(statsBottom);
+    this.descText.setText(def.description);
+
+    // Usage hint (repurpose shiftHintText)
+    let totalHeight: number;
+    if (def.usageHint) {
+      const descBottom = statsBottom + this.descText.height + Math.round(4 * S);
+      this.shiftHintText.setText(def.usageHint);
+      this.shiftHintText.setColor("#777777");
+      this.shiftHintText.setFontStyle("italic");
+      this.shiftHintText.setY(descBottom);
+      this.shiftHintText.setVisible(true);
+      totalHeight = descBottom + this.shiftHintText.height + this.tooltipPadding;
+    } else {
+      this.shiftHintText.setVisible(false);
+      totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
+    }
+
+    const bannerColor = def.color;
+    this.drawBgAndPosition(totalHeight, bannerColor, bannerColor, screenX, screenY);
   }
 
   showCraftingOrb(orbType: number, screenX: number, screenY: number): void {
@@ -587,17 +646,21 @@ export class ItemTooltip {
     }
 
     const S = this.S;
-    const statsStartY = this.tooltipPadding + Math.round(32 * S);
+    const tierY = this.bannerHeight + Math.round(4 * S);
 
+    // Name (white — banner provides the color)
     this.nameText.setText(orbDef.name);
-    const colorStr = `#${orbDef.color.toString(16).padStart(6, "0")}`;
-    this.nameText.setColor(colorStr);
+    this.nameText.setColor("#ffffff");
+    this.nameText.setY(this.bannerHeight / 2);
 
-    this.tierText.setText("Crafting Orb");
-    this.tierText.setColor("#aaaaaa");
+    // No category text
+    this.tierText.setText("");
+    this.tierText.setY(tierY);
 
-    this.statsText.setText("");
-    this.statsText.setY(statsStartY);
+    // Stack size
+    this.statsText.setText(`Stack Size: ${ORB_MAX_STACK}`);
+    this.statsText.setColor("#aaaaaa");
+    this.statsText.setY(tierY);
 
     // Clear tiered-only text elements
     this.dividerAboveLockedText.setText("");
@@ -606,23 +669,45 @@ export class ItemTooltip {
     this.openStatsText.setText("");
     this.hiddenStatsText.setText("");
     this.hiddenStatsText.setVisible(false);
-    this.shiftHintText.setVisible(false);
     for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
 
-    const statsBottom = statsStartY + this.statsText.height + 4;
+    // Description (blue)
+    const statsBottom = tierY + this.statsText.height + Math.round(4 * S);
+    this.descText.setColor("#4488ff");
     this.descText.setY(statsBottom);
     this.descText.setText(orbDef.description);
 
-    const totalHeight = statsBottom + this.descText.height + this.tooltipPadding;
-    this.drawBgAndPosition(totalHeight, orbDef.color, screenX, screenY);
+    // Usage hint (repurpose shiftHintText)
+    const descBottom = statsBottom + this.descText.height + Math.round(4 * S);
+    this.shiftHintText.setText(orbDef.usageHint);
+    this.shiftHintText.setColor("#777777");
+    this.shiftHintText.setFontStyle("italic");
+    this.shiftHintText.setY(descBottom);
+    this.shiftHintText.setVisible(true);
+
+    const totalHeight = descBottom + this.shiftHintText.height + this.tooltipPadding;
+    this.drawBgAndPosition(totalHeight, orbDef.color, orbDef.color, screenX, screenY);
   }
 
-  private drawBgAndPosition(totalHeight: number, borderColor: number, screenX: number, screenY: number): void {
+  private drawBgAndPosition(totalHeight: number, borderColor: number, bannerColor: number, screenX: number, screenY: number): void {
     const S = this.S;
 
     this.bg.clear();
     this.bg.fillStyle(0x111122, 0.95);
     this.bg.fillRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
+
+    // Draw colored banner at top
+    this.bg.fillStyle(bannerColor, 0.35);
+    this.bg.fillRoundedRect(0, 0, this.tooltipWidth, this.bannerHeight, { tl: 4, tr: 4, bl: 0, br: 0 });
+
+    // Subtle separator line below banner
+    this.bg.lineStyle(1, bannerColor, 0.5);
+    this.bg.beginPath();
+    this.bg.moveTo(0, this.bannerHeight);
+    this.bg.lineTo(this.tooltipWidth, this.bannerHeight);
+    this.bg.strokePath();
+
+    // Border
     this.bg.lineStyle(1, borderColor, 0.8);
     this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
 
@@ -649,10 +734,12 @@ export class ItemTooltip {
     const S = this.S;
     this.tooltipWidth = Math.round(BASE_TOOLTIP_WIDTH * S);
     this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
+    this.bannerHeight = Math.round(BASE_BANNER_HEIGHT * S);
 
     const nameFontSize = `${Math.round(12 * S)}px`;
     const tierFontSize = `${Math.round(10 * S)}px`;
     const statsFontSize = `${Math.round(10 * S)}px`;
+    const tieredStatFontSize = `${Math.round(9 * S)}px`;
     const descFontSize = `${Math.round(9 * S)}px`;
     const cx = this.tooltipWidth / 2;
     const wrapWidth = this.tooltipWidth - this.tooltipPadding * 2;
@@ -669,20 +756,21 @@ export class ItemTooltip {
     this.statsText.setWordWrapWidth(wrapWidth);
 
     this.dividerAboveLockedText.setX(cx);
-    this.dividerAboveLockedText.setFontSize(statsFontSize);
+    this.dividerAboveLockedText.setFontSize(descFontSize);
     this.lockedStatsText.setX(cx);
-    this.lockedStatsText.setFontSize(statsFontSize);
+    this.lockedStatsText.setFontSize(tieredStatFontSize);
     this.lockedStatsText.setWordWrapWidth(wrapWidth);
     this.dividerBelowLockedText.setX(cx);
-    this.dividerBelowLockedText.setFontSize(statsFontSize);
+    this.dividerBelowLockedText.setFontSize(descFontSize);
     this.openStatsText.setX(cx);
-    this.openStatsText.setFontSize(statsFontSize);
+    this.openStatsText.setFontSize(tieredStatFontSize);
     this.openStatsText.setWordWrapWidth(wrapWidth);
     this.hiddenStatsText.setX(cx);
-    this.hiddenStatsText.setFontSize(statsFontSize);
+    this.hiddenStatsText.setFontSize(tieredStatFontSize);
     this.hiddenStatsText.setWordWrapWidth(wrapWidth);
     this.shiftHintText.setX(cx);
     this.shiftHintText.setFontSize(`${Math.round(9 * S)}px`);
+    this.shiftHintText.setWordWrapWidth(wrapWidth);
 
     this.descText.setX(cx);
     this.descText.setFontSize(descFontSize);
@@ -693,7 +781,7 @@ export class ItemTooltip {
       entry.tier.setX(cx);
       entry.tier.setFontSize(tierLabelFontSize);
       entry.stat.setX(cx);
-      entry.stat.setFontSize(statsFontSize);
+      entry.stat.setFontSize(tieredStatFontSize);
       entry.stat.setWordWrapWidth(wrapWidth);
     }
 

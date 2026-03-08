@@ -15,12 +15,11 @@ import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import type { DragManager } from "./DragManager";
 
-const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
 const COLS = 4;
 const ROWS = 2;
 const BASE_PADDING = 8;
-const BASE_HEADER = 18;
+const BASE_HEADER = 24;
 
 const BAG_HEADER_COLORS: Record<number, string> = {
   [BagRarity.Green]: "#44aa44",
@@ -83,7 +82,7 @@ export class LootBagUI {
   private anchorX: number;
   private anchorY: number;
 
-  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invSectionX: number, unifiedPanelY: number) {
+  constructor(scene: Phaser.Scene, tooltip: ItemTooltip, invSectionX: number, unifiedPanelY: number, hudSlotSize: number) {
     this.scene = scene;
     this.tooltip = tooltip;
 
@@ -95,7 +94,7 @@ export class LootBagUI {
 
     this.S = getUIScale();
     const S = this.S;
-    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
+    this.slotSize = hudSlotSize;
     this.slotGap = Math.round(BASE_SLOT_GAP * S);
     this.padding = Math.round(BASE_PADDING * S);
     this.header = Math.round(BASE_HEADER * S);
@@ -105,7 +104,7 @@ export class LootBagUI {
     this.anchorX = invSectionX - this.padding;
     this.anchorY = unifiedPanelY - this.panelHeight - Math.round(8 * S);
 
-    const headerFontSize = `${Math.round(12 * S)}px`;
+    const headerFontSize = `${Math.round(11 * S)}px`;
     const slotFontSize = `${Math.round(8 * S)}px`;
     const tierFontSize = `${Math.round(7 * S)}px`;
 
@@ -119,7 +118,9 @@ export class LootBagUI {
         fontSize: headerFontSize,
         color: "#44aa44",
         fontFamily: "monospace",
-      });
+        fontStyle: "bold",
+      })
+      .setOrigin(0.5, 0.5);
     this.container.add(this.headerText);
 
     this.slotGraphics = scene.add.graphics();
@@ -289,11 +290,23 @@ export class LootBagUI {
     this.panelBg.lineStyle(2, borderColor, 1);
     this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
 
+    // Header decorative background
+    const headerAreaH = this.header;
+    this.panelBg.fillStyle(0x1a1a33, 0.8);
+    this.panelBg.fillRect(panelX + 2, panelY + 2, this.panelWidth - 4, headerAreaH);
+    // Separator line in bag color
+    const borderColor2 = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
+    this.panelBg.lineStyle(1, borderColor2, 0.6);
+    this.panelBg.lineBetween(
+      panelX + this.padding, panelY + headerAreaH,
+      panelX + this.panelWidth - this.padding, panelY + headerAreaH
+    );
+
     const headerColor = BAG_HEADER_COLORS[this.currentBagRarity] ?? "#44aa44";
     const headerName = BAG_HEADER_NAMES[this.currentBagRarity] ?? "Loot Bag";
     this.headerText.setText(headerName);
     this.headerText.setColor(headerColor);
-    this.headerText.setPosition(panelX + this.padding, panelY + 4);
+    this.headerText.setPosition(panelX + this.panelWidth / 2, panelY + headerAreaH / 2);
 
     this.slotGraphics.clear();
     for (let i = 0; i < BAG_SIZE; i++) {
@@ -414,10 +427,10 @@ export class LootBagUI {
     return bounds;
   }
 
-  relayout(invSectionX: number, unifiedPanelY: number): void {
+  relayout(invSectionX: number, unifiedPanelY: number, hudSlotSize: number): void {
     this.S = getUIScale();
     const S = this.S;
-    this.slotSize = Math.round(BASE_SLOT_SIZE * S);
+    this.slotSize = hudSlotSize;
     this.slotGap = Math.round(BASE_SLOT_GAP * S);
     this.padding = Math.round(BASE_PADDING * S);
     this.header = Math.round(BASE_HEADER * S);
@@ -429,7 +442,7 @@ export class LootBagUI {
 
     const slotFontSize = `${Math.round(8 * S)}px`;
     const tierFontSize = `${Math.round(7 * S)}px`;
-    const headerFontSize = `${Math.round(12 * S)}px`;
+    const headerFontSize = `${Math.round(11 * S)}px`;
 
     this.headerText.setFontSize(headerFontSize);
 

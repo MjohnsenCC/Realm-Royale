@@ -47,6 +47,7 @@ import {
   MANA_POT_ID,
   PORTAL_GEM_ID,
   createEmptyItemInstance,
+  isBossEnemy,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData, DungeonMapData } from "@rotmg-lite/shared";
 
@@ -129,6 +130,8 @@ export class HUD {
   private minimapZoom: number;
   private minimapZoomInBtn!: Phaser.GameObjects.Text;
   private minimapZoomOutBtn!: Phaser.GameObjects.Text;
+  private exploredTiles: Uint8Array | null = null;
+  private exploredDungeonZone: string = "";
 
   // Inventory & Loot Bag & Vault UI
   inventoryUI: InventoryUI;
@@ -425,7 +428,7 @@ export class HUD {
     });
 
     // --- Loot Bag UI (above unified panel, aligned with inventory section) ---
-    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), this.invX, this.panelY);
+    this.lootBagUI = new LootBagUI(scene, this.inventoryUI.getTooltip(), this.invX, this.panelY, this.slotSize);
 
     // --- Vault UI (left panel, full height) ---
     this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip(), this.slotSize);
@@ -612,7 +615,7 @@ export class HUD {
       slotGap: this.slotGap,
     });
 
-    this.lootBagUI.relayout(this.invX, this.panelY);
+    this.lootBagUI.relayout(this.invX, this.panelY, this.slotSize);
     this.vaultUI.relayout(this.slotSize);
 
     this.drawConsumableSlots();
@@ -959,10 +962,24 @@ export class HUD {
 
     // Compute visible region based on zoom
     const zoom = zone === "nexus" || isVaultZone(zone) ? 1 : this.minimapZoom;
-    const visibleW = mapW / zoom;
-    const visibleH = mapH / zoom;
-    const viewX = Math.max(0, Math.min(localX - visibleW / 2, mapW - visibleW));
-    const viewY = Math.max(0, Math.min(localY - visibleH / 2, mapH - visibleH));
+    let visibleW = mapW / zoom;
+    let visibleH = mapH / zoom;
+    let viewX = Math.max(0, Math.min(localX - visibleW / 2, mapW - visibleW));
+    let viewY = Math.max(0, Math.min(localY - visibleH / 2, mapH - visibleH));
+
+    // For non-square maps (dungeons), use uniform scaling to prevent stretching
+    if (isDungeonZone(zone) && visibleW !== visibleH) {
+      const maxVisible = Math.max(visibleW, visibleH);
+      // Center the shorter axis within the square minimap
+      viewX = (mapW - maxVisible) / 2;
+      viewY = (mapH - maxVisible) / 2;
+      if (zoom > 1) {
+        viewX = localX - maxVisible / 2;
+        viewY = localY - maxVisible / 2;
+      }
+      visibleW = maxVisible;
+      visibleH = maxVisible;
+    }
 
     const scaleX = this.mmWidth / visibleW;
     const scaleY = this.mmHeight / visibleH;
@@ -985,6 +1002,34 @@ export class HUD {
     this.minimapBg.fillRect(mmX, mmY, this.mmWidth, this.mmHeight);
     this.minimapBg.lineStyle(1, 0x444466, 1);
     this.minimapBg.strokeRect(mmX, mmY, this.mmWidth, this.mmHeight);
+
+    // Update dungeon fog of war — reveal tiles near the player
+    const FOG_REVEAL_RADIUS = 20;
+    if (isDungeonZone(zone) && dungeonMap) {
+      if (this.exploredDungeonZone !== zone) {
+        this.exploredTiles = new Uint8Array(dungeonMap.width * dungeonMap.height);
+        this.exploredDungeonZone = zone;
+      }
+      const playerTX = Math.floor(localX / TILE_SIZE);
+      const playerTY = Math.floor(localY / TILE_SIZE);
+      const r = FOG_REVEAL_RADIUS;
+      const rSq = r * r;
+      let revealed = false;
+      for (let dy = -r; dy <= r; dy++) {
+        for (let dx = -r; dx <= r; dx++) {
+          if (dx * dx + dy * dy > rSq) continue;
+          const tx = playerTX + dx;
+          const ty = playerTY + dy;
+          if (tx < 0 || tx >= dungeonMap.width || ty < 0 || ty >= dungeonMap.height) continue;
+          const idx = ty * dungeonMap.width + tx;
+          if (!this.exploredTiles![idx]) {
+            this.exploredTiles![idx] = 1;
+            revealed = true;
+          }
+        }
+      }
+      if (revealed) this.invalidateMinimapCache();
+    }
 
     // Biome/terrain rendering (cached only at zoom 1 for the same zone)
     const canUseCache =
@@ -1020,7 +1065,7 @@ export class HUD {
         const dungeonType = getDungeonTypeFromZone(zone);
         const visual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
         const fillColor = visual ? visual.groundFill : 0x2a4a2a;
-        this.renderMinimapTiles(dungeonMap, mmX, mmY, viewX, viewY, visibleW, visibleH, fillColor);
+        this.renderMinimapTiles(dungeonMap, mmX, mmY, viewX, viewY, visibleW, visibleH, fillColor, this.exploredTiles ?? undefined);
         if (zoom === 1) {
           this.minimapBiomeCached = true;
           this.minimapBiomeCachedZone = zone;
@@ -1034,17 +1079,30 @@ export class HUD {
     // Dots
     this.minimapDots.clear();
 
-    // Enemy dots (red)
-    this.minimapDots.fillStyle(0xcc3333, 0.8);
+    // Enemy dots (red) — hidden under fog of war in dungeons
     const syncRadiusSq = ENEMY_SYNC_RADIUS * ENEMY_SYNC_RADIUS;
+    const hasFog = isDungeonZone(zone) && this.exploredTiles && dungeonMap;
+    const inDungeon = isDungeonZone(zone);
     enemies.forEach((enemy) => {
       const ex = enemy.x - localX;
       const ey = enemy.y - localY;
       if (ex * ex + ey * ey > syncRadiusSq) return;
+      if (hasFog) {
+        const etx = Math.floor(enemy.x / TILE_SIZE);
+        const ety = Math.floor(enemy.y / TILE_SIZE);
+        if (etx >= 0 && etx < dungeonMap!.width && ety >= 0 && ety < dungeonMap!.height) {
+          if (!this.exploredTiles![ety * dungeonMap!.width + etx]) return;
+        }
+      }
       const dx = mmX + (enemy.x - viewX) * scaleX;
       const dy = mmY + (enemy.y - viewY) * scaleY;
       if (dx < mmX || dx > mmX + this.mmWidth || dy < mmY || dy > mmY + this.mmHeight) return;
-      this.minimapDots.fillRect(dx - 1, dy - 1, 3, 3);
+      if (inDungeon && isBossEnemy(enemy.getEnemyType())) {
+        this.drawMinimapStar(this.minimapDots, dx, dy, 5, 0xffcc00);
+      } else {
+        this.minimapDots.fillStyle(0xcc3333, 0.8);
+        this.minimapDots.fillRect(dx - 1, dy - 1, 3, 3);
+      }
     });
 
     // Player dots (only show players in the same zone)
@@ -1155,7 +1213,8 @@ export class HUD {
     viewY: number,
     viewW: number,
     viewH: number,
-    fillColor: number = 0x2a4a2a
+    fillColor: number = 0x2a4a2a,
+    explored?: Uint8Array
   ): void {
     const { tiles, width, height } = mapData;
     const ts = TILE_SIZE;
@@ -1165,6 +1224,7 @@ export class HUD {
     for (let ty = 0; ty < height; ty++) {
       for (let tx = 0; tx < width; tx++) {
         if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
+        if (explored && !explored[ty * width + tx]) continue;
 
         const worldX = tx * ts;
         const worldY = ty * ts;
@@ -1178,8 +1238,15 @@ export class HUD {
         const sw = ts * scaleX;
         const sh = ts * scaleY;
 
+        // Clamp tile rectangle to minimap bounds
+        const left = Math.max(sx, mmX);
+        const top = Math.max(sy, mmY);
+        const right = Math.min(sx + Math.ceil(sw), mmX + this.mmWidth);
+        const bottom = Math.min(sy + Math.ceil(sh), mmY + this.mmHeight);
+        if (left >= right || top >= bottom) continue;
+
         this.minimapBiomeGraphics.fillStyle(fillColor, 0.9);
-        this.minimapBiomeGraphics.fillRect(sx, sy, Math.ceil(sw), Math.ceil(sh));
+        this.minimapBiomeGraphics.fillRect(left, top, right - left, bottom - top);
       }
     }
   }
@@ -1242,6 +1309,24 @@ export class HUD {
   }
 
   /** Portal icon: outer ring + filled center dot */
+  /** Draw a 5-pointed star on the minimap (used for boss enemies) */
+  private drawMinimapStar(
+    g: Phaser.GameObjects.Graphics, cx: number, cy: number, r: number, color: number
+  ): void {
+    g.fillStyle(color, 1);
+    g.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const angle = -Math.PI / 2 + (Math.PI / 5) * i;
+      const dist = i % 2 === 0 ? r : r * 0.4;
+      const px = cx + Math.cos(angle) * dist;
+      const py = cy + Math.sin(angle) * dist;
+      if (i === 0) g.moveTo(px, py);
+      else g.lineTo(px, py);
+    }
+    g.closePath();
+    g.fillPath();
+  }
+
   private drawMinimapPortalIcon(
     g: Phaser.GameObjects.Graphics, sx: number, sy: number, color: number, r: number
   ): void {

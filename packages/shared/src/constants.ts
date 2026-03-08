@@ -142,6 +142,8 @@ export const VAULT_PORTAL_X = 7 * TILE_SIZE; // 280 — nexus west room center X
 export const VAULT_PORTAL_Y = 25.5 * TILE_SIZE; // 1020 — nexus west room center Y
 export const VAULT_RETURN_PORTAL_X = 10 * TILE_SIZE; // 400 — center bottom
 export const VAULT_RETURN_PORTAL_Y = 16 * TILE_SIZE; // 640 — bottom of room
+export const VAULT_CRAFTING_TABLE_X = 14 * TILE_SIZE; // 560 — right side of vault room
+export const VAULT_CRAFTING_TABLE_Y = 6 * TILE_SIZE; // 240 — upper area (same height as chest)
 
 // Consumables
 export const HEALTH_POT_MAX_STACK = 6;

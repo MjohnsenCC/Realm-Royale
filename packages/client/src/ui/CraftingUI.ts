@@ -119,6 +119,8 @@ export class CraftingUI {
     const nameFontSize = `${Math.round(12 * S)}px`;
     const tierFontSize = `${Math.round(10 * S)}px`;
     const statsFontSize = `${Math.round(10 * S)}px`;
+    const tieredStatFontSize = `${Math.round(9 * S)}px`;
+    const dividerFontSize = `${Math.round(9 * S)}px`;
     const smallFontSize = `${Math.round(8 * S)}px`;
 
     // --- Panel container (non-interactive visuals only) ---
@@ -200,8 +202,8 @@ export class CraftingUI {
     // Divider above locked stats
     this.dividerAboveLockedText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
-        color: "#444466",
+        fontSize: dividerFontSize,
+        color: "#555566",
         fontFamily: "monospace",
         align: "center",
       })
@@ -212,10 +214,10 @@ export class CraftingUI {
     // Locked stats
     this.lockedStatsText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
+        fontSize: tieredStatFontSize,
         color: "#ffffff",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -226,8 +228,8 @@ export class CraftingUI {
     // Divider below locked stats
     this.dividerBelowLockedText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
-        color: "#444466",
+        fontSize: dividerFontSize,
+        color: "#555566",
         fontFamily: "monospace",
         align: "center",
       })
@@ -238,10 +240,10 @@ export class CraftingUI {
     // Open stats
     this.openStatsText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
-        color: "#88ccff",
+        fontSize: tieredStatFontSize,
+        color: "#4488ff",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -252,10 +254,10 @@ export class CraftingUI {
     // Hidden stats (shift-only, for weapons/abilities)
     this.hiddenStatsText = scene.add
       .text(cx, 0, "", {
-        fontSize: statsFontSize,
+        fontSize: tieredStatFontSize,
         color: "#aaffaa",
         fontFamily: "monospace",
-        lineSpacing: 2,
+        lineSpacing: Math.round(4 * S),
         align: "center",
       })
       .setOrigin(0.5, 0)
@@ -293,7 +295,7 @@ export class CraftingUI {
 
       const statLabel = scene.add
         .text(cx, 0, "", {
-          fontSize: statsFontSize,
+          fontSize: tieredStatFontSize,
           color: "#ffffff",
           fontFamily: "monospace",
           align: "center",
@@ -469,18 +471,19 @@ export class CraftingUI {
     this.hiddenStatsText.setWordWrapWidth(wrapWidth);
     this.shiftHintText.setX(cx);
 
-    const statsFontSize = `${Math.round(10 * S)}px`;
-    this.dividerAboveLockedText.setFontSize(statsFontSize);
-    this.lockedStatsText.setFontSize(statsFontSize);
-    this.dividerBelowLockedText.setFontSize(statsFontSize);
-    this.openStatsText.setFontSize(statsFontSize);
-    this.hiddenStatsText.setFontSize(statsFontSize);
+    const tieredStatFontSize = `${Math.round(9 * S)}px`;
+    const dividerFontSize = `${Math.round(9 * S)}px`;
+    this.dividerAboveLockedText.setFontSize(dividerFontSize);
+    this.lockedStatsText.setFontSize(tieredStatFontSize);
+    this.dividerBelowLockedText.setFontSize(dividerFontSize);
+    this.openStatsText.setFontSize(tieredStatFontSize);
+    this.hiddenStatsText.setFontSize(tieredStatFontSize);
 
     for (const entry of this.statPool) {
       entry.tier.setX(cx);
       entry.tier.setFontSize(`${Math.round(8 * S)}px`);
       entry.stat.setX(cx);
-      entry.stat.setFontSize(statsFontSize);
+      entry.stat.setFontSize(tieredStatFontSize);
       entry.stat.setWordWrapWidth(wrapWidth);
     }
 
@@ -750,7 +753,7 @@ export class CraftingUI {
     }
 
     // === Layout using pool with tier labels ===
-    let currentY = this.tierText.y + this.tierText.height + Math.round(4 * S);
+    let currentY = this.tierText.y + this.tierText.height + Math.round(2 * S);
     let poolIdx = 0;
 
     // Hide multi-line text objects (using pool instead)
@@ -803,7 +806,7 @@ export class CraftingUI {
       entry.tier.setVisible(true);
       currentY += entry.tier.height + 1;
       entry.stat.setText(openEntries[i].text);
-      entry.stat.setColor(openEntries[i].forgeProtected ? "#ffaa00" : "#88ccff");
+      entry.stat.setColor(openEntries[i].forgeProtected ? "#ffaa00" : "#4488ff");
       entry.stat.setY(currentY);
       entry.stat.setVisible(true);
       currentY += entry.stat.height + 2;
@@ -822,26 +825,8 @@ export class CraftingUI {
       this.statPool[i].stat.setVisible(false);
     }
 
-    // === Hidden stats (for weapons/abilities) ===
-    const hiddenLines: string[] = [];
-    if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
-      hiddenLines.push(`Range: ${ws.range}`);
-    } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
-      hiddenLines.push(`Cooldown: ${(as.cooldown / 1000).toFixed(2)}s`);
-      hiddenLines.push(`Range: ${as.range}`);
-      if (as.piercing) hiddenLines.push(`Piercing: Yes`);
-    }
-
-    if (hiddenLines.length > 0) {
-      this.hiddenStatsText.setText(hiddenLines.join("\n"));
-      this.hiddenStatsText.setY(currentY + 4);
-      this.hiddenStatsText.setVisible(true);
-    } else {
-      this.hiddenStatsText.setText("");
-      this.hiddenStatsText.setVisible(false);
-    }
+    this.hiddenStatsText.setText("");
+    this.hiddenStatsText.setVisible(false);
 
     this.shiftHintText.setVisible(false);
   }

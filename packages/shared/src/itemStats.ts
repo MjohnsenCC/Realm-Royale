@@ -222,15 +222,15 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.Health]: "Health",
   [StatType.HealthRegen]: "Health Regen",
   [StatType.ManaRegen]: "Mana Regen",
-  [StatType.MovementSpeed]: "Movement Speed",
+  [StatType.MovementSpeed]: "Move Speed",
   [StatType.Mana]: "Mana",
-  [StatType.PhysicalDamageReduction]: "Phys Dmg Reduction",
-  [StatType.MagicDamageReduction]: "Magic Dmg Reduction",
+  [StatType.PhysicalDamageReduction]: "Phys Reduction",
+  [StatType.MagicDamageReduction]: "Magic Reduction",
   [StatType.AbilityDamage]: "Ability Damage",
-  [StatType.ReducedAbilityCooldown]: "Reduced Ability Cooldown",
-  [StatType.IncreasedProjectileSpeed]: "Increased Projectile Speed",
-  [StatType.CriticalStrikeChance]: "Critical Strike Chance",
-  [StatType.CriticalStrikeMultiplier]: "Critical Strike Multiplier",
+  [StatType.ReducedAbilityCooldown]: "Ability Cooldown",
+  [StatType.IncreasedProjectileSpeed]: "Proj Speed",
+  [StatType.CriticalStrikeChance]: "Crit Chance",
+  [StatType.CriticalStrikeMultiplier]: "Crit Multiplier",
 };
 
 // --- Crafting Orb Definitions ---
@@ -246,6 +246,7 @@ export interface OrbDefinition {
   type: number;
   name: string;
   description: string;
+  usageHint: string;
   rarity: number;
   color: number;
 }
@@ -255,6 +256,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Blank,
     name: "Blank Orb",
     description: "Clears all open stats.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Common,
     color: 0xdddddd,
   },
@@ -262,6 +264,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Ember,
     name: "Ember Orb",
     description: "Fills all empty open slots with random stats.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Common,
     color: 0xff6622,
   },
@@ -269,6 +272,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Shard,
     name: "Shard Orb",
     description: "Adds one random stat to an empty slot.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Uncommon,
     color: 0x44ccff,
   },
@@ -276,6 +280,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Chaos,
     name: "Chaos Orb",
     description: "Rerolls all open stats.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.VeryRare,
     color: 0xff2244,
   },
@@ -283,6 +288,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Flux,
     name: "Flux Orb",
     description: "Rerolls one random existing stat.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Uncommon,
     color: 0xaa44ff,
   },
@@ -290,6 +296,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Void,
     name: "Void Orb",
     description: "Removes one random existing stat.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Rare,
     color: 0x222244,
   },
@@ -297,6 +304,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Prism,
     name: "Prism Orb",
     description: "Rerolls the tier of one random stat.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Rare,
     color: 0xff88ff,
   },
@@ -304,6 +312,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Forge,
     name: "Forge Orb",
     description: "Protects a random stat from the next orb.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.VeryRare,
     color: 0xffaa00,
   },
@@ -311,6 +320,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Calibrate,
     name: "Calibrate Orb",
     description: "Re-rolls the value of one open stat within its tier range.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.Uncommon,
     color: 0x66ff88,
   },
@@ -318,6 +328,7 @@ export const ORB_DEFINITIONS: Record<number, OrbDefinition> = {
     type: CraftingOrbType.Divine,
     name: "Divine Forge Orb",
     description: "Protects two random stats from the next orb.",
+    usageHint: "Right click this orb then left click an item to apply it.",
     rarity: OrbRarity.VeryRare,
     color: 0xffd700,
   },

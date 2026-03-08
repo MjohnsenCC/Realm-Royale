@@ -69,6 +69,9 @@ export class DragManager {
   // Current highlight
   private currentHighlight: DropTarget | null = null;
 
+  // Ctrl key for quick-transfer
+  private shiftKey: Phaser.Input.Keyboard.Key | null = null;
+
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
 
@@ -78,6 +81,10 @@ export class DragManager {
     scene.input.on("pointerup", (pointer: Phaser.Input.Pointer) => {
       this.onPointerUp(pointer);
     });
+
+    if (scene.input.keyboard) {
+      this.shiftKey = scene.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT);
+    }
   }
 
   setRoom(room: any): void {
@@ -114,10 +121,218 @@ export class DragManager {
 
   /** Called by InventoryUI/LootBagUI/HUD when a slot receives pointerdown */
   onSlotPointerDown(source: DragSource, item: ItemInstanceData, x: number, y: number): void {
+    // Shift+Click: quick-transfer instead of starting drag
+    if (this.shiftKey?.isDown) {
+      this.handleCtrlClick(source, item);
+      return;
+    }
+
     this.source = source;
     this.item = item;
     this.startX = x;
     this.startY = y;
+  }
+
+  private handleCtrlClick(source: DragSource, item: ItemInstanceData): void {
+    if (!this.room || item.baseItemId < 0) return;
+
+    // Priority 1: Vault quick-transfer (vault is open)
+    if (this.vaultUI?.isVisible()) {
+      if (source.type === "vault") {
+        this.quickTransferToInventory(source.slotIndex, item);
+        return;
+      }
+      if (source.type === "inventory") {
+        this.quickTransferToVault(source.slotIndex, item);
+        return;
+      }
+      if (source.type === "equipment") {
+        this.quickTransferEquipmentToVault(source.slotIndex, item);
+        return;
+      }
+    }
+
+    // Priority 2: Crafting quick-select (crafting UI is open)
+    if (this.craftingUI?.isVisible()) {
+      if (source.type === "inventory" || source.type === "equipment") {
+        this.craftingUI.selectItem(item, source.type, source.slotIndex);
+        return;
+      }
+    }
+
+    // Priority 3: Bag quick-pickup (bag is visible)
+    if (source.type === "bag") {
+      this.quickTransferBagToInventory(source.bagId, source.slotIndex, item);
+      return;
+    }
+  }
+
+  private quickTransferToInventory(vaultSlot: number, item: ItemInstanceData): void {
+    if (!this.vaultUI || !this.room) return;
+
+    const inv = this.inventoryUI.getInventory();
+    const vaultItems = this.vaultUI.getItems();
+
+    // For stackable items, try to merge with an existing partial stack first
+    if (isStackableItem(item.baseItemId)) {
+      const maxStack = getMaxStack(item.baseItemId);
+      for (let i = 0; i < inv.length; i++) {
+        if (inv[i].baseItemId === item.baseItemId) {
+          const toQty = inv[i].quantity || 1;
+          if (toQty < maxStack) {
+            const fromQty = item.quantity || 1;
+            const merged = Math.min(fromQty + toQty, maxStack);
+            const remainder = fromQty + toQty - merged;
+            inv[i].quantity = merged;
+            if (remainder > 0) {
+              vaultItems[vaultSlot].quantity = remainder;
+            } else {
+              vaultItems[vaultSlot] = createEmptyItemInstance();
+            }
+            this.inventoryUI.redrawSlots();
+            this.vaultUI.redrawItems();
+            this.room.send(ClientMessage.StackConsumables, {
+              fromSource: "vault", fromSlot: vaultSlot,
+              toSource: "inventory", toSlot: i,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Fall back to first empty inventory slot
+    const targetSlot = inv.findIndex(slot => slot.baseItemId < 0);
+    if (targetSlot === -1) return;
+
+    const fromCopy = { ...vaultItems[vaultSlot] };
+    vaultItems[vaultSlot] = createEmptyItemInstance();
+    inv[targetSlot] = fromCopy;
+    this.vaultUI.redrawItems();
+    this.inventoryUI.redrawSlots();
+
+    this.room.send(ClientMessage.VaultMoveItem, {
+      fromSource: "vault", fromSlot: vaultSlot,
+      toSource: "inventory", toSlot: targetSlot,
+    });
+  }
+
+  private quickTransferToVault(invSlot: number, item: ItemInstanceData): void {
+    if (!this.vaultUI || !this.room) return;
+
+    const inv = this.inventoryUI.getInventory();
+    const vaultItems = this.vaultUI.getItems();
+
+    // For stackable items, try to merge with an existing partial stack first
+    if (isStackableItem(item.baseItemId)) {
+      const maxStack = getMaxStack(item.baseItemId);
+      for (let i = 0; i < vaultItems.length; i++) {
+        if (vaultItems[i].baseItemId === item.baseItemId) {
+          const toQty = vaultItems[i].quantity || 1;
+          if (toQty < maxStack) {
+            const fromQty = item.quantity || 1;
+            const merged = Math.min(fromQty + toQty, maxStack);
+            const remainder = fromQty + toQty - merged;
+            vaultItems[i].quantity = merged;
+            if (remainder > 0) {
+              inv[invSlot].quantity = remainder;
+            } else {
+              inv[invSlot] = createEmptyItemInstance();
+            }
+            this.inventoryUI.redrawSlots();
+            this.vaultUI.redrawItems();
+            this.room.send(ClientMessage.StackConsumables, {
+              fromSource: "inventory", fromSlot: invSlot,
+              toSource: "vault", toSlot: i,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Fall back to first empty vault slot
+    const targetSlot = vaultItems.findIndex(slot => slot.baseItemId < 0);
+    if (targetSlot === -1) return;
+
+    const fromCopy = { ...inv[invSlot] };
+    inv[invSlot] = createEmptyItemInstance();
+    vaultItems[targetSlot] = fromCopy;
+    this.inventoryUI.redrawSlots();
+    this.vaultUI.redrawItems();
+
+    this.room.send(ClientMessage.VaultMoveItem, {
+      fromSource: "inventory", fromSlot: invSlot,
+      toSource: "vault", toSlot: targetSlot,
+    });
+  }
+
+  private quickTransferEquipmentToVault(eqSlot: number, item: ItemInstanceData): void {
+    if (!this.vaultUI || !this.room) return;
+
+    const eq = this.inventoryUI.getEquipment();
+    const vaultItems = this.vaultUI.getItems();
+
+    const targetSlot = vaultItems.findIndex(slot => slot.baseItemId < 0);
+    if (targetSlot === -1) return;
+
+    const eqCopy = { ...eq[eqSlot] };
+    eq[eqSlot] = createEmptyItemInstance();
+    vaultItems[targetSlot] = eqCopy;
+    this.inventoryUI.redrawEquipmentSlots();
+    this.vaultUI.redrawItems();
+
+    this.room.send(ClientMessage.VaultMoveItem, {
+      fromSource: "equipment", fromSlot: eqSlot,
+      toSource: "vault", toSlot: targetSlot,
+    });
+  }
+
+  private quickTransferBagToInventory(bagId: string, bagSlot: number, item: ItemInstanceData): void {
+    if (!this.room) return;
+
+    const inv = this.inventoryUI.getInventory();
+    const bagItems = this.lootBagUI.getItems();
+
+    // For stackable items, try to merge with an existing partial stack first
+    if (isStackableItem(item.baseItemId)) {
+      const maxStack = getMaxStack(item.baseItemId);
+      for (let i = 0; i < inv.length; i++) {
+        if (inv[i].baseItemId === item.baseItemId) {
+          const toQty = inv[i].quantity || 1;
+          if (toQty < maxStack) {
+            const fromQty = item.quantity || 1;
+            const merged = Math.min(fromQty + toQty, maxStack);
+            const remainder = fromQty + toQty - merged;
+            inv[i].quantity = merged;
+            if (remainder > 0) {
+              bagItems[bagSlot].quantity = remainder;
+            } else {
+              bagItems[bagSlot] = createEmptyItemInstance();
+            }
+            this.inventoryUI.redrawSlots();
+            this.lootBagUI.redrawItems();
+            this.room.send(ClientMessage.PickupItem, {
+              bagId, slotIndex: bagSlot,
+            });
+            return;
+          }
+        }
+      }
+    }
+
+    // Fall back to first empty inventory slot
+    const targetSlot = inv.findIndex(slot => slot.baseItemId < 0);
+    if (targetSlot === -1) return;
+
+    inv[targetSlot] = { ...bagItems[bagSlot] };
+    bagItems[bagSlot] = createEmptyItemInstance();
+    this.inventoryUI.redrawSlots();
+    this.lootBagUI.redrawItems();
+
+    this.room.send(ClientMessage.PickupItem, {
+      bagId, slotIndex: bagSlot,
+    });
   }
 
   private onPointerMove(pointer: Phaser.Input.Pointer): void {

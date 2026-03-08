@@ -55,6 +55,10 @@ export class EnemySprite {
     this.drawHpBar(hp, maxHp);
   }
 
+  public getEnemyType(): number {
+    return this.enemyType;
+  }
+
   private getColor(): number {
     const def = ENEMY_DEFS[this.enemyType];
     return def ? def.color : 0xcc3333;

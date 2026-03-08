@@ -181,10 +181,14 @@ export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
   const error = validateCraftTarget(item);
   if (error) return { success: false, item, message: error };
 
+  const openCount = getOpenStatCount(item);
+  if (openCount === 0) {
+    return { success: false, item, message: "No open stats to reroll." };
+  }
+
   const result = cloneItem(item);
   const newStats: number[] = [];
   const usedTypes = new Set<number>();
-  const openCount = getOpenStatCount(item);
 
   // Reserve types of all forge-protected stats first
   if (item.forgeProtectedSlot >= 0 && item.forgeProtectedSlot < openCount) {
@@ -194,7 +198,7 @@ export function applyChaosOrb(item: ItemInstanceData): CraftingResult {
     usedTypes.add(item.openStats[item.forgeProtectedSlot2 * 3]);
   }
 
-  for (let i = 0; i < MAX_OPEN_STATS; i++) {
+  for (let i = 0; i < openCount; i++) {
     if (isProtectedSlot(item, i) && i < openCount) {
       // Preserve protected stat
       newStats.push(item.openStats[i * 3], item.openStats[i * 3 + 1], item.openStats[i * 3 + 2]);

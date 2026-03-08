@@ -74,6 +74,8 @@ import {
   VAULT_CHEST_INTERACT_RADIUS,
   VAULT_RETURN_PORTAL_X,
   VAULT_RETURN_PORTAL_Y,
+  VAULT_CRAFTING_TABLE_X,
+  VAULT_CRAFTING_TABLE_Y,
   generateVaultMap,
   getItemCategory,
   isCraftingOrbItem,
@@ -927,6 +929,35 @@ export class GameScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setAlpha(0.5);
     this.nexusLabels.push(portalLabel);
+
+    // Draw crafting table in vault (same style as nexus crafting table)
+    const vctx = VAULT_CRAFTING_TABLE_X;
+    const vcty = VAULT_CRAFTING_TABLE_Y;
+    const vctr = CRAFTING_TABLE_RADIUS;
+
+    // Table surface
+    this.groundGraphics.fillStyle(0x553311, 0.9);
+    this.groundGraphics.fillRoundedRect(vctx - vctr, vcty - vctr * 0.6, vctr * 2, vctr * 1.2, 6);
+    this.groundGraphics.lineStyle(2, 0x886633, 0.8);
+    this.groundGraphics.strokeRoundedRect(vctx - vctr, vcty - vctr * 0.6, vctr * 2, vctr * 1.2, 6);
+
+    // Anvil/rune symbol
+    this.groundGraphics.fillStyle(0xaa8844, 0.7);
+    this.groundGraphics.fillCircle(vctx, vcty, 12);
+    this.groundGraphics.lineStyle(2, 0xddaa55, 0.6);
+    this.groundGraphics.strokeCircle(vctx, vcty, 12);
+    this.groundGraphics.strokeCircle(vctx, vcty, 18);
+
+    // Crafting table label
+    const vaultCraftLabel = this.add
+      .text(vctx, vcty + vctr * 0.6 + 14, "Crafting Table", {
+        fontSize: "12px",
+        color: "#ddaa55",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setAlpha(0.6);
+    this.nexusLabels.push(vaultCraftLabel);
   }
 
   private drawVaultPortalGem(): void {
@@ -2745,7 +2776,7 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Check crafting table in nexus
+    // Check crafting table in nexus or vault
     this.nearCraftingTable = false;
     if (!nearPortal && this.localZone === "nexus") {
       const dx = px - CRAFTING_TABLE_X;
@@ -2754,6 +2785,16 @@ export class GameScene extends Phaser.Scene {
         nearPortal = true;
         portalX = CRAFTING_TABLE_X;
         portalY = CRAFTING_TABLE_Y;
+        this.nearCraftingTable = true;
+      }
+    }
+    if (!nearPortal && isVaultZone(this.localZone)) {
+      const dx = px - VAULT_CRAFTING_TABLE_X;
+      const dy = py - VAULT_CRAFTING_TABLE_Y;
+      if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
+        nearPortal = true;
+        portalX = VAULT_CRAFTING_TABLE_X;
+        portalY = VAULT_CRAFTING_TABLE_Y;
         this.nearCraftingTable = true;
       }
     }

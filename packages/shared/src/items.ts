@@ -129,6 +129,7 @@ export interface ItemDefinition {
   color: number;
   tierColor: number;
   description: string;
+  usageHint?: string;
   weaponStats?: WeaponStats;
   abilityStats?: AbilityStats;
   armorStats?: ArmorStats;
@@ -573,19 +574,22 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(4, 0, 1)]: {
     id: 4001, name: "Health Potion", category: 4, subtype: 0, tier: 1,
     color: 0xcc3333, tierColor: TIER_COLORS[1],
-    description: "Restores 100 HP. Press F to use.",
+    description: "Restores 100 HP.",
+    usageHint: "Press F to use.",
     consumableStats: { maxStack: 6, healAmount: 100 },
   },
   [makeItemId(4, 1, 1)]: {
     id: 4101, name: "Mana Potion", category: 4, subtype: 1, tier: 1,
     color: 0x4466cc, tierColor: TIER_COLORS[1],
-    description: "Restores 100 Mana. Press G to use.",
+    description: "Restores 100 Mana.",
+    usageHint: "Press G to use.",
     consumableStats: { maxStack: 6, manaAmount: 100 },
   },
   [makeItemId(4, 2, 1)]: {
     id: 4201, name: "Portal Gem", category: 4, subtype: 2, tier: 1,
     color: 0xaa44ff, tierColor: TIER_COLORS[1],
-    description: "Teleport anywhere on the map. Right-click minimap to target. Press T to open a portal to your vault.",
+    description: "Teleport anywhere on the map.",
+    usageHint: "Right-click minimap to target. Press T to open a portal to your vault.",
     consumableStats: { maxStack: 20 },
   },
 };

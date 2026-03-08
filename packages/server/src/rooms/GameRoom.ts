@@ -107,6 +107,8 @@ import {
   CRAFTING_TABLE_X,
   CRAFTING_TABLE_Y,
   CRAFTING_TABLE_INTERACT_RADIUS,
+  VAULT_CRAFTING_TABLE_X,
+  VAULT_CRAFTING_TABLE_Y,
   getScaledWeaponStats,
   getScaledAbilityStats,
   determineBagRarity,
@@ -1064,9 +1066,11 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.OpenCraftingTable, async (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return;
-      if (player.zone !== "nexus") return;
+      if (player.zone !== "nexus" && !isVaultZone(player.zone)) return;
 
-      const dist = distanceBetween(player.x, player.y, CRAFTING_TABLE_X, CRAFTING_TABLE_Y);
+      const tableX = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_X : CRAFTING_TABLE_X;
+      const tableY = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_Y : CRAFTING_TABLE_Y;
+      const dist = distanceBetween(player.x, player.y, tableX, tableY);
       if (dist > CRAFTING_TABLE_INTERACT_RADIUS) return;
 
       // Lazy-load vault if not yet loaded (so crafting table can use vault orbs)
