@@ -6,7 +6,13 @@ import {
   MAX_CHARACTERS_PER_ACCOUNT,
   CHARACTER_NAME_MAX_LENGTH,
   CHARACTER_NAME_MIN_LENGTH,
+  CharacterClass,
+  CLASS_NAMES,
+  CLASS_EQUIPMENT_MAP,
+  ItemCategory,
+  getSubtypeName,
 } from "@rotmg-lite/shared";
+import { drawItemIcon } from "../ui/ItemIcons";
 import {
   SERVERS,
   getSelectedServerId,
@@ -147,9 +153,10 @@ export class CharacterSelectScene extends Phaser.Scene {
       })
       .setDepth(6);
 
-    // Level
+    // Level and class
+    const className = CLASS_NAMES[char.characterClass] ?? "Unknown";
     const levelText = this.add
-      .text(x + 16, y + 42, `Level ${char.level}`, {
+      .text(x + 16, y + 42, `Level ${char.level} ${className}`, {
         fontSize: "13px",
         color: "#8888aa",
         fontFamily: "monospace",
@@ -265,8 +272,8 @@ export class CharacterSelectScene extends Phaser.Scene {
     overlay.fillRect(0, 0, width, height);
 
     // Dialog box
-    const dialogW = 320;
-    const dialogH = 200;
+    const dialogW = 500;
+    const dialogH = 380;
     const dialogX = cx - dialogW / 2;
     const dialogY = height / 2 - dialogH / 2;
 
@@ -286,6 +293,120 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(22);
 
+    // Class selector
+    let selectedClass: number = CharacterClass.Archer;
+    const classLabel = this.add
+      .text(cx, dialogY + 52, "SELECT CLASS", {
+        fontSize: "11px",
+        color: "#667788",
+        fontFamily: "monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(22);
+
+    const classOptions = [
+      { id: CharacterClass.Archer, name: "ARCHER" },
+      { id: CharacterClass.Warrior, name: "WARRIOR" },
+      { id: CharacterClass.Arcanist, name: "ARCANIST" },
+    ];
+
+    // Class cards
+    const cardW = 140;
+    const cardH = 120;
+    const cardGap = 16;
+    const totalCardsW = classOptions.length * cardW + (classOptions.length - 1) * cardGap;
+    const cardsStartX = cx - totalCardsW / 2;
+    const cardTopY = dialogY + 68;
+
+    const cardGraphics = this.add.graphics().setDepth(21);
+    const cardElements: Phaser.GameObjects.GameObject[] = [cardGraphics];
+
+    const drawCards = () => {
+      cardGraphics.clear();
+      for (let i = 0; i < classOptions.length; i++) {
+        const opt = classOptions[i];
+        const cardX = cardsStartX + i * (cardW + cardGap);
+        const isSelected = opt.id === selectedClass;
+
+        cardGraphics.fillStyle(isSelected ? 0x2a2a55 : 0x1a1a33, 1);
+        cardGraphics.fillRoundedRect(cardX, cardTopY, cardW, cardH, 6);
+        cardGraphics.lineStyle(isSelected ? 2 : 1, isSelected ? 0x4488ff : 0x333355, isSelected ? 0.8 : 0.4);
+        cardGraphics.strokeRoundedRect(cardX, cardTopY, cardW, cardH, 6);
+
+        // Draw weapon icon
+        const equip = CLASS_EQUIPMENT_MAP[opt.id];
+        const iconColor = isSelected ? 0x4488ff : 0x555577;
+        drawItemIcon(cardGraphics, cardX + cardW / 2, cardTopY + 48, 28, ItemCategory.Weapon, equip.weapon, iconColor);
+      }
+    };
+
+    // Text elements for each card
+    const cardTextElements: Phaser.GameObjects.Text[] = [];
+    for (let i = 0; i < classOptions.length; i++) {
+      const opt = classOptions[i];
+      const cardX = cardsStartX + i * (cardW + cardGap);
+      const cardCx = cardX + cardW / 2;
+      const equip = CLASS_EQUIPMENT_MAP[opt.id];
+      const isSelected = opt.id === selectedClass;
+
+      const nameText = this.add
+        .text(cardCx, cardTopY + 16, opt.name, {
+          fontSize: "14px",
+          color: isSelected ? "#ffffff" : "#666688",
+          fontFamily: "monospace",
+          fontStyle: "bold",
+        })
+        .setOrigin(0.5)
+        .setDepth(22);
+
+      const weaponName = getSubtypeName(ItemCategory.Weapon, equip.weapon);
+      const abilityName = getSubtypeName(ItemCategory.Ability, equip.ability);
+      const info1Text = this.add
+        .text(cardCx, cardTopY + 78, `${weaponName} · ${abilityName}`, {
+          fontSize: "10px",
+          color: isSelected ? "#8888aa" : "#555566",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setDepth(22);
+
+      const armorName = getSubtypeName(ItemCategory.Armor, equip.armor);
+      const info2Text = this.add
+        .text(cardCx, cardTopY + 94, armorName, {
+          fontSize: "10px",
+          color: isSelected ? "#8888aa" : "#555566",
+          fontFamily: "monospace",
+        })
+        .setOrigin(0.5)
+        .setDepth(22);
+
+      const zone = this.add
+        .zone(cardCx, cardTopY + cardH / 2, cardW, cardH)
+        .setDepth(23)
+        .setInteractive({ useHandCursor: true });
+
+      zone.on("pointerdown", () => {
+        selectedClass = opt.id;
+        updateClassCards();
+      });
+
+      cardTextElements.push(nameText, info1Text, info2Text);
+      cardElements.push(nameText, info1Text, info2Text, zone);
+    }
+
+    const updateClassCards = () => {
+      drawCards();
+      for (let i = 0; i < classOptions.length; i++) {
+        const isSelected = classOptions[i].id === selectedClass;
+        const base = i * 3;
+        cardTextElements[base].setColor(isSelected ? "#ffffff" : "#666688");
+        cardTextElements[base + 1].setColor(isSelected ? "#8888aa" : "#555566");
+        cardTextElements[base + 2].setColor(isSelected ? "#8888aa" : "#555566");
+      }
+    };
+
+    drawCards();
+
     // Name input
     const inputHTML = `
       <input type="text" id="charNameInput" maxlength="${CHARACTER_NAME_MAX_LENGTH}" placeholder="Character name..."
@@ -304,23 +425,23 @@ export class CharacterSelectScene extends Phaser.Scene {
       />
     `;
     const inputElement = this.add
-      .dom(cx, dialogY + 80)
+      .dom(cx, dialogY + 218)
       .createFromHTML(inputHTML)
       .setDepth(22);
 
     const htmlInput = inputElement.getChildByID("charNameInput") as HTMLInputElement;
     if (htmlInput) {
-      htmlInput.addEventListener("focus", () => {
-        if (this.input.keyboard) this.input.keyboard.enabled = false;
+      htmlInput.addEventListener("keydown", (e) => {
+        e.stopPropagation();
       });
-      htmlInput.addEventListener("blur", () => {
-        if (this.input.keyboard) this.input.keyboard.enabled = true;
+      htmlInput.addEventListener("keyup", (e) => {
+        e.stopPropagation();
       });
       this.time.delayedCall(100, () => htmlInput.focus());
     }
 
     const errorText = this.add
-      .text(cx, dialogY + 115, "", {
+      .text(cx, dialogY + 258, "", {
         fontSize: "12px",
         color: "#ff4444",
         fontFamily: "monospace",
@@ -330,7 +451,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     // Buttons
     const confirmBtn = this.add
-      .text(cx - 50, dialogY + 155, "CREATE", {
+      .text(cx - 50, dialogY + 305, "CREATE", {
         fontSize: "16px",
         color: "#44ff88",
         fontFamily: "monospace",
@@ -341,7 +462,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const cancelBtn = this.add
-      .text(cx + 50, dialogY + 155, "CANCEL", {
+      .text(cx + 50, dialogY + 305, "CANCEL", {
         fontSize: "16px",
         color: "#aa6666",
         fontFamily: "monospace",
@@ -354,6 +475,8 @@ export class CharacterSelectScene extends Phaser.Scene {
       overlay.destroy();
       dialogBg.destroy();
       title.destroy();
+      classLabel.destroy();
+      for (const el of cardElements) el.destroy();
       inputElement.destroy();
       errorText.destroy();
       confirmBtn.destroy();
@@ -373,7 +496,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       confirmBtn.disableInteractive();
       errorText.setText("");
       try {
-        await AuthManager.getInstance().createCharacter(name);
+        await AuthManager.getInstance().createCharacter(name, selectedClass);
         cleanup();
         await this.loadCharacters();
       } catch (err) {

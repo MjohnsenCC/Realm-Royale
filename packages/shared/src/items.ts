@@ -3,6 +3,7 @@ import {
   ItemTier,
   WeaponSubtype,
   AbilitySubtype,
+  ArmorSubtype,
   BagRarity,
   DungeonType,
   EnemyType,
@@ -12,6 +13,7 @@ import { PORTAL_GEM_MAX_STACK } from "./constants";
 import {
   ItemInstanceData,
   LOCKED_STATS_BY_CATEGORY,
+  ARMOR_LOCKED_STATS,
   rollStatTier,
   rollStatRoll,
   createEmptyItemInstance,
@@ -314,6 +316,80 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     weaponStats: { damage: 220, range: 670, shootCooldown: 190, projectileSpeed: 720, projectileSize: 9 },
   },
 
+  // ===== WANDS (category=0, subtype=2) =====
+  [makeItemId(0, 2, 1)]: {
+    id: 201, name: "Apprentice Wand", category: 0, subtype: 2, tier: 1,
+    color: 0x8b7355, tierColor: TIER_COLORS[1],
+    description: "A novice's wand. Its bolts pierce weakly.",
+    weaponStats: { damage: 18, range: 458, shootCooldown: 850, projectileSpeed: 539, projectileSize: 4 },
+  },
+  [makeItemId(0, 2, 2)]: {
+    id: 202, name: "Aether Wand", category: 0, subtype: 2, tier: 2,
+    color: 0x44aa44, tierColor: TIER_COLORS[2],
+    description: "Channels raw aether into piercing bolts.",
+    weaponStats: { damage: 27, range: 478, shootCooldown: 567, projectileSpeed: 558, projectileSize: 5 },
+  },
+  [makeItemId(0, 2, 3)]: {
+    id: 203, name: "Crystal Wand", category: 0, subtype: 2, tier: 3,
+    color: 0x778899, tierColor: TIER_COLORS[3],
+    description: "Crystal focus sharpens arcane bolts.",
+    weaponStats: { damage: 36, range: 499, shootCooldown: 425, projectileSpeed: 576, projectileSize: 5 },
+  },
+  [makeItemId(0, 2, 4)]: {
+    id: 204, name: "Arcane Wand", category: 0, subtype: 2, tier: 4,
+    color: 0xaa44ff, tierColor: TIER_COLORS[4],
+    description: "Pure arcane energy tears through foes.",
+    weaponStats: { damage: 45, range: 520, shootCooldown: 340, projectileSpeed: 620, projectileSize: 5 },
+  },
+  [makeItemId(0, 2, 5)]: {
+    id: 205, name: "Shadow Wand", category: 0, subtype: 2, tier: 5,
+    color: 0x6644aa, tierColor: TIER_COLORS[5],
+    description: "Dark magic that pierces all barriers.",
+    weaponStats: { damage: 54, range: 541, shootCooldown: 283, projectileSpeed: 639, projectileSize: 5 },
+  },
+  [makeItemId(0, 2, 6)]: {
+    id: 206, name: "Divine Wand", category: 0, subtype: 2, tier: 6,
+    color: 0xffdd00, tierColor: TIER_COLORS[6],
+    description: "Blessed bolts of radiant energy.",
+    weaponStats: { damage: 68, range: 572, shootCooldown: 227, projectileSpeed: 667, projectileSize: 6 },
+  },
+  [makeItemId(0, 2, 7)]: {
+    id: 207, name: "Infernal Wand", category: 0, subtype: 2, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Hellfire bolts that burn through anything.",
+    weaponStats: { damage: 81, range: 603, shootCooldown: 189, projectileSpeed: 696, projectileSize: 6 },
+  },
+  [makeItemId(0, 2, 8)]: {
+    id: 208, name: "Abyssal Wand", category: 0, subtype: 2, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Channels the void into devastating bolts.",
+    weaponStats: { damage: 99, range: 645, shootCooldown: 155, projectileSpeed: 734, projectileSize: 7 },
+  },
+  [makeItemId(0, 2, 9)]: {
+    id: 209, name: "Spectral Wand", category: 0, subtype: 2, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Ghostly bolts phase through all resistance.",
+    weaponStats: { damage: 117, range: 686, shootCooldown: 131, projectileSpeed: 772, projectileSize: 7 },
+  },
+  [makeItemId(0, 2, 10)]: {
+    id: 210, name: "Celestial Wand", category: 0, subtype: 2, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Starlight condensed into piercing rays.",
+    weaponStats: { damage: 135, range: 728, shootCooldown: 113, projectileSpeed: 810, projectileSize: 7 },
+  },
+  [makeItemId(0, 2, 11)]: {
+    id: 211, name: "Doomfire Wand", category: 0, subtype: 2, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Apocalyptic bolts that rend reality.",
+    weaponStats: { damage: 158, range: 780, shootCooldown: 97, projectileSpeed: 858, projectileSize: 8 },
+  },
+  [makeItemId(0, 2, 12)]: {
+    id: 212, name: "Eternity Wand", category: 0, subtype: 2, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "The last arcane focus ever created.",
+    weaponStats: { damage: 180, range: 832, shootCooldown: 85, projectileSpeed: 906, projectileSize: 8 },
+  },
+
   // ===== QUIVERS (category=1, subtype=0) =====
   [makeItemId(1, 0, 1)]: {
     id: 101, name: "Crude Quiver", category: 1, subtype: 0, tier: 1,
@@ -388,7 +464,155 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     abilityStats: { damage: 560, range: 840, projectileSpeed: 940, projectileSize: 24, manaCost: 52, cooldown: 570, piercing: true },
   },
 
-  // ===== ARMOR (category=2, subtype=0) =====
+  // ===== HELMS (category=1, subtype=1) =====
+  [makeItemId(1, 1, 1)]: {
+    id: 1101, name: "Iron Helm", category: 1, subtype: 1, tier: 1,
+    color: 0x8b7355, tierColor: TIER_COLORS[1],
+    description: "A basic helm that spins with force.",
+    abilityStats: { damage: 30, range: 130, projectileSpeed: 350, projectileSize: 10, manaCost: 35, cooldown: 1100, piercing: true },
+  },
+  [makeItemId(1, 1, 2)]: {
+    id: 1102, name: "Steel Helm", category: 1, subtype: 1, tier: 2,
+    color: 0xaabbcc, tierColor: TIER_COLORS[2],
+    description: "Reinforced steel spins with deadly force.",
+    abilityStats: { damage: 45, range: 135, projectileSpeed: 360, projectileSize: 10, manaCost: 37, cooldown: 1075, piercing: true },
+  },
+  [makeItemId(1, 1, 3)]: {
+    id: 1103, name: "Crystal Helm", category: 1, subtype: 1, tier: 3,
+    color: 0x44cc66, tierColor: TIER_COLORS[3],
+    description: "Crystal shards shred nearby foes.",
+    abilityStats: { damage: 62, range: 140, projectileSpeed: 370, projectileSize: 11, manaCost: 38, cooldown: 1050, piercing: true },
+  },
+  [makeItemId(1, 1, 4)]: {
+    id: 1104, name: "Demon Helm", category: 1, subtype: 1, tier: 4,
+    color: 0xff4422, tierColor: TIER_COLORS[4],
+    description: "Demonic fury unleashed in a deadly spin.",
+    abilityStats: { damage: 80, range: 150, projectileSpeed: 400, projectileSize: 12, manaCost: 40, cooldown: 1000, piercing: true },
+  },
+  [makeItemId(1, 1, 5)]: {
+    id: 1105, name: "Shadow Helm", category: 1, subtype: 1, tier: 5,
+    color: 0x8844cc, tierColor: TIER_COLORS[5],
+    description: "Shadows lash out at all nearby enemies.",
+    abilityStats: { damage: 100, range: 160, projectileSpeed: 420, projectileSize: 12, manaCost: 42, cooldown: 950, piercing: true },
+  },
+  [makeItemId(1, 1, 6)]: {
+    id: 1106, name: "Divine Helm", category: 1, subtype: 1, tier: 6,
+    color: 0xffdd00, tierColor: TIER_COLORS[6],
+    description: "Holy wrath strikes all who stand near.",
+    abilityStats: { damage: 128, range: 170, projectileSpeed: 440, projectileSize: 13, manaCost: 44, cooldown: 900, piercing: true },
+  },
+  [makeItemId(1, 1, 7)]: {
+    id: 1107, name: "Infernal Helm", category: 1, subtype: 1, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Hellfire erupts in a devastating circle.",
+    abilityStats: { damage: 144, range: 175, projectileSpeed: 450, projectileSize: 13, manaCost: 46, cooldown: 870, piercing: true },
+  },
+  [makeItemId(1, 1, 8)]: {
+    id: 1108, name: "Abyssal Helm", category: 1, subtype: 1, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Abyssal energy tears through everything nearby.",
+    abilityStats: { damage: 176, range: 185, projectileSpeed: 460, projectileSize: 14, manaCost: 48, cooldown: 840, piercing: true },
+  },
+  [makeItemId(1, 1, 9)]: {
+    id: 1109, name: "Spectral Helm", category: 1, subtype: 1, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Ghostly blades spin through the living.",
+    abilityStats: { damage: 208, range: 195, projectileSpeed: 470, projectileSize: 14, manaCost: 50, cooldown: 810, piercing: true },
+  },
+  [makeItemId(1, 1, 10)]: {
+    id: 1110, name: "Celestial Helm", category: 1, subtype: 1, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Starlight shreds all in its orbit.",
+    abilityStats: { damage: 240, range: 205, projectileSpeed: 480, projectileSize: 15, manaCost: 52, cooldown: 780, piercing: true },
+  },
+  [makeItemId(1, 1, 11)]: {
+    id: 1111, name: "Doomfire Helm", category: 1, subtype: 1, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Apocalyptic flames consume the battlefield.",
+    abilityStats: { damage: 280, range: 215, projectileSpeed: 490, projectileSize: 15, manaCost: 54, cooldown: 750, piercing: true },
+  },
+  [makeItemId(1, 1, 12)]: {
+    id: 1112, name: "Eternity Helm", category: 1, subtype: 1, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "An endless vortex of annihilation.",
+    abilityStats: { damage: 320, range: 225, projectileSpeed: 500, projectileSize: 16, manaCost: 56, cooldown: 720, piercing: true },
+  },
+
+  // ===== RELICS (category=1, subtype=2) =====
+  [makeItemId(1, 2, 1)]: {
+    id: 1201, name: "Stone Relic", category: 1, subtype: 2, tier: 1,
+    color: 0x8b7355, tierColor: TIER_COLORS[1],
+    description: "Emits a weak expanding pulse.",
+    abilityStats: { damage: 48, range: 176, projectileSpeed: 271, projectileSize: 13, manaCost: 47, cooldown: 3000, piercing: true },
+  },
+  [makeItemId(1, 2, 2)]: {
+    id: 1202, name: "Iron Relic", category: 1, subtype: 2, tier: 2,
+    color: 0xaabbcc, tierColor: TIER_COLORS[2],
+    description: "Arcane energy ripples outward.",
+    abilityStats: { damage: 72, range: 184, projectileSpeed: 282, projectileSize: 14, manaCost: 46, cooldown: 2000, piercing: true },
+  },
+  [makeItemId(1, 2, 3)]: {
+    id: 1203, name: "Crystal Relic", category: 1, subtype: 2, tier: 3,
+    color: 0x44cc66, tierColor: TIER_COLORS[3],
+    description: "Crystal resonance shatters nearby foes.",
+    abilityStats: { damage: 96, range: 192, projectileSpeed: 294, projectileSize: 14, manaCost: 45, cooldown: 1500, piercing: true },
+  },
+  [makeItemId(1, 2, 4)]: {
+    id: 1204, name: "Arcane Relic", category: 1, subtype: 2, tier: 4,
+    color: 0xaa44ff, tierColor: TIER_COLORS[4],
+    description: "Unleashes a devastating arcane nova.",
+    abilityStats: { damage: 120, range: 200, projectileSpeed: 300, projectileSize: 15, manaCost: 45, cooldown: 1200, piercing: true },
+  },
+  [makeItemId(1, 2, 5)]: {
+    id: 1205, name: "Shadow Relic", category: 1, subtype: 2, tier: 5,
+    color: 0x8844cc, tierColor: TIER_COLORS[5],
+    description: "Shadow energy consumes all nearby.",
+    abilityStats: { damage: 144, range: 208, projectileSpeed: 318, projectileSize: 16, manaCost: 44, cooldown: 1000, piercing: true },
+  },
+  [makeItemId(1, 2, 6)]: {
+    id: 1206, name: "Divine Relic", category: 1, subtype: 2, tier: 6,
+    color: 0xffdd00, tierColor: TIER_COLORS[6],
+    description: "Holy radiance purges all within reach.",
+    abilityStats: { damage: 180, range: 220, projectileSpeed: 338, projectileSize: 16, manaCost: 42, cooldown: 800, piercing: true },
+  },
+  [makeItemId(1, 2, 7)]: {
+    id: 1207, name: "Infernal Relic", category: 1, subtype: 2, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Hellfire erupts in an ever-growing wave.",
+    abilityStats: { damage: 216, range: 232, projectileSpeed: 357, projectileSize: 17, manaCost: 41, cooldown: 667, piercing: true },
+  },
+  [makeItemId(1, 2, 8)]: {
+    id: 1208, name: "Abyssal Relic", category: 1, subtype: 2, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "The abyss expands to devour everything.",
+    abilityStats: { damage: 264, range: 248, projectileSpeed: 381, projectileSize: 18, manaCost: 39, cooldown: 545, piercing: true },
+  },
+  [makeItemId(1, 2, 9)]: {
+    id: 1209, name: "Spectral Relic", category: 1, subtype: 2, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Ghostly energy tears through the living.",
+    abilityStats: { damage: 312, range: 264, projectileSpeed: 405, projectileSize: 19, manaCost: 37, cooldown: 462, piercing: true },
+  },
+  [makeItemId(1, 2, 10)]: {
+    id: 1210, name: "Celestial Relic", category: 1, subtype: 2, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Starlight explodes in an expanding nova.",
+    abilityStats: { damage: 360, range: 280, projectileSpeed: 429, projectileSize: 20, manaCost: 35, cooldown: 400, piercing: true },
+  },
+  [makeItemId(1, 2, 11)]: {
+    id: 1211, name: "Doomfire Relic", category: 1, subtype: 2, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Apocalyptic flame engulfs the battlefield.",
+    abilityStats: { damage: 420, range: 300, projectileSpeed: 459, projectileSize: 20, manaCost: 33, cooldown: 343, piercing: true },
+  },
+  [makeItemId(1, 2, 12)]: {
+    id: 1212, name: "Eternity Relic", category: 1, subtype: 2, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "An infinite expanding wave of annihilation.",
+    abilityStats: { damage: 480, range: 320, projectileSpeed: 488, projectileSize: 21, manaCost: 31, cooldown: 300, piercing: true },
+  },
+
+  // ===== HEAVY ARMOR (category=2, subtype=0) =====
   [makeItemId(2, 0, 1)]: {
     id: 201, name: "Cloth Robe", category: 2, subtype: 0, tier: 1,
     color: 0x6b6b6b, tierColor: TIER_COLORS[1],
@@ -460,6 +684,154 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     color: 0xff2266, tierColor: TIER_COLORS[12],
     description: "The ultimate protection, beyond time.",
     armorStats: { maxHpBonus: 400 },
+  },
+
+  // ===== LIGHT ARMOR (category=2, subtype=1) =====
+  [makeItemId(2, 1, 1)]: {
+    id: 2101, name: "Padded Vest", category: 2, subtype: 1, tier: 1,
+    color: 0x6b6b6b, tierColor: TIER_COLORS[1],
+    description: "Light padding for agile fighters.",
+    armorStats: { maxHpBonus: 7 },
+  },
+  [makeItemId(2, 1, 2)]: {
+    id: 2102, name: "Scout's Leather", category: 2, subtype: 1, tier: 2,
+    color: 0x9c6b30, tierColor: TIER_COLORS[2],
+    description: "Supple leather favored by scouts.",
+    armorStats: { maxHpBonus: 16 },
+  },
+  [makeItemId(2, 1, 3)]: {
+    id: 2103, name: "Ranger Mail", category: 2, subtype: 1, tier: 3,
+    color: 0x778899, tierColor: TIER_COLORS[3],
+    description: "Light chain links over leather.",
+    armorStats: { maxHpBonus: 29 },
+  },
+  [makeItemId(2, 1, 4)]: {
+    id: 2104, name: "Shadow Garb", category: 2, subtype: 1, tier: 4,
+    color: 0xaabbcc, tierColor: TIER_COLORS[4],
+    description: "Dark cloth that absorbs impact.",
+    armorStats: { maxHpBonus: 45 },
+  },
+  [makeItemId(2, 1, 5)]: {
+    id: 2105, name: "Windwalker Vest", category: 2, subtype: 1, tier: 5,
+    color: 0xcc2200, tierColor: TIER_COLORS[5],
+    description: "Enchanted to move with the wind.",
+    armorStats: { maxHpBonus: 65 },
+  },
+  [makeItemId(2, 1, 6)]: {
+    id: 2106, name: "Divine Vestments", category: 2, subtype: 1, tier: 6,
+    color: 0xffdd00, tierColor: TIER_COLORS[6],
+    description: "Blessed robes of the swift.",
+    armorStats: { maxHpBonus: 91 },
+  },
+  [makeItemId(2, 1, 7)]: {
+    id: 2107, name: "Infernal Shroud", category: 2, subtype: 1, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Flame-touched cloth, light as air.",
+    armorStats: { maxHpBonus: 110 },
+  },
+  [makeItemId(2, 1, 8)]: {
+    id: 2108, name: "Abyssal Wrap", category: 2, subtype: 1, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Woven from threads of the deep.",
+    armorStats: { maxHpBonus: 137 },
+  },
+  [makeItemId(2, 1, 9)]: {
+    id: 2109, name: "Spectral Cloak", category: 2, subtype: 1, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Phases between realms to deflect blows.",
+    armorStats: { maxHpBonus: 163 },
+  },
+  [makeItemId(2, 1, 10)]: {
+    id: 2110, name: "Celestial Garb", category: 2, subtype: 1, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Garments spun from starlight.",
+    armorStats: { maxHpBonus: 189 },
+  },
+  [makeItemId(2, 1, 11)]: {
+    id: 2111, name: "Doomfire Mantle", category: 2, subtype: 1, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Burns with contained apocalyptic flame.",
+    armorStats: { maxHpBonus: 221 },
+  },
+  [makeItemId(2, 1, 12)]: {
+    id: 2112, name: "Eternity Veil", category: 2, subtype: 1, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "Protection beyond the end of time.",
+    armorStats: { maxHpBonus: 260 },
+  },
+
+  // ===== MANTLES (category=2, subtype=2) =====
+  [makeItemId(2, 2, 1)]: {
+    id: 2201, name: "Torn Mantle", category: 2, subtype: 2, tier: 1,
+    color: 0x6b6b6b, tierColor: TIER_COLORS[1],
+    description: "A frayed cloak. Offers little protection.",
+    armorStats: { maxHpBonus: 5, manaRegenBonus: 1 },
+  },
+  [makeItemId(2, 2, 2)]: {
+    id: 2202, name: "Woven Mantle", category: 2, subtype: 2, tier: 2,
+    color: 0x9c6b30, tierColor: TIER_COLORS[2],
+    description: "Enchanted threads channel mana.",
+    armorStats: { maxHpBonus: 11, manaRegenBonus: 2 },
+  },
+  [makeItemId(2, 2, 3)]: {
+    id: 2203, name: "Silk Mantle", category: 2, subtype: 2, tier: 3,
+    color: 0x778899, tierColor: TIER_COLORS[3],
+    description: "Fine silk woven with arcane wards.",
+    armorStats: { maxHpBonus: 20, manaRegenBonus: 3 },
+  },
+  [makeItemId(2, 2, 4)]: {
+    id: 2204, name: "Arcane Mantle", category: 2, subtype: 2, tier: 4,
+    color: 0xaa44ff, tierColor: TIER_COLORS[4],
+    description: "Pulses with raw arcane energy.",
+    armorStats: { maxHpBonus: 32, manaRegenBonus: 5 },
+  },
+  [makeItemId(2, 2, 5)]: {
+    id: 2205, name: "Shadow Mantle", category: 2, subtype: 2, tier: 5,
+    color: 0x6644aa, tierColor: TIER_COLORS[5],
+    description: "Darkness fuels the wearer's mana.",
+    armorStats: { maxHpBonus: 45, manaRegenBonus: 7 },
+  },
+  [makeItemId(2, 2, 6)]: {
+    id: 2206, name: "Divine Mantle", category: 2, subtype: 2, tier: 6,
+    color: 0xffdd00, tierColor: TIER_COLORS[6],
+    description: "Blessed cloth that restores mana rapidly.",
+    armorStats: { maxHpBonus: 63, manaRegenBonus: 10 },
+  },
+  [makeItemId(2, 2, 7)]: {
+    id: 2207, name: "Infernal Mantle", category: 2, subtype: 2, tier: 7,
+    color: 0xff4444, tierColor: TIER_COLORS[7],
+    description: "Hellfire cloth that burns with power.",
+    armorStats: { maxHpBonus: 77, manaRegenBonus: 12 },
+  },
+  [makeItemId(2, 2, 8)]: {
+    id: 2208, name: "Abyssal Mantle", category: 2, subtype: 2, tier: 8,
+    color: 0xff66aa, tierColor: TIER_COLORS[8],
+    description: "Draws mana from the endless abyss.",
+    armorStats: { maxHpBonus: 95, manaRegenBonus: 15 },
+  },
+  [makeItemId(2, 2, 9)]: {
+    id: 2209, name: "Spectral Mantle", category: 2, subtype: 2, tier: 9,
+    color: 0x44ffcc, tierColor: TIER_COLORS[9],
+    description: "Phases between realms, channeling mana.",
+    armorStats: { maxHpBonus: 113, manaRegenBonus: 18 },
+  },
+  [makeItemId(2, 2, 10)]: {
+    id: 2210, name: "Celestial Mantle", category: 2, subtype: 2, tier: 10,
+    color: 0xffffff, tierColor: TIER_COLORS[10],
+    description: "Starlight fabric that floods the wearer with mana.",
+    armorStats: { maxHpBonus: 131, manaRegenBonus: 21 },
+  },
+  [makeItemId(2, 2, 11)]: {
+    id: 2211, name: "Doomfire Mantle", category: 2, subtype: 2, tier: 11,
+    color: 0xff8844, tierColor: TIER_COLORS[11],
+    description: "Apocalyptic cloth that blazes with mana.",
+    armorStats: { maxHpBonus: 153, manaRegenBonus: 25 },
+  },
+  [makeItemId(2, 2, 12)]: {
+    id: 2212, name: "Eternity Mantle", category: 2, subtype: 2, tier: 12,
+    color: 0xff2266, tierColor: TIER_COLORS[12],
+    description: "The ultimate arcane mantle, beyond time.",
+    armorStats: { maxHpBonus: 180, manaRegenBonus: 30 },
   },
 
   // ===== RINGS (category=3, subtype=0) =====
@@ -569,6 +941,21 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     description: "The void amplifies power but offers no shelter.",
     ringStats: { speedBonus: 30, damageBonus: 25, hpRegenBonus: 0, maxHpBonus: 0, maxManaBonus: 0, projSpeedBonus: 100 },
   },
+  [makeItemId(1, 1, 13)]: {
+    id: 1113, name: "Berserker's Crown", category: 1, subtype: 1, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
+    description: "Spins with devastating fury, striking all nearby foes.",
+    abilityStats: {
+      damage: 100, range: 200, projectileSpeed: 450, projectileSize: 14,
+      manaCost: 50, cooldown: 1400, piercing: true,
+    },
+  },
+  [makeItemId(2, 1, 13)]: {
+    id: 2113, name: "Windrunner's Cloak", category: 2, subtype: 1, tier: 13,
+    color: 0x00cccc, tierColor: TIER_COLORS[13],
+    description: "Sacrifices protection for unmatched agility.",
+    armorStats: { maxHpBonus: 30, manaRegenBonus: 5 },
+  },
 
   // ===== CONSUMABLES (category=4) =====
   [makeItemId(4, 2, 1)]: {
@@ -618,16 +1005,25 @@ export function getMaxStack(itemId: number): number {
 const WEAPON_SUBTYPE_NAMES: Record<number, string> = {
   [WeaponSubtype.Sword]: "Sword",
   [WeaponSubtype.Bow]: "Bow",
+  [WeaponSubtype.Wand]: "Wand",
 };
 
 const ABILITY_SUBTYPE_NAMES: Record<number, string> = {
   [AbilitySubtype.Quiver]: "Quiver",
+  [AbilitySubtype.Helm]: "Helm",
+  [AbilitySubtype.Relic]: "Relic",
+};
+
+const ARMOR_SUBTYPE_NAMES: Record<number, string> = {
+  [ArmorSubtype.Heavy]: "Heavy Armor",
+  [ArmorSubtype.Light]: "Light Armor",
+  [ArmorSubtype.Mantle]: "Mantle",
 };
 
 export function getSubtypeName(category: number, subtype: number): string {
   if (category === ItemCategory.Weapon) return WEAPON_SUBTYPE_NAMES[subtype] ?? "Weapon";
   if (category === ItemCategory.Ability) return ABILITY_SUBTYPE_NAMES[subtype] ?? "Ability";
-  if (category === ItemCategory.Armor) return "Armor";
+  if (category === ItemCategory.Armor) return ARMOR_SUBTYPE_NAMES[subtype] ?? "Armor";
   if (category === ItemCategory.Ring) return "Ring";
   if (category === ItemCategory.CraftingOrb) return ORB_DEFINITIONS[subtype]?.name ?? "Orb";
   return "Unknown";
@@ -697,7 +1093,10 @@ export function generateItemInstance(
   tier: number,
   prerollOpenStats: boolean = true
 ): ItemInstanceData {
-  const lockedStats = LOCKED_STATS_BY_CATEGORY[category];
+  let lockedStats = LOCKED_STATS_BY_CATEGORY[category];
+  if (category === ItemCategory.Armor) {
+    lockedStats = ARMOR_LOCKED_STATS[subtype] ?? lockedStats;
+  }
   if (!lockedStats) {
     return createEmptyItemInstance();
   }
@@ -806,9 +1205,15 @@ function makeEquipmentTierGroup(
     type: "tierGroup",
     dropChance,
     items: [
+      { category: ItemCategory.Weapon, subtype: WeaponSubtype.Sword, tierMin, tierMax },
       { category: ItemCategory.Weapon, subtype: WeaponSubtype.Bow, tierMin, tierMax },
-      { category: ItemCategory.Ability, subtype: 0, tierMin, tierMax },
-      { category: ItemCategory.Armor, subtype: 0, tierMin, tierMax },
+      { category: ItemCategory.Weapon, subtype: WeaponSubtype.Wand, tierMin, tierMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Quiver, tierMin, tierMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Helm, tierMin, tierMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Relic, tierMin, tierMax },
+      { category: ItemCategory.Armor, subtype: ArmorSubtype.Heavy, tierMin, tierMax },
+      { category: ItemCategory.Armor, subtype: ArmorSubtype.Light, tierMin, tierMax },
+      { category: ItemCategory.Armor, subtype: ArmorSubtype.Mantle, tierMin, tierMax },
       { category: ItemCategory.Ring, subtype: 0, tierMin, tierMax },
     ],
   };

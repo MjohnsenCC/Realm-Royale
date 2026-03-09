@@ -4,6 +4,7 @@ import {
   CraftingOrbType,
   WeaponSubtype,
   AbilitySubtype,
+  ArmorSubtype,
 } from "./types";
 
 // --- Item Instance Data Interface ---
@@ -118,8 +119,9 @@ export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]
 // Separate locked stat range table for stats that scale differently as locked stats
 // (e.g., Health on armor gives much more than Health as an open stat)
 export const LOCKED_STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]>> = {
-  [StatType.Health]: { 1: [80, 170], 2: [180, 370], 3: [380, 580], 4: [590, 800], 5: [810, 1030], 6: [1040, 1280] },
-  [StatType.Mana]:   { 1: [15, 40],  2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260],  6: [260, 340] },
+  [StatType.Health]:    { 1: [80, 170], 2: [180, 370], 3: [380, 580], 4: [590, 800], 5: [810, 1030], 6: [1040, 1280] },
+  [StatType.Mana]:      { 1: [15, 40],  2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260],  6: [260, 340] },
+  [StatType.ManaRegen]: { 1: [3, 8],    2: [8, 16],    3: [16, 26],   4: [26, 38],   5: [38, 52],    6: [52, 68] },
 };
 
 // --- Locked Quality Multiplier ---
@@ -188,6 +190,13 @@ export const WEAPON_TEMPLATES: Record<number, WeaponTemplate> = {
     baseProjSpeed: 560,
     baseProjSize: 6,
   },
+  [WeaponSubtype.Wand]: {
+    baseDamage: 45,
+    baseCooldown: 340,
+    baseRange: 520,
+    baseProjSpeed: 620,
+    baseProjSize: 5,
+  },
 };
 
 // --- Ability Templates ---
@@ -200,6 +209,9 @@ export interface AbilityTemplate {
   baseManaCost: number;
   baseCooldown: number;
   piercing: boolean;
+  aoeRing?: boolean;
+  projectileCount?: number;
+  expandingAoe?: boolean;
 }
 
 export const ABILITY_TEMPLATES: Record<number, AbilityTemplate> = {
@@ -212,6 +224,43 @@ export const ABILITY_TEMPLATES: Record<number, AbilityTemplate> = {
     baseCooldown: 850,
     piercing: true,
   },
+  [AbilitySubtype.Helm]: {
+    baseDamage: 80,
+    baseRange: 150,
+    baseProjSpeed: 400,
+    baseProjSize: 12,
+    baseManaCost: 40,
+    baseCooldown: 1000,
+    piercing: true,
+    aoeRing: true,
+    projectileCount: 8,
+  },
+  [AbilitySubtype.Relic]: {
+    baseDamage: 120,
+    baseRange: 200,
+    baseProjSpeed: 300,
+    baseProjSize: 15,
+    baseManaCost: 45,
+    baseCooldown: 1200,
+    piercing: true,
+    expandingAoe: true,
+  },
+};
+
+// --- Armor Locked Stat Multiplier by Subtype ---
+// Heavy armor gets full locked stats, light armor gets reduced values.
+export const ARMOR_LOCKED_STAT_MULTIPLIER: Record<number, number> = {
+  0: 1.0,   // ArmorSubtype.Heavy
+  1: 0.65,  // ArmorSubtype.Light
+  2: 0.45,  // ArmorSubtype.Mantle — very low HP, trades survivability for mana
+};
+
+// --- Per-Armor-Subtype Locked Stats ---
+// Overrides LOCKED_STATS_BY_CATEGORY for armor to allow subtype-specific locked stats.
+export const ARMOR_LOCKED_STATS: Record<number, [number, number]> = {
+  [ArmorSubtype.Heavy]: [StatType.Health, StatType.HealthRegen],
+  [ArmorSubtype.Light]: [StatType.Health, StatType.HealthRegen],
+  [ArmorSubtype.Mantle]: [StatType.Health, StatType.ManaRegen],
 };
 
 // --- Stat Display Names ---

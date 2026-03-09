@@ -6,6 +6,7 @@ export interface CharacterSummary {
   id: string;
   name: string;
   level: number;
+  characterClass: number;
   createdAt: string;
   lastPlayed: string;
 }
@@ -14,6 +15,7 @@ export interface CharacterData {
   id: string;
   accountId: string;
   name: string;
+  characterClass: number;
   level: number;
   xp: number;
   equipment: ItemInstanceData[];

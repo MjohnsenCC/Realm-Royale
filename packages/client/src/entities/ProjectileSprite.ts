@@ -7,6 +7,9 @@ export class ProjectileSprite {
   private serverY: number = 0;
   private angle: number = 0;
   private speed: number = 0;
+  private isExpandingAoe: boolean = false;
+  private expandElapsed: number = 0;
+  private expandSpeed: number = 0;
 
   public x: number = 0;
   public y: number = 0;
@@ -52,6 +55,29 @@ export class ProjectileSprite {
           this.graphics.fillStyle(0x88ccff, 1);
           this.graphics.fillCircle(0, 0, 8);
           break;
+        case ProjectileType.HelmSpin:
+          // Orange/red circular slash for Helm AoE
+          this.graphics.fillStyle(0xff6622, 0.6);
+          this.graphics.fillCircle(0, 0, 12);
+          this.graphics.fillStyle(0xffaa44, 1);
+          this.graphics.fillEllipse(0, 0, 20, 8);
+          break;
+        case ProjectileType.WandBolt:
+          // Purple/violet elongated bolt
+          this.graphics.fillStyle(0xaa44ff, 0.7);
+          this.graphics.fillEllipse(0, 0, 14, 5);
+          this.graphics.fillStyle(0xcc88ff, 1);
+          this.graphics.fillEllipse(0, 0, 8, 3);
+          break;
+        case ProjectileType.RelicExpand:
+          // Expanding AoE circle — initial state
+          this.isExpandingAoe = true;
+          this.expandSpeed = speed;
+          this.graphics.fillStyle(0x8844ff, 0.3);
+          this.graphics.fillCircle(0, 0, 15);
+          this.graphics.lineStyle(2, 0xaa66ff, 0.6);
+          this.graphics.strokeCircle(0, 0, 15);
+          break;
         case ProjectileType.BowArrow:
         default:
           // Yellow elongated shape
@@ -75,6 +101,19 @@ export class ProjectileSprite {
   }
 
   update(delta: number): void {
+    if (this.isExpandingAoe) {
+      // Expanding AoE: grow circle each frame, position stays fixed
+      this.expandElapsed += delta / 1000;
+      const currentRadius = 15 + this.expandSpeed * this.expandElapsed;
+      this.graphics.clear();
+      const alpha = Math.max(0.05, 0.3 - (currentRadius / 300) * 0.25);
+      this.graphics.fillStyle(0x8844ff, alpha);
+      this.graphics.fillCircle(0, 0, currentRadius);
+      this.graphics.lineStyle(2, 0xaa66ff, Math.max(0.1, 0.6 - (currentRadius / 300) * 0.5));
+      this.graphics.strokeCircle(0, 0, currentRadius);
+      this.graphics.setPosition(this.x, this.y);
+      return;
+    }
     // Client-side extrapolation: move projectile forward using known angle + speed
     // This provides smooth 60fps movement between 20Hz server ticks
     const dt = delta / 1000;

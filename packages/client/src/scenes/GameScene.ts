@@ -10,6 +10,8 @@ import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
+import { EscapeMenuUI } from "../ui/EscapeMenuUI";
+import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
   HOSTILE_WIDTH,
@@ -82,6 +84,7 @@ import {
   isCraftingOrbItem,
   PORTAL_GEM_ID,
   ChatChannel,
+  ABILITY_TEMPLATES,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -141,6 +144,7 @@ export class GameScene extends Phaser.Scene {
     P: Phaser.Input.Keyboard.Key;
     T: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
+    ESC: Phaser.Input.Keyboard.Key;
   };
 
   private hud!: HUD;
@@ -174,6 +178,7 @@ export class GameScene extends Phaser.Scene {
   private craftingUI!: CraftingUI;
   private statsPanel!: StatsPanel;
   private chatUI!: ChatUI;
+  private escapeMenuUI!: EscapeMenuUI;
   private nearCraftingTable: boolean = false;
   private nearVaultChest: boolean = false;
   private vaultOrbCounts: number[] = new Array(10).fill(0);
@@ -328,6 +333,7 @@ export class GameScene extends Phaser.Scene {
         P: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P),
         T: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T),
         ENTER: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
+        ESC: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
       };
     }
 
@@ -354,6 +360,28 @@ export class GameScene extends Phaser.Scene {
     // Create chat UI
     this.chatUI = new ChatUI(this);
 
+    // Create escape menu
+    this.escapeMenuUI = new EscapeMenuUI(this);
+    this.escapeMenuUI.setCallbacks({
+      onReturnToGame: () => {
+        this.escapeMenuUI.hide();
+      },
+      onOptions: () => {
+        // Placeholder — no functionality yet
+      },
+      onExitToCharacterSelect: () => {
+        this.escapeMenuUI.hide();
+        this.network.leave();
+        this.scene.start("CharacterSelectScene");
+      },
+      onLogOut: () => {
+        this.escapeMenuUI.hide();
+        this.network.leave();
+        AuthManager.getInstance().logout();
+        this.scene.start("MenuScene");
+      },
+    });
+
     // Listen for chat messages
     room.onMessage(ServerMessage.ChatMessage, (data: { playerId: string; playerName: string; text: string; channel: ChatChannel }) => {
       this.chatUI.addMessage(data);
@@ -378,6 +406,10 @@ export class GameScene extends Phaser.Scene {
       this.isDead = false;
       this.hud.hideDeathScreen();
       this.hud.vaultUI.hide();
+      this.hud.lootBagUI.hide();
+      // Clear stale bag sprites from previous zone
+      this.bagSprites.forEach((sprite) => sprite.destroy());
+      this.bagSprites.clear();
       this.nearVaultChest = false;
       // Reset portal gem vault state when returning to nexus (e.g. Q key while portal active)
       if (data.zone === "nexus") {
@@ -1877,7 +1909,7 @@ export class GameScene extends Phaser.Scene {
           hitEnemies: new Set(),
         });
         // Re-sync local timer to prevent continued drift
-        if (pt === ProjectileType.QuiverShot) {
+        if (pt === ProjectileType.QuiverShot || pt === ProjectileType.RelicExpand) {
           this.lastLocalAbilityTime = performance.now();
         } else {
           this.lastLocalShootTime = performance.now();
@@ -1967,10 +1999,26 @@ export class GameScene extends Phaser.Scene {
     let mx = 0;
     let my = 0;
     let aimAngle = 0;
+    let aimX = 0;
+    let aimY = 0;
     let shooting = false;
     let useAbility = false;
 
-    if (!this.isDead && !this.isLoadingZone) {
+    // ESC key — toggle escape menu (works even when dead or loading)
+    if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ESC)) {
+      if (this.chatUI.isTyping) {
+        // Directly cancel — don't rely on DOM keydown which requires input focus
+        this.chatUI.cancelInput();
+      } else if (this.escapeMenuUI.isVisible()) {
+        this.escapeMenuUI.hide();
+      } else {
+        this.closeLeftPanels();
+        this.hud.lootBagUI.hide();
+        this.escapeMenuUI.show();
+      }
+    }
+
+    if (!this.isDead && !this.isLoadingZone && !this.escapeMenuUI.isVisible()) {
       // Enter key — open chat (only when not already typing)
       if (this.keys && Phaser.Input.Keyboard.JustDown(this.keys.ENTER) && !this.chatUI.isTyping) {
         this.chatUI.openInput();
@@ -2060,6 +2108,8 @@ export class GameScene extends Phaser.Scene {
             worldPoint.y - localSprite.displayY,
             worldPoint.x - localSprite.displayX
           );
+          aimX = worldPoint.x;
+          aimY = worldPoint.y;
         }
 
         // Space key — use ability (hostile + dungeons)
@@ -2110,6 +2160,8 @@ export class GameScene extends Phaser.Scene {
         seq: this.inputSequence,
         movement: { x: mx, y: my },
         aimAngle,
+        aimX,
+        aimY,
         shooting,
         useAbility,
         dt: sendDt,
@@ -2138,7 +2190,21 @@ export class GameScene extends Phaser.Scene {
           const stats = computePlayerStats(level, eqData);
           if (now - this.lastLocalShootTime >= stats.shootCooldown) {
             this.lastLocalShootTime = now;
-            const isSword = getItemSubtype(weaponItem.baseItemId) === WeaponSubtype.Sword;
+            const weaponSubtype = getItemSubtype(weaponItem.baseItemId);
+            let projType: number;
+            let weaponPiercing = false;
+            switch (weaponSubtype) {
+              case WeaponSubtype.Sword:
+                projType = ProjectileType.SwordSlash;
+                break;
+              case WeaponSubtype.Wand:
+                projType = ProjectileType.WandBolt;
+                weaponPiercing = true;
+                break;
+              default:
+                projType = ProjectileType.BowArrow;
+                break;
+            }
             // UT weapons may have multi-projectile
             let projectileCount = 1;
             let spreadAngle = 0;
@@ -2161,12 +2227,12 @@ export class GameScene extends Phaser.Scene {
                 EntityType.Player,
                 angle,
                 stats.weaponProjSpeed,
-                isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow
+                projType
               );
               this.predictedProjectiles.push({
                 sprite: projSprite,
                 angle,
-                projType: isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow,
+                projType,
                 startX: localSprite.displayX,
                 startY: localSprite.displayY,
                 maxRange: stats.weaponRange,
@@ -2174,7 +2240,7 @@ export class GameScene extends Phaser.Scene {
                 confirmed: false,
                 collisionRadius: stats.weaponProjSize,
                 damage: stats.damage,
-                piercing: false,
+                piercing: weaponPiercing,
                 hitEnemies: new Set(),
               });
             }
@@ -2201,29 +2267,63 @@ export class GameScene extends Phaser.Scene {
             const mana = (localPlayer.mana as number) ?? 0;
             if (mana >= as.manaCost) {
               this.lastLocalAbilityTime = now;
-              const projSprite = new ProjectileSprite(
-                this,
-                localSprite.displayX,
-                localSprite.displayY,
-                EntityType.Player,
-                aimAngle,
-                as.projectileSpeed,
-                ProjectileType.QuiverShot
-              );
-              this.predictedProjectiles.push({
-                sprite: projSprite,
-                angle: aimAngle,
-                projType: ProjectileType.QuiverShot,
-                startX: localSprite.displayX,
-                startY: localSprite.displayY,
-                maxRange: as.range,
-                createdAt: now,
-                confirmed: false,
-                collisionRadius: as.projectileSize,
-                damage: as.damage,
-                piercing: as.piercing,
-                hitEnemies: new Set(),
-              });
+              const abilitySubtype = getItemSubtype(abilityItem.baseItemId);
+              const abilityTemplate = ABILITY_TEMPLATES[abilitySubtype];
+              const isExpandingAoe = abilityItem.isUT ? false : abilityTemplate?.expandingAoe === true;
+              const isAoeRing = !isExpandingAoe && (abilityItem.isUT ? false : abilityTemplate?.aoeRing === true);
+
+              if (isExpandingAoe) {
+                // Expanding AoE prediction — spawn at cursor position
+                const projSprite = new ProjectileSprite(
+                  this,
+                  aimX,
+                  aimY,
+                  EntityType.Player,
+                  0,
+                  as.projectileSpeed,
+                  ProjectileType.RelicExpand
+                );
+                this.predictedProjectiles.push({
+                  sprite: projSprite,
+                  angle: 0,
+                  projType: ProjectileType.RelicExpand,
+                  startX: aimX,
+                  startY: aimY,
+                  maxRange: as.range,
+                  createdAt: now,
+                  confirmed: false,
+                  collisionRadius: as.projectileSize,
+                  damage: as.damage,
+                  piercing: true,
+                  hitEnemies: new Set(),
+                });
+              } else if (!isAoeRing) {
+                // Single aimed projectile (Quiver, etc.)
+                const projSprite = new ProjectileSprite(
+                  this,
+                  localSprite.displayX,
+                  localSprite.displayY,
+                  EntityType.Player,
+                  aimAngle,
+                  as.projectileSpeed,
+                  ProjectileType.QuiverShot
+                );
+                this.predictedProjectiles.push({
+                  sprite: projSprite,
+                  angle: aimAngle,
+                  projType: ProjectileType.QuiverShot,
+                  startX: localSprite.displayX,
+                  startY: localSprite.displayY,
+                  maxRange: as.range,
+                  createdAt: now,
+                  confirmed: false,
+                  collisionRadius: as.projectileSize,
+                  damage: as.damage,
+                  piercing: as.piercing,
+                  hitEnemies: new Set(),
+                });
+              }
+              // AoE ring (Helm) — no client prediction, server handles it
             }
           }
         }
@@ -2318,6 +2418,8 @@ export class GameScene extends Phaser.Scene {
           seq: this.inputSequence,
           movement: { x: mx, y: my },
           aimAngle,
+          aimX,
+          aimY,
           shooting,
           useAbility,
           dt: sendDt,
@@ -2486,6 +2588,28 @@ export class GameScene extends Phaser.Scene {
       const eqItems = readEquipmentData(localPlayer);
       this.hud.inventoryUI.updateEquipment(eqItems);
 
+      // Update ability cooldown overlay
+      {
+        let cdProgress = -1;
+        const abilityEquip = eqItems[1]; // ItemCategory.Ability = 1
+        if (abilityEquip && abilityEquip.baseItemId >= 0 && this.lastLocalAbilityTime > 0) {
+          let cooldownMs = 0;
+          if (abilityEquip.isUT) {
+            const abilityDef = ITEM_DEFS[abilityEquip.baseItemId];
+            if (abilityDef?.abilityStats) cooldownMs = abilityDef.abilityStats.cooldown;
+          } else {
+            const subtype = getItemSubtype(abilityEquip.baseItemId);
+            const as = getScaledAbilityStats(subtype, abilityEquip.instanceTier, abilityEquip.lockedStat1Tier, abilityEquip.lockedStat2Tier, abilityEquip.lockedStat1Roll, abilityEquip.lockedStat2Roll);
+            cooldownMs = as.cooldown;
+          }
+          if (cooldownMs > 0) {
+            const elapsed = performance.now() - this.lastLocalAbilityTime;
+            if (elapsed < cooldownMs) cdProgress = elapsed / cooldownMs;
+          }
+        }
+        this.hud.inventoryUI.updateAbilityCooldown(cdProgress);
+      }
+
       // Update crafting UI if open (sync selected item + orb counts each frame)
       if (this.craftingUI.isVisible()) {
         const slotIdx = this.craftingUI.getCurrentSlotIndex();
@@ -2533,6 +2657,7 @@ export class GameScene extends Phaser.Scene {
     this.dungeonTooltip?.hide();
     this.craftingUI?.hide();
     this.statsPanel?.hide();
+    this.escapeMenuUI?.hide();
     this.inputSequence = 0;
     this.pendingInputs = [];
     this.inputSendTimer = 0;
@@ -2929,6 +3054,7 @@ export class GameScene extends Phaser.Scene {
     this.craftingUI.relayout();
     this.dungeonTooltip.relayout();
     this.chatUI.relayout();
+    this.escapeMenuUI.relayout();
   }
 
   private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {

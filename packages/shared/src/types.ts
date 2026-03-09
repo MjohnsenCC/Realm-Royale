@@ -3,6 +3,8 @@ export interface PlayerInput {
   seq: number; // monotonically increasing sequence number for reconciliation
   movement: { x: number; y: number }; // -1 to 1 on each axis
   aimAngle: number; // radians
+  aimX: number; // cursor world X
+  aimY: number; // cursor world Y
   shooting: boolean;
   useAbility: boolean; // Space key
   dt: number; // accumulated delta time (ms) the client predicted with
@@ -270,15 +272,26 @@ export type CraftingOrbType = (typeof CraftingOrbType)[keyof typeof CraftingOrbT
 export const WeaponSubtype = {
   Sword: 0,
   Bow: 1,
+  Wand: 2,
 } as const;
 export type WeaponSubtype = (typeof WeaponSubtype)[keyof typeof WeaponSubtype];
 
 // Ability subtypes
 export const AbilitySubtype = {
   Quiver: 0,
+  Helm: 1,
+  Relic: 2,
 } as const;
 export type AbilitySubtype =
   (typeof AbilitySubtype)[keyof typeof AbilitySubtype];
+
+// Armor subtypes
+export const ArmorSubtype = {
+  Heavy: 0,
+  Light: 1,
+  Mantle: 2,
+} as const;
+export type ArmorSubtype = (typeof ArmorSubtype)[keyof typeof ArmorSubtype];
 
 // Consumable subtypes
 export const ConsumableSubtype = {
@@ -311,6 +324,9 @@ export const ProjectileType = {
   SwordSlash: 1,
   QuiverShot: 2,
   EnemyBullet: 3,
+  HelmSpin: 4,
+  WandBolt: 5,
+  RelicExpand: 6,
 } as const;
 export type ProjectileType =
   (typeof ProjectileType)[keyof typeof ProjectileType];
@@ -376,3 +392,59 @@ export const ClientMessage = {
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
 export type ChatChannel = "global" | "local";
+
+// --- Character Classes ---
+
+export const CharacterClass = {
+  Archer: 0,
+  Warrior: 1,
+  Arcanist: 2,
+} as const;
+export type CharacterClass =
+  (typeof CharacterClass)[keyof typeof CharacterClass];
+
+export const CLASS_NAMES: Record<number, string> = {
+  [CharacterClass.Archer]: "Archer",
+  [CharacterClass.Warrior]: "Warrior",
+  [CharacterClass.Arcanist]: "Arcanist",
+};
+
+/** Maps each class to its allowed weapon/ability/armor subtypes. Rings are universal. */
+export const CLASS_EQUIPMENT_MAP: Record<
+  number,
+  { weapon: number; ability: number; armor: number }
+> = {
+  [CharacterClass.Archer]: {
+    weapon: WeaponSubtype.Bow,
+    ability: AbilitySubtype.Quiver,
+    armor: ArmorSubtype.Light,
+  },
+  [CharacterClass.Warrior]: {
+    weapon: WeaponSubtype.Sword,
+    ability: AbilitySubtype.Helm,
+    armor: ArmorSubtype.Heavy,
+  },
+  [CharacterClass.Arcanist]: {
+    weapon: WeaponSubtype.Wand,
+    ability: AbilitySubtype.Relic,
+    armor: ArmorSubtype.Mantle,
+  },
+};
+
+/** Check if a class can equip an item. Rings are universal. */
+export function canClassEquip(
+  characterClass: number,
+  itemCategory: number,
+  itemSubtype: number
+): boolean {
+  if (itemCategory === ItemCategory.Ring) return true;
+  const mapping = CLASS_EQUIPMENT_MAP[characterClass];
+  if (!mapping) return false;
+  if (itemCategory === ItemCategory.Weapon)
+    return itemSubtype === mapping.weapon;
+  if (itemCategory === ItemCategory.Ability)
+    return itemSubtype === mapping.ability;
+  if (itemCategory === ItemCategory.Armor)
+    return itemSubtype === mapping.armor;
+  return false;
+}

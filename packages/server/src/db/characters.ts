@@ -13,6 +13,8 @@ import {
   CraftingOrbType,
   INVENTORY_SIZE,
   PORTAL_GEM_ID,
+  CharacterClass,
+  CLASS_EQUIPMENT_MAP,
 } from "@rotmg-lite/shared";
 
 /** Legacy orb counter fields from DB. Used for one-time migration to inventory items. */
@@ -73,11 +75,20 @@ function migrateOrbCountersToInventory(
   return inv;
 }
 
-function generateDefaultEquipment(): ItemInstanceData[] {
+function generateDefaultEquipment(characterClass: number = CharacterClass.Archer): ItemInstanceData[] {
+  const mapping = CLASS_EQUIPMENT_MAP[characterClass];
+  if (!mapping) {
+    return [
+      generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false),
+      generateItemInstance(ItemCategory.Ability, 0, 1, false),
+      generateItemInstance(ItemCategory.Armor, 0, 1, false),
+      generateItemInstance(ItemCategory.Ring, 0, 1, false),
+    ];
+  }
   return [
-    generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false),
-    generateItemInstance(ItemCategory.Ability, 0, 1, false),
-    generateItemInstance(ItemCategory.Armor, 0, 1, false),
+    generateItemInstance(ItemCategory.Weapon, mapping.weapon, 1, false),
+    generateItemInstance(ItemCategory.Ability, mapping.ability, 1, false),
+    generateItemInstance(ItemCategory.Armor, mapping.armor, 1, false),
     generateItemInstance(ItemCategory.Ring, 0, 1, false),
   ];
 }
@@ -125,7 +136,7 @@ export async function getCharactersByAccount(
 
   const { data, error } = await supabase
     .from("characters")
-    .select("id, name, level, created_at, last_played")
+    .select("id, name, level, class, created_at, last_played")
     .eq("account_id", accountId)
     .order("created_at", { ascending: true });
 
@@ -137,6 +148,7 @@ export async function getCharactersByAccount(
     id: row.id,
     name: row.name,
     level: row.level,
+    characterClass: (row as Record<string, unknown>).class as number ?? CharacterClass.Archer,
     createdAt: row.created_at,
     lastPlayed: row.last_played,
   }));
@@ -177,6 +189,7 @@ export async function getCharacter(
     id: data.id,
     accountId: data.account_id,
     name: data.name,
+    characterClass: (data as Record<string, unknown>).class as number ?? CharacterClass.Archer,
     level: data.level,
     xp: data.xp,
     equipment: data.equipment as ItemInstanceData[],
@@ -186,7 +199,8 @@ export async function getCharacter(
 
 export async function createCharacter(
   accountId: string,
-  name: string
+  name: string,
+  characterClass: number = CharacterClass.Archer
 ): Promise<CharacterData> {
   const supabase = getSupabase();
 
@@ -200,7 +214,7 @@ export async function createCharacter(
     throw new Error(`Maximum ${MAX_CHARACTERS_PER_ACCOUNT} characters per account`);
   }
 
-  const equipment = generateDefaultEquipment();
+  const equipment = generateDefaultEquipment(characterClass);
   const inventory = generateDefaultInventory();
 
   const { data, error } = await supabase
@@ -208,6 +222,7 @@ export async function createCharacter(
     .insert({
       account_id: accountId,
       name,
+      class: characterClass,
       level: 1,
       xp: 0,
       equipment,
@@ -224,6 +239,7 @@ export async function createCharacter(
     id: data.id,
     accountId: data.account_id,
     name: data.name,
+    characterClass: (data as Record<string, unknown>).class as number ?? CharacterClass.Archer,
     level: data.level,
     xp: data.xp,
     equipment: data.equipment as ItemInstanceData[],

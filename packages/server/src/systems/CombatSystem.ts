@@ -56,55 +56,66 @@ export class CombatSystem {
 
     // Move projectiles and check collisions
     state.projectiles.forEach((proj, id) => {
-      // Move projectile
-      proj.x += Math.cos(proj.angle) * proj.speed * dt;
-      proj.y += Math.sin(proj.angle) * proj.speed * dt;
+      if (proj.expandingAoe) {
+        // Expanding AoE: grow collision radius instead of moving
+        proj.collisionRadius += proj.speed * dt;
+        if (proj.collisionRadius >= proj.maxRange) {
+          projectilesToRemove.push(id);
+          return;
+        }
+        // Skip bounds/wall/water checks — AoE stays at cast location
+      } else {
+        // Normal projectile movement
+        proj.x += Math.cos(proj.angle) * proj.speed * dt;
+        proj.y += Math.sin(proj.angle) * proj.speed * dt;
 
-      // Check if exceeded max range
-      const traveled = distanceBetween(proj.startX, proj.startY, proj.x, proj.y);
-      if (traveled >= proj.maxRange) {
-        projectilesToRemove.push(id);
-        return;
-      }
+        // Check if exceeded max range
+        const traveled = distanceBetween(proj.startX, proj.startY, proj.x, proj.y);
+        if (traveled >= proj.maxRange) {
+          projectilesToRemove.push(id);
+          return;
+        }
 
-      // Check if out of bounds (zone-aware)
-      const dims = getZoneDimensions(proj.zone);
-      if (
-        proj.x < 0 ||
-        proj.x > dims.width ||
-        proj.y < 0 ||
-        proj.y > dims.height
-      ) {
-        projectilesToRemove.push(id);
-        return;
-      }
-
-      // Check if projectile hit a wall tile in a dungeon
-      const projMapData = dungeonMaps?.get(proj.zone);
-      if (projMapData) {
-        const tileX = Math.floor(proj.x / TILE_SIZE);
-        const tileY = Math.floor(proj.y / TILE_SIZE);
+        // Check if out of bounds (zone-aware)
+        const dims = getZoneDimensions(proj.zone);
         if (
-          tileX >= 0 &&
-          tileX < projMapData.width &&
-          tileY >= 0 &&
-          tileY < projMapData.height &&
-          projMapData.tiles[tileY * projMapData.width + tileX] === DungeonTile.Wall
+          proj.x < 0 ||
+          proj.x > dims.width ||
+          proj.y < 0 ||
+          proj.y > dims.height
         ) {
+          projectilesToRemove.push(id);
+          return;
+        }
+
+        // Check if projectile hit a wall tile in a dungeon
+        const projMapData = dungeonMaps?.get(proj.zone);
+        if (projMapData) {
+          const tileX = Math.floor(proj.x / TILE_SIZE);
+          const tileY = Math.floor(proj.y / TILE_SIZE);
+          if (
+            tileX >= 0 &&
+            tileX < projMapData.width &&
+            tileY >= 0 &&
+            tileY < projMapData.height &&
+            projMapData.tiles[tileY * projMapData.width + tileX] === DungeonTile.Wall
+          ) {
+            projectilesToRemove.push(id);
+            return;
+          }
+        }
+
+        // Check if projectile hit water in hostile zone
+        if (isHostileZone(proj.zone) && getRealmMap() && isWaterTile(proj.x, proj.y)) {
           projectilesToRemove.push(id);
           return;
         }
       }
 
-      // Check if projectile hit water in hostile zone
-      if (isHostileZone(proj.zone) && getRealmMap() && isWaterTile(proj.x, proj.y)) {
-        projectilesToRemove.push(id);
-        return;
-      }
-
       if (proj.ownerType === EntityType.Player) {
         // Player projectile → check enemy collisions using spatial grid
-        const nearby = this.enemyGrid.query(proj.x, proj.y, 50);
+        const queryRadius = proj.expandingAoe ? proj.collisionRadius + 50 : 50;
+        const nearby = this.enemyGrid.query(proj.x, proj.y, queryRadius);
         for (const enemy of nearby) {
           // Only collide with enemies in the same zone
           if (enemy.zone !== proj.zone) continue;

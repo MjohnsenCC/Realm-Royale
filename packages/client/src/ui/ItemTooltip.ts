@@ -5,6 +5,7 @@ import {
   getItemCategory,
   getItemSubtype,
   getItemInstanceName,
+  getSubtypeName,
   ItemCategory,
   StatType,
   STAT_NAMES,
@@ -16,6 +17,7 @@ import {
   getScaledAbilityStatsRange,
   ORB_DEFINITIONS,
   ORB_MAX_STACK,
+  ARMOR_LOCKED_STAT_MULTIPLIER,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
@@ -254,7 +256,8 @@ export class ItemTooltip {
     this.nameText.setColor("#ffffff");
     this.nameText.setY(this.bannerHeight / 2);
 
-    const tierLabel = `T${item.instanceTier} ${getCategoryName(category)}`;
+    const subtypeName = getSubtypeName(category, subtype);
+    const tierLabel = `T${item.instanceTier} ${subtypeName}`;
     this.tierText.setText(tierLabel);
     this.tierText.setColor("#aaaaaa");
     this.tierText.setY(tierY);
@@ -307,11 +310,18 @@ export class ItemTooltip {
       lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
     } else {
       // Armor and Ring: use rolled locked stat bonuses
+      // Light armor gets reduced locked stat values
+      const armorMult = category === ItemCategory.Armor
+        ? (ARMOR_LOCKED_STAT_MULTIPLIER[subtype] ?? 1.0)
+        : 1.0;
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
+        const rawVal = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
+        const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
         if (shiftHeld) {
-          const [min, max] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
+          const [rawMin, rawMax] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
+          const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
+          const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)}) ${name}`);
         } else {
           lockedLines.push(`+${formatStatValue(val)} ${name}`);
@@ -319,10 +329,13 @@ export class ItemTooltip {
         lockedTiers.push(item.lockedStat1Tier);
       }
       if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+        const rawVal = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+        const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
         if (shiftHeld) {
-          const [min, max] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
+          const [rawMin, rawMax] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
+          const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
+          const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${formatStatValue(val)}(${formatStatValue(min)}-${formatStatValue(max)}) ${name}`);
         } else {
           lockedLines.push(`+${formatStatValue(val)} ${name}`);

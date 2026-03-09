@@ -78,10 +78,10 @@ export class AuthManager {
     return res.json();
   }
 
-  async createCharacter(name: string): Promise<CharacterSummary> {
+  async createCharacter(name: string, characterClass: number = 0): Promise<CharacterSummary> {
     const res = await this.authFetch("/api/characters", {
       method: "POST",
-      body: JSON.stringify({ name }),
+      body: JSON.stringify({ name, characterClass }),
     });
     if (!res.ok) {
       const data = await res.json();

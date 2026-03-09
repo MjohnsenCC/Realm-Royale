@@ -15,6 +15,7 @@ import { ItemInstance, createEmptyItemSchema } from "./ItemInstance";
 export class Player extends Schema {
   @type("string") id: string = "";
   @type("string") name: string = "";
+  @type("uint8") characterClass: number = 0;
   @type("number") x: number = 0;
   @type("number") y: number = 0;
   @type("number") aimAngle: number = 0;
@@ -50,6 +51,8 @@ export class Player extends Schema {
   inputMovementX: number = 0;
   inputMovementY: number = 0;
   inputAimAngle: number = 0;
+  inputAimX: number = 0;
+  inputAimY: number = 0;
   inputShooting: boolean = false;
   inputUseAbility: boolean = false;
   pendingInputs: Array<{
@@ -57,6 +60,8 @@ export class Player extends Schema {
     movementX: number;
     movementY: number;
     aimAngle: number;
+    aimX: number;
+    aimY: number;
     shooting: boolean;
     useAbility: boolean;
     dt: number;

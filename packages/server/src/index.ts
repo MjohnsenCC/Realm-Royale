@@ -21,6 +21,7 @@ import {
 import {
   CHARACTER_NAME_MAX_LENGTH,
   CHARACTER_NAME_MIN_LENGTH,
+  CharacterClass,
 } from "@rotmg-lite/shared";
 
 const app = express();
@@ -104,7 +105,7 @@ app.get("/api/characters", authMiddleware, async (req: AuthRequest, res) => {
 
 app.post("/api/characters", authMiddleware, async (req: AuthRequest, res) => {
   try {
-    const { name } = req.body;
+    const { name, characterClass } = req.body;
     if (
       typeof name !== "string" ||
       name.trim().length < CHARACTER_NAME_MIN_LENGTH ||
@@ -116,7 +117,12 @@ app.post("/api/characters", authMiddleware, async (req: AuthRequest, res) => {
       return;
     }
 
-    const character = await createCharacter(req.accountId!, name.trim());
+    const validClasses: number[] = [CharacterClass.Archer, CharacterClass.Warrior, CharacterClass.Arcanist];
+    const cls = typeof characterClass === "number" && validClasses.includes(characterClass)
+      ? (characterClass as CharacterClass)
+      : CharacterClass.Archer;
+
+    const character = await createCharacter(req.accountId!, name.trim(), cls);
     res.status(201).json(character);
   } catch (err) {
     const message = err instanceof Error ? err.message : "Failed to create character";

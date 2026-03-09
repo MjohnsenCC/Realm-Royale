@@ -13,13 +13,14 @@ const config: Phaser.Types.Core.GameConfig = {
   width: 800,
   height: 600,
   backgroundColor: "#1a1a2e",
-  parent: document.body,
+  parent: "game-container",
   dom: { createContainer: true },
   scene: [BootScene, MenuScene, CharacterSelectScene, GameScene],
   render: { roundPixels: true },
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,
+    fullscreenTarget: document.getElementById("game-container") as HTMLElement,
   },
 };
 

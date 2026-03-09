@@ -48,6 +48,7 @@ export class InventoryUI {
 
   // Equipment
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
+  private abilityCooldownGraphics: Phaser.GameObjects.Graphics;
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
@@ -105,6 +106,7 @@ export class InventoryUI {
 
     // --- Equipment slot graphics ---
     this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.abilityCooldownGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
       const sx = this.eqX + i * (this.slotSize + this.slotGap);
@@ -523,6 +525,24 @@ export class InventoryUI {
     this.drawEquipmentSlots();
   }
 
+  /**
+   * Update the ability cooldown fill overlay each frame.
+   * @param progress 0 = just cast (full dark), 1 = ready (no overlay), negative = no overlay needed.
+   */
+  updateAbilityCooldown(progress: number): void {
+    this.abilityCooldownGraphics.clear();
+    if (progress < 0 || progress >= 1) return;
+
+    const ABILITY_SLOT = 1;
+    const sx = this.eqX + ABILITY_SLOT * (this.slotSize + this.slotGap);
+    const sy = this.eqY;
+    const darkHeight = Math.ceil(this.slotSize * (1 - progress));
+    if (darkHeight <= 0) return;
+
+    this.abilityCooldownGraphics.fillStyle(0x000000, 0.55);
+    this.abilityCooldownGraphics.fillRect(sx, sy, this.slotSize, darkHeight);
+  }
+
   // --- Drag-and-drop support ---
 
   setDragManager(dm: DragManager): void {
@@ -621,6 +641,7 @@ export class InventoryUI {
 
     this.drawSlots();
     this.drawEquipmentSlots();
+    this.abilityCooldownGraphics.clear();
     this.tooltip.relayout();
   }
 

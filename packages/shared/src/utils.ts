@@ -22,7 +22,7 @@ import {
   NEXUS_HEIGHT,
   TILE_SIZE,
 } from "./constants";
-import { ItemCategory, PlayerZone, DungeonType, StatType, getZoneBase } from "./types";
+import { ItemCategory, PlayerZone, DungeonType, StatType, getZoneBase, ArmorSubtype } from "./types";
 import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
 import { ITEM_DEFS, getItemCategory, getItemSubtype } from "./items";
 import {
@@ -31,6 +31,7 @@ import {
   getStatValue,
   getScaledWeaponStats,
   getScaledAbilityStats,
+  ARMOR_LOCKED_STAT_MULTIPLIER,
 } from "./itemStats";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
@@ -77,13 +78,14 @@ function accumulateItemBonuses(
     projSpeedPercent: number;
     critChance: number;
     critMultiplier: number;
-  }
+  },
+  lockedStatMultiplier: number = 1.0
 ): void {
   if (isEmptyItem(item) || item.isUT) return;
 
   // Locked stats (pass roll instead of item tier)
-  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
-  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true, lockedStatMultiplier);
+  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true, lockedStatMultiplier);
 
   // Open stats (packed as [type, tier, roll, type, tier, roll, ...])
   for (let i = 0; i < item.openStats.length; i += 3) {
@@ -112,10 +114,12 @@ function addStatBonus(
   statType: number,
   statTier: number,
   roll: number,
-  isLocked: boolean = false
+  isLocked: boolean = false,
+  multiplier: number = 1.0
 ): void {
   if (statType < 0 || statTier <= 0) return;
-  const value = getStatValue(statType, statTier, roll, isLocked);
+  const rawValue = getStatValue(statType, statTier, roll, isLocked);
+  const value = multiplier !== 1.0 ? Math.round(rawValue * multiplier) : rawValue;
   switch (statType) {
     case StatType.AttackDamage:
       bonuses.damage += value;
@@ -261,9 +265,16 @@ export function computePlayerStats(
   }
 
   // --- Accumulate locked + open stat bonuses from all tiered equipment ---
-  for (const item of equipment) {
+  for (let i = 0; i < equipment.length; i++) {
+    const item = equipment[i];
     if (item) {
-      accumulateItemBonuses(item, bonuses);
+      // Light armor gets reduced locked stat values
+      let lockedMult = 1.0;
+      if (i === ItemCategory.Armor && !isEmptyItem(item) && !item.isUT) {
+        const armorSubtype = getItemSubtype(item.baseItemId);
+        lockedMult = ARMOR_LOCKED_STAT_MULTIPLIER[armorSubtype] ?? 1.0;
+      }
+      accumulateItemBonuses(item, bonuses, lockedMult);
     }
   }
 

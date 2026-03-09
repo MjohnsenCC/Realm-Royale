@@ -111,6 +111,11 @@ import {
   CHAT_MAX_LENGTH,
   CHAT_RATE_LIMIT_MS,
   ChatChannel,
+  canClassEquip,
+  AbilitySubtype,
+  ABILITY_TEMPLATES,
+  CharacterClass,
+  CLASS_EQUIPMENT_MAP,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
@@ -198,6 +203,8 @@ export class GameRoom extends Room<GameState> {
         movementX: mv.x,
         movementY: mv.y,
         aimAngle: typeof input.aimAngle === "number" ? input.aimAngle : 0,
+        aimX: typeof input.aimX === "number" ? input.aimX : player.x,
+        aimY: typeof input.aimY === "number" ? input.aimY : player.y,
         shooting: !!input.shooting,
         useAbility: !!input.useAbility,
         dt,
@@ -445,6 +452,10 @@ export class GameRoom extends Room<GameState> {
           const category = getItemCategory(itemId);
           if (category !== eqSlot) return;
 
+          // Class restriction check
+          const subtype = getItemSubtype(itemId);
+          if (!canClassEquip(player.characterClass, category, subtype)) return;
+
           const currentEquipped = schemaToItemData(player.equipment[eqSlot]!);
           updateSchemaFromData(player.equipment[eqSlot]!, itemData);
           updateSchemaFromData(bagItem.item, createEmptyItemInstance());
@@ -584,6 +595,10 @@ export class GameRoom extends Room<GameState> {
 
         const category = getItemCategory(itemId);
         if (category < 0 || category >= EQUIPMENT_SLOTS) return;
+
+        // Class restriction check
+        const subtype = getItemSubtype(itemId);
+        if (!canClassEquip(player.characterClass, category, subtype)) return;
 
         // Swap equipment and inventory
         const currentEquipped = schemaToItemData(player.equipment[category]!);
@@ -1108,6 +1123,7 @@ export class GameRoom extends Room<GameState> {
       player.accountId = payload.accountId;
       player.characterId = character.id;
       player.name = character.name;
+      player.characterClass = character.characterClass;
       player.level = character.level;
       player.xp = character.xp;
 
@@ -1132,10 +1148,13 @@ export class GameRoom extends Room<GameState> {
       player.level = 1;
       player.xp = 0;
 
-      // Default equipment: T1 items with random locked stat tiers
-      updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, WeaponSubtype.Bow, 1, false));
-      updateSchemaFromData(player.equipment[ItemCategory.Ability]!, generateItemInstance(ItemCategory.Ability, 0, 1, false));
-      updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, 0, 1, false));
+      // Default equipment: T1 items based on class (guests default to Archer)
+      const guestClass = CharacterClass.Archer;
+      player.characterClass = guestClass;
+      const guestMapping = CLASS_EQUIPMENT_MAP[guestClass];
+      updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, guestMapping.weapon, 1, false));
+      updateSchemaFromData(player.equipment[ItemCategory.Ability]!, generateItemInstance(ItemCategory.Ability, guestMapping.ability, 1, false));
+      updateSchemaFromData(player.equipment[ItemCategory.Armor]!, generateItemInstance(ItemCategory.Armor, guestMapping.armor, 1, false));
       updateSchemaFromData(player.equipment[ItemCategory.Ring]!, generateItemInstance(ItemCategory.Ring, 0, 1, false));
 
       // Starting portal gems in inventory
@@ -1480,6 +1499,8 @@ export class GameRoom extends Room<GameState> {
           }
 
           player.aimAngle = input.aimAngle;
+          player.inputAimX = input.aimX ?? player.x;
+          player.inputAimY = input.aimY ?? player.y;
           player.inputShooting = input.shooting;
           player.inputUseAbility = input.useAbility;
           player.lastProcessedInput = input.seq;
@@ -1498,7 +1519,7 @@ export class GameRoom extends Room<GameState> {
           const hasWeapon = weaponSchema && weaponSchema.baseItemId >= 0;
 
           if (hasWeapon) {
-            const isSword = getItemSubtype(weaponSchema.baseItemId) === WeaponSubtype.Sword;
+            const weaponSubtype = getItemSubtype(weaponSchema.baseItemId);
 
             // Multi-projectile and spread only for UT weapons (e.g. Doom Blade)
             let projectileCount = 1;
@@ -1533,8 +1554,20 @@ export class GameRoom extends Room<GameState> {
               proj.startY = player.y;
               proj.maxRange = player.cachedWeaponRange;
               proj.collisionRadius = player.cachedWeaponProjSize;
-              proj.projType = isSword ? ProjectileType.SwordSlash : ProjectileType.BowArrow;
-              proj.piercing = false;
+              switch (weaponSubtype) {
+                case WeaponSubtype.Sword:
+                  proj.projType = ProjectileType.SwordSlash;
+                  proj.piercing = false;
+                  break;
+                case WeaponSubtype.Wand:
+                  proj.projType = ProjectileType.WandBolt;
+                  proj.piercing = true;
+                  break;
+                default:
+                  proj.projType = ProjectileType.BowArrow;
+                  proj.piercing = false;
+                  break;
+              }
               proj.zone = player.zone;
 
               this.state.projectiles.set(proj.id, proj);
@@ -1590,24 +1623,83 @@ export class GameRoom extends Room<GameState> {
               player.mana -= abilityManaCost;
               player.lastAbilityTime = now;
 
-              const proj = new Projectile();
-              proj.id = generateId("aproj");
-              proj.x = player.x;
-              proj.y = player.y;
-              proj.angle = player.aimAngle;
-              proj.ownerType = EntityType.Player;
-              proj.ownerId = player.id;
-              proj.speed = abilityProjSpeed;
-              proj.damage = abilityDamage;
-              proj.startX = player.x;
-              proj.startY = player.y;
-              proj.maxRange = abilityRange;
-              proj.collisionRadius = abilityProjSize;
-              proj.projType = ProjectileType.QuiverShot;
-              proj.piercing = abilityPiercing;
-              proj.zone = player.zone;
+              // Determine ability behavior
+              const abilitySubtype = getItemSubtype(abilitySchema.baseItemId);
+              const abilityTemplate = ABILITY_TEMPLATES[abilitySubtype];
+              const isExpandingAoe = abilitySchema.isUT
+                ? (ITEM_DEFS[abilitySchema.baseItemId]?.abilityStats as { expandingAoe?: boolean } | undefined)?.expandingAoe === true
+                : abilityTemplate?.expandingAoe === true;
+              const isAoeRing = !isExpandingAoe && (abilitySchema.isUT
+                ? (ITEM_DEFS[abilitySchema.baseItemId]?.abilityStats as { aoeRing?: boolean } | undefined)?.aoeRing === true
+                : abilityTemplate?.aoeRing === true);
+              const projCount = isAoeRing
+                ? (abilitySchema.isUT
+                    ? ((ITEM_DEFS[abilitySchema.baseItemId]?.abilityStats as { projectileCount?: number } | undefined)?.projectileCount ?? 8)
+                    : (abilityTemplate?.projectileCount ?? 8))
+                : 1;
 
-              this.state.projectiles.set(proj.id, proj);
+              if (isExpandingAoe) {
+                // Expanding AoE: stationary circle that grows over time at cursor position
+                const proj = new Projectile();
+                proj.id = generateId("aproj");
+                proj.x = player.inputAimX;
+                proj.y = player.inputAimY;
+                proj.angle = 0;
+                proj.ownerType = EntityType.Player;
+                proj.ownerId = player.id;
+                proj.speed = abilityProjSpeed; // expansion rate
+                proj.damage = abilityDamage;
+                proj.startX = player.inputAimX;
+                proj.startY = player.inputAimY;
+                proj.maxRange = abilityRange; // max radius
+                proj.collisionRadius = abilityProjSize; // starting radius
+                proj.projType = ProjectileType.RelicExpand;
+                proj.piercing = true;
+                proj.expandingAoe = true;
+                proj.zone = player.zone;
+                this.state.projectiles.set(proj.id, proj);
+              } else if (isAoeRing) {
+                // AoE ring: fire projectiles evenly spaced in a full circle
+                for (let pi = 0; pi < projCount; pi++) {
+                  const angle = (2 * Math.PI / projCount) * pi;
+                  const proj = new Projectile();
+                  proj.id = generateId("aproj");
+                  proj.x = player.x;
+                  proj.y = player.y;
+                  proj.angle = angle;
+                  proj.ownerType = EntityType.Player;
+                  proj.ownerId = player.id;
+                  proj.speed = abilityProjSpeed;
+                  proj.damage = abilityDamage;
+                  proj.startX = player.x;
+                  proj.startY = player.y;
+                  proj.maxRange = abilityRange;
+                  proj.collisionRadius = abilityProjSize;
+                  proj.projType = ProjectileType.HelmSpin;
+                  proj.piercing = abilityPiercing;
+                  proj.zone = player.zone;
+                  this.state.projectiles.set(proj.id, proj);
+                }
+              } else {
+                // Single aimed projectile (Quiver, etc.)
+                const proj = new Projectile();
+                proj.id = generateId("aproj");
+                proj.x = player.x;
+                proj.y = player.y;
+                proj.angle = player.aimAngle;
+                proj.ownerType = EntityType.Player;
+                proj.ownerId = player.id;
+                proj.speed = abilityProjSpeed;
+                proj.damage = abilityDamage;
+                proj.startX = player.x;
+                proj.startY = player.y;
+                proj.maxRange = abilityRange;
+                proj.collisionRadius = abilityProjSize;
+                proj.projType = ProjectileType.QuiverShot;
+                proj.piercing = abilityPiercing;
+                proj.zone = player.zone;
+                this.state.projectiles.set(proj.id, proj);
+              }
 
               if (speedBoostAmt && speedBoostDur) {
                 player.speedBoostAmount = speedBoostAmt;

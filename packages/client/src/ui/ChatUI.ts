@@ -43,7 +43,7 @@ export class ChatUI {
     // Background
     this.bg = scene.add.graphics();
     this.bg.setScrollFactor(0);
-    this.bg.setDepth(100);
+    this.bg.setDepth(90);
 
     // Pre-create text objects for visible lines
     for (let i = 0; i < VISIBLE_LINES; i++) {
@@ -55,7 +55,7 @@ export class ChatUI {
           wordWrap: { width: PANEL_WIDTH_REF },
         })
         .setScrollFactor(0)
-        .setDepth(101);
+        .setDepth(91);
       this.lineTexts.push(t);
     }
 
@@ -68,7 +68,7 @@ export class ChatUI {
         fontStyle: "bold",
       })
       .setScrollFactor(0)
-      .setDepth(102)
+      .setDepth(92)
       .setVisible(false);
 
     // DOM input element
@@ -216,7 +216,16 @@ export class ChatUI {
     this.inputEl.style.display = "block";
     this.inputEl.value = "";
     // Delay focus slightly so the Enter keypress that opens chat doesn't immediately close it
-    setTimeout(() => this.inputEl.focus(), 50);
+    setTimeout(() => {
+      this.inputEl.focus();
+      // Safety: if focus failed (e.g. element outside fullscreen boundary),
+      // automatically close to prevent stuck state
+      setTimeout(() => {
+        if (this._isTyping && document.activeElement !== this.inputEl) {
+          this.closeInput();
+        }
+      }, 100);
+    }, 50);
   }
 
   private sendAndClose(): void {
@@ -227,7 +236,7 @@ export class ChatUI {
     this.closeInput();
   }
 
-  private cancelInput(): void {
+  cancelInput(): void {
     this.closeInput();
   }
 

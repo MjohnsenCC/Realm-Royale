@@ -456,18 +456,21 @@ export class StatsPanel {
     const weaponItem = equipment[ItemCategory.Weapon];
     let weaponCooldown = baseStats.shootCooldown;
     let weaponBaseDamage = baseStats.damage;
+    let weaponBaseProjSpeed = 300;
     if (weaponItem && !isEmptyItem(weaponItem)) {
       if (weaponItem.isUT) {
         const def = ITEM_DEFS[weaponItem.baseItemId];
         if (def?.weaponStats) {
           weaponCooldown = def.weaponStats.shootCooldown;
           weaponBaseDamage = def.weaponStats.damage;
+          weaponBaseProjSpeed = def.weaponStats.projectileSpeed;
         }
       } else {
         const subtype = getItemSubtype(weaponItem.baseItemId);
         const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Tier, weaponItem.lockedStat2Tier, weaponItem.lockedStat1Roll, weaponItem.lockedStat2Roll);
         weaponCooldown = scaled.shootCooldown;
         weaponBaseDamage = scaled.damage;
+        weaponBaseProjSpeed = scaled.projectileSpeed;
       }
     }
 
@@ -560,7 +563,8 @@ export class StatsPanel {
     // Row 4: Weapon Range
     this.setStatRow(4, String(fullStats.weaponRange));
     // Row 5: Projectile Speed
-    this.setStatRow(5, String(fullStats.weaponProjSpeed));
+    const projSpeedBonus = fullStats.weaponProjSpeed - weaponBaseProjSpeed;
+    this.setStatRow(5, String(fullStats.weaponProjSpeed), projSpeedBonus);
     // Row 6: Crit Chance
     this.setStatRow(6, fullStats.critChance > 0 ? Math.round(fullStats.critChance) + "%" : "0%", fullStats.critChance, undefined, "%");
     // Row 7: Crit Multiplier
@@ -579,7 +583,13 @@ export class StatsPanel {
     const effectiveAbilityCooldown = fullStats.abilityCooldownReduction > 0
       ? Math.round(abilityCooldown * (1 - fullStats.abilityCooldownReduction / 100))
       : abilityCooldown;
-    this.setStatRow(11, hasAbility ? (effectiveAbilityCooldown / 1000).toFixed(2) + "s" : "N/A");
+    this.setStatRow(
+      11,
+      hasAbility ? (effectiveAbilityCooldown / 1000).toFixed(2) + "s" : "N/A",
+      hasAbility && fullStats.abilityCooldownReduction > 0 ? fullStats.abilityCooldownReduction : undefined,
+      undefined,
+      "%"
+    );
     // Row 12: Ability Mana Cost
     this.setStatRow(12, hasAbility ? String(abilityManaCost) : "N/A");
     // Row 13: Max Health
