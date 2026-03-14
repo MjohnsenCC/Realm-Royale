@@ -12,6 +12,7 @@ import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
 import { OptionsUI } from "../ui/OptionsUI";
+import { generateEntityTextures } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
@@ -123,6 +124,38 @@ interface DecodedState {
   dungeonPortals: MapSchemaInstance;
 }
 
+/**
+ * Tileset sprite keys: 36 slots (18 tile types × 2 variants).
+ * Index = oldBiomeIndex * 2 + variant (0 or 1).
+ */
+const TILE_SPRITE_KEYS: string[] = [
+  /* 0  Ocean       */ "tile-ocean",        "tile-ocean",
+  /* 1  ShallowWater*/ "tile-shallowwater", "tile-shallowwater",
+  /* 2  Beach       */ "tile-beach",        "tile-beach-1",
+  /* 3  Marsh       */ "tile-marsh",        "tile-marsh-1",
+  /* 4  Desert      */ "tile-desert",       "tile-desert-1",
+  /* 5  DryPlains   */ "tile-dryplains",    "tile-dryplains-1",
+  /* 6  Grassland   */ "tile-grassland",    "tile-grassland-1",
+  /* 7  Forest      */ "tile-forest",       "tile-forest-1",
+  /* 8  Jungle      */ "tile-jungle",       "tile-jungle-1",
+  /* 9  Shrubland   */ "tile-savanna",      "tile-savanna-1",
+  /* 10 Taiga       */ "tile-forest",       "tile-forest-1",
+  /* 11 DesertCliffs*/ "tile-highland",     "tile-highland-1",
+  /* 12 Tundra      */ "tile-tundra",       "tile-tundra-1",
+  /* 13 Scorched    */ "tile-volcanicridge", "tile-volcanicridge-1",
+  /* 14 Snow        */ "tile-mountainpeak", "tile-mountainpeak-1",
+  /* 15 Lake        */ "tile-lake",         "tile-lake",
+  /* 16 River       */ "tile-shallowwater", "tile-shallowwater",
+  /* 17 Road        */ "tile-dryplains",    "tile-dryplains-1",
+];
+
+/** Deterministic 0-or-1 hash for tile variant selection. */
+function tileVariantHash(x: number, y: number): number {
+  let h = (x * 374761393 + y * 668265263) | 0;
+  h = ((h ^ (h >> 13)) * 1274126177) | 0;
+  return h >>> 31;
+}
+
 export class GameScene extends Phaser.Scene {
   private network!: NetworkManager;
   private playerSprites = new Map<string, PlayerSprite>();
@@ -153,6 +186,8 @@ export class GameScene extends Phaser.Scene {
   private hud!: HUD;
   private groundGraphics!: Phaser.GameObjects.Graphics;
   private portalGraphics!: Phaser.GameObjects.Graphics;
+  private zoneTilemap: Phaser.Tilemaps.Tilemap | null = null;
+  private zoneLayer: Phaser.Tilemaps.TilemapLayer | null = null;
   private nexusLabels: Phaser.GameObjects.Text[] = [];
   private decodedState!: DecodedState;
 
@@ -299,6 +334,9 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Pre-render all entity shapes into reusable textures (batched draw calls)
+    generateEntityTextures(this);
+
     this.localZone = "nexus";
     this.currentDungeonMap = this.nexusMap; // enable wall collision in nexus
 
@@ -312,7 +350,7 @@ export class GameScene extends Phaser.Scene {
     });
 
     // Draw ground for current zone
-    this.groundGraphics = this.add.graphics().setDepth(-1);
+    this.groundGraphics = this.add.graphics().setDepth(-0.5);
     this.portalGraphics = this.add.graphics();
     this.drawGround();
     this.drawPortal();
@@ -662,6 +700,7 @@ export class GameScene extends Phaser.Scene {
     this.clearDungeonPortalSprites();
     this.destroyVaultPortalGem();
     this.destroyHostileTilemap();
+    this.destroyZoneTilemap();
     this.drawGround();
 
     if (zone === "nexus") {
@@ -812,23 +851,10 @@ export class GameScene extends Phaser.Scene {
   private drawNexusGround(): void {
     const mapData = this.nexusMap;
     const { tiles, width, height } = mapData;
-    const groundFill = 0x1a2a1a;
-    const lineColor = 0x2a4a2a;
     const edgeColor = 0x44aa66;
 
-    // Draw floor tiles
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        if (tiles[ty * width + tx] === DungeonTile.Floor) {
-          const px = tx * TILE_SIZE;
-          const py = ty * TILE_SIZE;
-          this.groundGraphics.fillStyle(groundFill, 1);
-          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-          this.groundGraphics.lineStyle(1, lineColor, 0.4);
-          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
-        }
-      }
-    }
+    // Floor tiles via tilemap (single draw call, replaces per-tile fillRect)
+    this.createZoneTilemap("tile-nexus", tiles, width, height);
 
     // Draw highlighted edges where floor meets wall
     this.groundGraphics.lineStyle(2, edgeColor, 0.6);
@@ -897,23 +923,10 @@ export class GameScene extends Phaser.Scene {
   private drawVaultGround(): void {
     const mapData = this.vaultMap;
     const { tiles, width, height } = mapData;
-    const groundFill = 0x1a1a2a;
-    const lineColor = 0x2a2a4a;
     const edgeColor = 0xddaa55;
 
-    // Draw floor tiles (dark stone)
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        if (tiles[ty * width + tx] === DungeonTile.Floor) {
-          const px = tx * TILE_SIZE;
-          const py = ty * TILE_SIZE;
-          this.groundGraphics.fillStyle(groundFill, 1);
-          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-          this.groundGraphics.lineStyle(1, lineColor, 0.4);
-          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
-        }
-      }
-    }
+    // Floor tiles via tilemap (single draw call, replaces per-tile fillRect)
+    this.createZoneTilemap("tile-vault", tiles, width, height);
 
     // Draw highlighted edges where floor meets wall
     this.groundGraphics.lineStyle(2, edgeColor, 0.4);
@@ -1083,36 +1096,49 @@ export class GameScene extends Phaser.Scene {
     }
 
     const ts = HOSTILE_TILE_SIZE; // 40px per tile (matches TILE_SIZE)
-    const numTiles = 18; // 16 biomes + river + road
+    const numTiles = TILE_SPRITE_KEYS.length; // 36 (18 tile types × 2 variants)
     const RIVER_TILE = 16;
 
-    // Generate tileset texture: 18 colored squares in a horizontal strip
+    // Generate tileset texture: blit loaded 8×8 sprites scaled to 40×40 into a strip.
+    // Each tile is extruded by 1px on all sides (edge pixels duplicated) to prevent
+    // sub-pixel seams when the camera has fractional scroll positions.
+    const EXTRUDE = 1;
+    const cellSize = ts + EXTRUDE * 2; // 42px per cell (1px border + 40px tile + 1px border)
     const tilesetKey = "realm-biome-tileset-v2";
     if (!this.textures.exists(tilesetKey)) {
       const canvas = document.createElement("canvas");
-      canvas.width = ts * numTiles;
-      canvas.height = ts;
+      canvas.width = EXTRUDE + numTiles * (ts + EXTRUDE * 2);
+      canvas.height = ts + EXTRUDE * 2;
       const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = false; // nearest-neighbor for crisp pixel art
       for (let i = 0; i < numTiles; i++) {
-        if (i < 16) {
-          const visual = REALM_BIOME_VISUALS[i];
-          if (visual) {
-            const hex = visual.groundFill.toString(16).padStart(6, "0");
-            ctx.fillStyle = `#${hex}`;
-          } else {
-            ctx.fillStyle = "#ff00ff"; // debug magenta
-          }
-        } else if (i === RIVER_TILE) {
-          ctx.fillStyle = "#2a6a9a";
-        } else {
-          ctx.fillStyle = "#8a7a5a";
-        }
-        ctx.fillRect(i * ts, 0, ts, ts);
+        const dx = EXTRUDE + i * cellSize; // tile content x (inside extrusion border)
+        const dy = EXTRUDE;
 
-        // Grid line border (matches nexus/dungeon tile style)
-        ctx.strokeStyle = "rgba(255, 255, 255, 0.15)";
-        ctx.lineWidth = 1;
-        ctx.strokeRect(i * ts + 0.5, 0.5, ts - 1, ts - 1);
+        const spriteKey = TILE_SPRITE_KEYS[i];
+        const tex = this.textures.get(spriteKey);
+        if (tex && tex.key !== "__MISSING") {
+          const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+          // Draw the tile content
+          ctx.drawImage(src, 0, 0, src.width, src.height, dx, dy, ts, ts);
+          // Extrude edges: duplicate 1px borders to fill the extrusion margin
+          // Top edge
+          ctx.drawImage(canvas, dx, dy, ts, 1, dx, dy - 1, ts, 1);
+          // Bottom edge
+          ctx.drawImage(canvas, dx, dy + ts - 1, ts, 1, dx, dy + ts, ts, 1);
+          // Left edge (including corners)
+          ctx.drawImage(canvas, dx, dy - 1, 1, ts + 2, dx - 1, dy - 1, 1, ts + 2);
+          // Right edge (including corners)
+          ctx.drawImage(canvas, dx + ts - 1, dy - 1, 1, ts + 2, dx + ts, dy - 1, 1, ts + 2);
+        } else {
+          // Fallback: solid color for missing sprites (fills entire cell incl. extrusion)
+          const biomeIdx = Math.floor(i / 2);
+          const visual = REALM_BIOME_VISUALS[biomeIdx];
+          ctx.fillStyle = visual
+            ? `#${visual.groundFill.toString(16).padStart(6, "0")}`
+            : "#ff00ff";
+          ctx.fillRect(dx - EXTRUDE, dy - EXTRUDE, cellSize, cellSize);
+        }
       }
       this.textures.addCanvas(tilesetKey, canvas);
     }
@@ -1277,7 +1303,7 @@ export class GameScene extends Phaser.Scene {
         if (mapData.roads[idx] > 0) {
           tile = ROAD_TILE;
         }
-        row.push(tile);
+        row.push(tile * 2 + tileVariantHash(startX + x, mapY));
       }
       tileData.push(row);
     }
@@ -1292,8 +1318,8 @@ export class GameScene extends Phaser.Scene {
       "realm-biome-tileset-v2",
       ts,
       ts,
-      0,
-      0
+      1,  // margin: 1px extrusion border before first tile
+      2   // spacing: 2px between tiles (1px extrusion on each side)
     );
     if (!biomeTileset) {
       biomeMap.destroy();
@@ -1622,6 +1648,83 @@ export class GameScene extends Phaser.Scene {
     this.lastChunkCY = -1;
   }
 
+  private destroyZoneTilemap(): void {
+    if (this.zoneLayer) {
+      this.zoneLayer.destroy();
+      this.zoneLayer = null;
+    }
+    if (this.zoneTilemap) {
+      this.zoneTilemap.destroy();
+      this.zoneTilemap = null;
+    }
+  }
+
+  /**
+   * Build a single-tile extruded tileset from a loaded sprite and create a
+   * tilemap for all floor tiles in a zone. Returns the created layer (depth -1).
+   * Uses the same extrusion technique as the hostile tileset to prevent seams.
+   */
+  private createZoneTilemap(
+    spriteKey: string,
+    tiles: Uint8Array | number[],
+    width: number,
+    height: number
+  ): void {
+    this.destroyZoneTilemap();
+
+    const ts = TILE_SIZE;
+    const EXTRUDE = 1;
+    const tilesetKey = `zone-tileset-${spriteKey}`;
+
+    if (!this.textures.exists(tilesetKey)) {
+      const canvas = document.createElement("canvas");
+      canvas.width = ts + EXTRUDE * 2;
+      canvas.height = ts + EXTRUDE * 2;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = false;
+
+      const tex = this.textures.get(spriteKey);
+      if (tex && tex.key !== "__MISSING") {
+        const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+        const dx = EXTRUDE;
+        const dy = EXTRUDE;
+        ctx.drawImage(src, 0, 0, src.width, src.height, dx, dy, ts, ts);
+        // Extrude edges
+        ctx.drawImage(canvas, dx, dy, ts, 1, dx, dy - 1, ts, 1);
+        ctx.drawImage(canvas, dx, dy + ts - 1, ts, 1, dx, dy + ts, ts, 1);
+        ctx.drawImage(canvas, dx, dy - 1, 1, ts + 2, dx - 1, dy - 1, 1, ts + 2);
+        ctx.drawImage(canvas, dx + ts - 1, dy - 1, 1, ts + 2, dx + ts, dy - 1, 1, ts + 2);
+      }
+      this.textures.addCanvas(tilesetKey, canvas);
+    }
+
+    // Build tile data: 0 = floor tile, -1 = empty (wall)
+    const tileData: number[][] = [];
+    for (let ty = 0; ty < height; ty++) {
+      const row: number[] = [];
+      for (let tx = 0; tx < width; tx++) {
+        row.push(tiles[ty * width + tx] === DungeonTile.Floor ? 0 : -1);
+      }
+      tileData.push(row);
+    }
+
+    const map = this.make.tilemap({ data: tileData, tileWidth: ts, tileHeight: ts });
+    const tileset = map.addTilesetImage("zone-tiles", tilesetKey, ts, ts, 1, 2);
+    if (!tileset) {
+      map.destroy();
+      return;
+    }
+    const layer = map.createLayer(0, tileset, 0, 0);
+    if (!layer) {
+      map.destroy();
+      return;
+    }
+    layer.setDepth(-1);
+
+    this.zoneTilemap = map;
+    this.zoneLayer = layer;
+  }
+
   private realmPortalLabels: Phaser.GameObjects.Text[] = [];
 
   private drawPortal(): void {
@@ -1699,7 +1802,8 @@ export class GameScene extends Phaser.Scene {
         player.x as number,
         player.y as number,
         player.name as string,
-        isLocal
+        isLocal,
+        player.characterClass as number
       );
       const playerZone = (player.zone as string) ?? "nexus";
       sprite.setZone(playerZone);
@@ -2532,10 +2636,12 @@ export class GameScene extends Phaser.Scene {
 
     // Update camera — always center on player's display position (rounded to avoid tile seams)
     if (localSprite) {
-      this.cameras.main.scrollX =
-        localSprite.displayX - this.cameras.main.width / 2;
-      this.cameras.main.scrollY =
-        localSprite.displayY - this.cameras.main.height / 2;
+      this.cameras.main.scrollX = Math.round(
+        localSprite.displayX - this.cameras.main.width / 2
+      );
+      this.cameras.main.scrollY = Math.round(
+        localSprite.displayY - this.cameras.main.height / 2
+      );
     }
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
@@ -2854,22 +2960,14 @@ export class GameScene extends Phaser.Scene {
 
     const { tiles, width, height } = mapData;
 
-    // Draw tiles
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        const px = tx * TILE_SIZE;
-        const py = ty * TILE_SIZE;
-        const tile = tiles[ty * width + tx];
-
-        if (tile === DungeonTile.Floor) {
-          // Floor tile: colored fill + grid line
-          this.groundGraphics.fillStyle(visual.groundFill, 1);
-          this.groundGraphics.fillRect(px, py, TILE_SIZE, TILE_SIZE);
-          this.groundGraphics.lineStyle(1, visual.tileLineColor, visual.tileLineAlpha);
-          this.groundGraphics.strokeRect(px, py, TILE_SIZE, TILE_SIZE);
-        }
-        // Wall tiles: skip rendering (transparent, black background shows through)
-      }
+    // Floor tiles via tilemap (single draw call per dungeon type)
+    const DUNGEON_SPRITE_KEYS: Record<number, string> = {
+      [0]: "tile-infernalpit",   // DungeonType.InfernalPit
+      [1]: "tile-voidsanctum",   // DungeonType.VoidSanctum
+    };
+    const spriteKey = dungeonType !== undefined ? DUNGEON_SPRITE_KEYS[dungeonType] : undefined;
+    if (spriteKey) {
+      this.createZoneTilemap(spriteKey, tiles, width, height);
     }
 
     // Draw highlighted edges where floor meets wall for visual clarity

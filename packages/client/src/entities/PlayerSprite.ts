@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS } from "@rotmg-lite/shared";
+import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS, TILE_SIZE } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
+import { getPlayerSpriteKey } from "../ui/EntityTextures";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -13,10 +14,10 @@ const DAMAGE_TEXT_FLOAT = 30;
 
 export class PlayerSprite {
   private scene: Phaser.Scene;
-  private graphics: Phaser.GameObjects.Graphics;
+  private bodyImage: Phaser.GameObjects.Image;
   private nameText: Phaser.GameObjects.Text;
-  private hpBarBg: Phaser.GameObjects.Graphics;
-  private hpBarFill: Phaser.GameObjects.Graphics;
+  private hpBarBg: Phaser.GameObjects.Image;
+  private hpBarFill: Phaser.GameObjects.Image;
 
   private serverX: number = 0;
   private serverY: number = 0;
@@ -25,9 +26,10 @@ export class PlayerSprite {
   private snapshots: SnapshotBuffer;
   private hitFlashTimer: number = 0;
   private lastHp: number = PLAYER_MAX_HP;
-  private lastBodyColor: number = -1;
   private lastDrawnHp: number = -1;
   private lastDrawnMaxHp: number = -1;
+  private normalTextureKey: string;
+  private currentTextureKey: string;
   private damageTexts: DamageText[] = [];
   private chatBubble: { text: Phaser.GameObjects.Text; elapsed: number } | null = null;
 
@@ -57,10 +59,12 @@ export class PlayerSprite {
     x: number,
     y: number,
     name: string,
-    isLocal: boolean
+    isLocal: boolean,
+    characterClass: number = 0
   ) {
     this.scene = scene;
     this._isLocal = isLocal;
+    this.baseName = name;
     this.x = x;
     this.y = y;
     this.serverX = x;
@@ -68,43 +72,36 @@ export class PlayerSprite {
     this.snapshots = new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    // Player body circle
-    this.graphics = scene.add.graphics();
-    this.drawBody(isLocal ? 0x4488ff : 0x44cc44);
+    // Body — use loaded 8×8 class sprite (scaled to tile size for uniform pixel scale)
+    this.normalTextureKey = getPlayerSpriteKey(characterClass);
+    this.currentTextureKey = this.normalTextureKey;
+    this.bodyImage = scene.add.image(x, y, this.normalTextureKey);
+    this.bodyImage.setDisplaySize(TILE_SIZE, TILE_SIZE);
 
-    // Name text (hidden for local player)
-    this.baseName = name;
-    this.nameText = scene.add
-      .text(x, y - PLAYER_RADIUS - 20, name, {
-        fontSize: "12px",
-        color: "#ffffff",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5);
-    if (isLocal) {
-      this.nameText.setVisible(false);
-    }
 
-    // HP bar background
-    this.hpBarBg = scene.add.graphics();
-    this.hpBarFill = scene.add.graphics();
-    this.drawHpBar(PLAYER_MAX_HP, PLAYER_MAX_HP);
-  }
+    // Name label (hidden for local player)
+    this.nameText = scene.add.text(x, y - PLAYER_RADIUS - 20, name, {
+      fontFamily: "monospace",
+      fontSize: "12px",
+      color: isLocal ? "#88aaff" : "#66cc66",
+    });
+    this.nameText.setOrigin(0.5, 0.5);
+    if (isLocal) this.nameText.setVisible(false);
 
-  private drawBody(color: number): void {
-    if (color === this.lastBodyColor) return;
-    this.lastBodyColor = color;
-    this.graphics.clear();
-    this.graphics.fillStyle(color, 1);
-    this.graphics.fillCircle(0, 0, PLAYER_RADIUS);
+    // HP bar — use shared pixel texture (tinted + scaled)
+    const barWidth = 36;
+    const barHeight = 4;
+    const yOffset = PLAYER_RADIUS + 8;
+    this.hpBarBg = scene.add.image(x - barWidth / 2, y + yOffset, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(barWidth, barHeight)
+      .setTint(0x333333)
+      .setAlpha(0.8);
 
-    // Aim direction indicator (small triangle)
-    this.graphics.fillStyle(0xffffff, 0.8);
-    this.graphics.fillTriangle(
-      PLAYER_RADIUS - 2, -4,
-      PLAYER_RADIUS - 2, 4,
-      PLAYER_RADIUS + 6, 0
-    );
+    this.hpBarFill = scene.add.image(x - barWidth / 2, y + yOffset, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(barWidth, barHeight)
+      .setTint(0x44cc44);
   }
 
   private drawHpBar(hp: number, maxHp: number): void {
@@ -114,18 +111,10 @@ export class PlayerSprite {
 
     const barWidth = 36;
     const barHeight = 4;
-    const xOffset = -barWidth / 2;
-    const yOffset = PLAYER_RADIUS + 8; // Below the player
-
-    this.hpBarBg.clear();
-    this.hpBarBg.fillStyle(0x333333, 0.8);
-    this.hpBarBg.fillRect(xOffset, yOffset, barWidth, barHeight);
-
-    this.hpBarFill.clear();
     const ratio = Math.max(0, hp / maxHp);
     const fillColor = ratio > 0.5 ? 0x44cc44 : ratio > 0.25 ? 0xcccc44 : 0xcc4444;
-    this.hpBarFill.fillStyle(fillColor, 1);
-    this.hpBarFill.fillRect(xOffset, yOffset, barWidth * ratio, barHeight);
+    this.hpBarFill.setDisplaySize(Math.max(0.1, barWidth * ratio), barHeight);
+    this.hpBarFill.setTint(fillColor);
   }
 
   showChatMessage(msg: string): void {
@@ -163,6 +152,10 @@ export class PlayerSprite {
     this.damageTexts.push({ text, elapsed: 0, startY });
   }
 
+  setLocalAimAngle(_angle: number): void {
+    // No-op: pixel-art sprites should not rotate with aim direction
+  }
+
   updateFromServer(
     x: number,
     y: number,
@@ -181,9 +174,6 @@ export class PlayerSprite {
       this.hitFlashTimer = 150; // ms
     }
     this.lastHp = hp;
-
-    // Rotate aim indicator
-    this.graphics.setRotation(aimAngle);
 
     // Update HP bar
     this.drawHpBar(hp, maxHp);
@@ -215,17 +205,25 @@ export class PlayerSprite {
     const dx = this._isLocal ? this.displayX : this.x;
     const dy = this._isLocal ? this.displayY : this.y;
 
-    this.graphics.setPosition(dx, dy);
+    this.bodyImage.setPosition(dx, dy);
     this.nameText.setPosition(dx, dy - PLAYER_RADIUS - 20);
-    this.hpBarBg.setPosition(dx, dy);
-    this.hpBarFill.setPosition(dx, dy);
+    const barWidth = 36;
+    const yOffset = PLAYER_RADIUS + 8;
+    this.hpBarBg.setPosition(dx - barWidth / 2, dy + yOffset);
+    this.hpBarFill.setPosition(dx - barWidth / 2, dy + yOffset);
 
-    // Hit flash
+    // Hit flash — tint white briefly
     if (this.hitFlashTimer > 0) {
       this.hitFlashTimer -= delta;
-      this.drawBody(0xffffff);
+      if (this.currentTextureKey !== "flash") {
+        this.bodyImage.setTintFill(0xffffff);
+        this.currentTextureKey = "flash";
+      }
     } else {
-      this.drawBody(this._isLocal ? 0x4488ff : 0x44cc44);
+      if (this.currentTextureKey !== this.normalTextureKey) {
+        this.bodyImage.clearTint();
+        this.currentTextureKey = this.normalTextureKey;
+      }
     }
 
     // Animate chat bubble
@@ -256,7 +254,6 @@ export class PlayerSprite {
     }
   }
 
-  // For client-side prediction: set position directly (instant, no smoothing)
   setLocalPosition(x: number, y: number): void {
     this.x = x;
     this.y = y;
@@ -278,11 +275,6 @@ export class PlayerSprite {
     this.corrOffsetY = 0;
   }
 
-  // For local player: set aim rotation instantly without waiting for server round trip
-  setLocalAimAngle(angle: number): void {
-    this.graphics.setRotation(angle);
-  }
-
   setZone(zone: string): void {
     this.zone = zone;
   }
@@ -293,7 +285,7 @@ export class PlayerSprite {
   }
 
   setVisible(visible: boolean): void {
-    this.graphics.setVisible(visible);
+    this.bodyImage.setVisible(visible);
     this.nameText.setVisible(this._isLocal ? false : visible);
     this.hpBarBg.setVisible(visible);
     this.hpBarFill.setVisible(visible);
@@ -304,15 +296,14 @@ export class PlayerSprite {
   }
 
   destroy(): void {
-    this.graphics.destroy();
+    this.bodyImage.destroy();
     this.nameText.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
-    for (const dt of this.damageTexts) dt.text.destroy();
-    this.damageTexts.length = 0;
     if (this.chatBubble) {
       this.chatBubble.text.destroy();
-      this.chatBubble = null;
     }
+    for (const dt of this.damageTexts) dt.text.destroy();
+    this.damageTexts = [];
   }
 }

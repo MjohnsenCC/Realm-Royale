@@ -1,10 +1,9 @@
 import Phaser from "phaser";
-import { EntityType, ProjectileType, PROJECTILE_RADIUS, lightenColor } from "@rotmg-lite/shared";
+import { EntityType, ProjectileType } from "@rotmg-lite/shared";
 
 export class ProjectileSprite {
-  private graphics: Phaser.GameObjects.Graphics;
-  private serverX: number = 0;
-  private serverY: number = 0;
+  private bodyImage: Phaser.GameObjects.Image | null = null;
+  private graphics: Phaser.GameObjects.Graphics | null = null;
   private angle: number = 0;
   private speed: number = 0;
   private isExpandingAoe: boolean = false;
@@ -26,78 +25,68 @@ export class ProjectileSprite {
   ) {
     this.x = x;
     this.y = y;
-    this.serverX = x;
-    this.serverY = y;
     this.angle = angle;
     this.speed = speed;
 
-    this.graphics = scene.add.graphics();
-
-    // Player projectiles render below the player sprite
-    if (ownerType !== EntityType.Enemy) {
-      this.graphics.setDepth(-0.25);
+    if (projType === ProjectileType.RelicExpand) {
+      // Expanding AoE — must use Graphics since it changes every frame
+      this.isExpandingAoe = true;
+      this.expandSpeed = speed;
+      this.graphics = scene.add.graphics();
+      this.graphics.fillStyle(0x8844ff, 0.3);
+      this.graphics.fillCircle(0, 0, 15);
+      this.graphics.lineStyle(2, 0xaa66ff, 0.6);
+      this.graphics.strokeCircle(0, 0, 15);
+      this.graphics.setPosition(x, y);
+      return;
     }
 
+    // All other projectile types use pre-generated textures (batched draw calls)
+    let textureKey: string;
+    let tint: number | null = null;
+
     if (ownerType === EntityType.Enemy) {
-      // Enemy bullets: red circle
-      this.graphics.fillStyle(0xff4444, 1);
-      this.graphics.fillCircle(0, 0, PROJECTILE_RADIUS);
+      textureKey = "proj-enemy";
     } else {
       switch (projType) {
         case ProjectileType.SwordSlash:
-          // Wide arc shape for melee
-          this.graphics.fillStyle(projColor || 0xccccff, 0.8);
-          this.graphics.fillEllipse(0, 0, 24, 8);
+          textureKey = "proj-sword";
+          tint = projColor || 0xccccff;
           break;
         case ProjectileType.QuiverShot:
-          // Large cyan/blue circle with inner glow
-          this.graphics.fillStyle(0x44aaff, 0.5);
-          this.graphics.fillCircle(0, 0, 14);
-          this.graphics.fillStyle(0x88ccff, 1);
-          this.graphics.fillCircle(0, 0, 8);
+          textureKey = "proj-quiver";
           break;
         case ProjectileType.HelmSpin:
-          // Orange/red circular slash for Helm AoE
-          this.graphics.fillStyle(0xff6622, 0.6);
-          this.graphics.fillCircle(0, 0, 12);
-          this.graphics.fillStyle(0xffaa44, 1);
-          this.graphics.fillEllipse(0, 0, 20, 8);
+          textureKey = "proj-helm";
           break;
-        case ProjectileType.WandBolt: {
-          // Elongated bolt with inner glow
-          const wOuter = projColor || 0xaa44ff;
-          const wInner = projColor ? lightenColor(projColor, 0.4) : 0xcc88ff;
-          this.graphics.fillStyle(wOuter, 0.7);
-          this.graphics.fillEllipse(0, 0, 14, 5);
-          this.graphics.fillStyle(wInner, 1);
-          this.graphics.fillEllipse(0, 0, 8, 3);
-          break;
-        }
-        case ProjectileType.RelicExpand:
-          // Expanding AoE circle — initial state
-          this.isExpandingAoe = true;
-          this.expandSpeed = speed;
-          this.graphics.fillStyle(0x8844ff, 0.3);
-          this.graphics.fillCircle(0, 0, 15);
-          this.graphics.lineStyle(2, 0xaa66ff, 0.6);
-          this.graphics.strokeCircle(0, 0, 15);
+        case ProjectileType.WandBolt:
+          textureKey = "proj-wand";
+          // Wand has baked-in colors, tint only if custom color
+          if (projColor && projColor !== 0xaa44ff) {
+            tint = projColor;
+          }
           break;
         case ProjectileType.BowArrow:
         default:
-          // Elongated arrow shape
-          this.graphics.fillStyle(projColor || 0xffff44, 1);
-          this.graphics.fillEllipse(0, 0, 10, 4);
+          textureKey = "proj-arrow";
+          tint = projColor || 0xffff44;
           break;
       }
     }
 
-    this.graphics.setRotation(angle);
-    this.graphics.setPosition(x, y);
+    this.bodyImage = scene.add.image(x, y, textureKey);
+    this.bodyImage.setRotation(angle);
+    if (tint !== null) {
+      this.bodyImage.setTint(tint);
+    }
+
+    // Player projectiles render below the player sprite
+    if (ownerType !== EntityType.Enemy) {
+      this.bodyImage.setDepth(-0.25);
+    }
   }
 
   updateFromServer(x: number, y: number): void {
-    this.serverX = x;
-    this.serverY = y;
     // Blend toward server position instead of snapping to avoid visible
     // backward jumps when client extrapolation overshoots slightly.
     this.x += (x - this.x) * 0.5;
@@ -105,7 +94,7 @@ export class ProjectileSprite {
   }
 
   update(delta: number): void {
-    if (this.isExpandingAoe) {
+    if (this.isExpandingAoe && this.graphics) {
       // Expanding AoE: grow circle each frame, position stays fixed
       this.expandElapsed += delta / 1000;
       const currentRadius = 15 + this.expandSpeed * this.expandElapsed;
@@ -123,14 +112,18 @@ export class ProjectileSprite {
     const dt = delta / 1000;
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
-    this.graphics.setPosition(this.x, this.y);
+    if (this.bodyImage) {
+      this.bodyImage.setPosition(this.x, this.y);
+    }
   }
 
   setVisible(visible: boolean): void {
-    this.graphics.setVisible(visible);
+    if (this.bodyImage) this.bodyImage.setVisible(visible);
+    if (this.graphics) this.graphics.setVisible(visible);
   }
 
   destroy(): void {
-    this.graphics.destroy();
+    if (this.bodyImage) this.bodyImage.destroy();
+    if (this.graphics) this.graphics.destroy();
   }
 }

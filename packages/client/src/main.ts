@@ -19,6 +19,7 @@ const config: Phaser.Types.Core.GameConfig = {
   scene: [BootScene, MenuScene, GuestSetupScene, CharacterSelectScene, GameScene],
   render: {
     roundPixels: true,
+    pixelArt: true,
     powerPreference: "high-performance",
   },
   scale: {

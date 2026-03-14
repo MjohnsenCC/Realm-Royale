@@ -1,6 +1,7 @@
 import Phaser from "phaser";
-import { ENEMY_DEFS } from "@rotmg-lite/shared";
+import { ENEMY_DEFS, TILE_SIZE } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
+import { getEnemySpriteKey } from "../ui/EntityTextures";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -13,13 +14,15 @@ const DAMAGE_TEXT_FLOAT = 30;
 
 export class EnemySprite {
   private scene: Phaser.Scene;
-  private graphics: Phaser.GameObjects.Graphics;
-  private hpBarBg: Phaser.GameObjects.Graphics;
-  private hpBarFill: Phaser.GameObjects.Graphics;
+  private bodyImage: Phaser.GameObjects.Image;
+  private hpBarBg: Phaser.GameObjects.Image;
+  private hpBarFill: Phaser.GameObjects.Image;
 
   private snapshots: SnapshotBuffer;
   private enemyType: number;
   private radius: number;
+  private barWidth: number = 28;
+  private barHeight: number = 3;
   private damageTexts: DamageText[] = [];
   private lastHp: number;
   private lastDrawnHp: number = -1;
@@ -49,99 +52,37 @@ export class EnemySprite {
     this.snapshots = existingBuffer ?? new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    this.graphics = scene.add.graphics();
-    this.drawBody();
+    // Body — use loaded 8×8 sprite (scaled to tile size for uniform pixel scale)
+    const textureKey = getEnemySpriteKey(enemyType);
+    this.bodyImage = scene.add.image(x, y, textureKey);
+    this.bodyImage.setDisplaySize(TILE_SIZE, TILE_SIZE);
 
-    this.hpBarBg = scene.add.graphics();
-    this.hpBarFill = scene.add.graphics();
-    this.drawHpBar(hp, maxHp);
+    // HP bar — use shared pixel texture (tinted + scaled)
+    const yOffset = this.radius + 6;
+    this.hpBarBg = scene.add.image(x - this.barWidth / 2, y + yOffset, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(this.barWidth, this.barHeight)
+      .setTint(0x333333)
+      .setAlpha(0.8);
+
+    const ratio = Math.max(0, hp / maxHp);
+    this.hpBarFill = scene.add.image(x - this.barWidth / 2, y + yOffset, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(this.barWidth * ratio, this.barHeight)
+      .setTint(0xcc3333);
   }
 
   public getEnemyType(): number {
     return this.enemyType;
   }
 
-  private getColor(): number {
-    const def = ENEMY_DEFS[this.enemyType];
-    return def ? def.color : 0xcc3333;
-  }
+  private drawHpBar(hp: number, maxHp: number): void {
+    if (hp === this.lastDrawnHp && maxHp === this.lastDrawnMaxHp) return;
+    this.lastDrawnHp = hp;
+    this.lastDrawnMaxHp = maxHp;
 
-  private drawBody(): void {
-    this.graphics.clear();
-    const color = this.getColor();
-    const def = ENEMY_DEFS[this.enemyType];
-    const shape = def ? def.shape : "circle";
-    const r = this.radius;
-
-    this.graphics.fillStyle(color, 1);
-
-    switch (shape) {
-      case "circle":
-        this.graphics.fillCircle(0, 0, r);
-        break;
-      case "diamond":
-        this.graphics.fillPoints(
-          [
-            new Phaser.Geom.Point(0, -r),
-            new Phaser.Geom.Point(r, 0),
-            new Phaser.Geom.Point(0, r),
-            new Phaser.Geom.Point(-r, 0),
-          ],
-          true
-        );
-        break;
-      case "triangle":
-        this.graphics.fillPoints(
-          [
-            new Phaser.Geom.Point(0, -r),
-            new Phaser.Geom.Point(r, r * 0.7),
-            new Phaser.Geom.Point(-r, r * 0.7),
-          ],
-          true
-        );
-        break;
-      case "square":
-        this.graphics.fillRect(-r * 0.7, -r * 0.7, r * 1.4, r * 1.4);
-        break;
-      case "hexagon": {
-        const pts: Phaser.Geom.Point[] = [];
-        for (let i = 0; i < 6; i++) {
-          const angle = (Math.PI / 3) * i - Math.PI / 6;
-          pts.push(
-            new Phaser.Geom.Point(
-              Math.cos(angle) * r,
-              Math.sin(angle) * r
-            )
-          );
-        }
-        this.graphics.fillPoints(pts, true);
-        break;
-      }
-      case "star": {
-        const pts: Phaser.Geom.Point[] = [];
-        for (let i = 0; i < 5; i++) {
-          const outerAngle = (Math.PI * 2 * i) / 5 - Math.PI / 2;
-          pts.push(
-            new Phaser.Geom.Point(
-              Math.cos(outerAngle) * r,
-              Math.sin(outerAngle) * r
-            )
-          );
-          const innerAngle = outerAngle + Math.PI / 5;
-          pts.push(
-            new Phaser.Geom.Point(
-              Math.cos(innerAngle) * r * 0.45,
-              Math.sin(innerAngle) * r * 0.45
-            )
-          );
-        }
-        this.graphics.fillPoints(pts, true);
-        break;
-      }
-      default:
-        this.graphics.fillCircle(0, 0, r);
-        break;
-    }
+    const ratio = Math.max(0, hp / maxHp);
+    this.hpBarFill.setDisplaySize(Math.max(0.1, this.barWidth * ratio), this.barHeight);
   }
 
   getRadius(): number {
@@ -163,26 +104,6 @@ export class EnemySprite {
     this.pendingPredictedDamageAge = 0;
   }
 
-  private drawHpBar(hp: number, maxHp: number): void {
-    if (hp === this.lastDrawnHp && maxHp === this.lastDrawnMaxHp) return;
-    this.lastDrawnHp = hp;
-    this.lastDrawnMaxHp = maxHp;
-
-    const barWidth = 28;
-    const barHeight = 3;
-    const xOffset = -barWidth / 2;
-    const yOffset = this.radius + 6;
-
-    this.hpBarBg.clear();
-    this.hpBarBg.fillStyle(0x333333, 0.8);
-    this.hpBarBg.fillRect(xOffset, yOffset, barWidth, barHeight);
-
-    this.hpBarFill.clear();
-    const ratio = Math.max(0, hp / maxHp);
-    this.hpBarFill.fillStyle(0xcc3333, 1);
-    this.hpBarFill.fillRect(xOffset, yOffset, barWidth * ratio, barHeight);
-  }
-
   updateFromServer(x: number, y: number, hp: number, maxHp: number): void {
     this.snapshots.push(x, y);
 
@@ -190,13 +111,11 @@ export class EnemySprite {
       const serverDamage = this.lastHp - hp;
 
       if (this.pendingPredictedDamage > 0) {
-        // Consume predicted damage to avoid duplicate display
-        const consumed = Math.min(this.pendingPredictedDamage, serverDamage);
-        this.pendingPredictedDamage -= consumed;
-        const remainder = serverDamage - consumed;
+        const remainder = serverDamage - this.pendingPredictedDamage;
+        this.pendingPredictedDamage = Math.max(0, this.pendingPredictedDamage - serverDamage);
+        this.pendingPredictedDamageAge = 0;
 
-        if (remainder > 0) {
-          // Show only the unpredicted portion (e.g. damage from other players)
+        if (remainder > 1) {
           const startY = -this.radius - 10;
           const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(remainder)}`, {
             fontFamily: "monospace",
@@ -234,9 +153,10 @@ export class EnemySprite {
       this.y = pos.y;
     }
 
-    this.graphics.setPosition(this.x, this.y);
-    this.hpBarBg.setPosition(this.x, this.y);
-    this.hpBarFill.setPosition(this.x, this.y);
+    this.bodyImage.setPosition(this.x, this.y);
+    const yOffset = this.radius + 6;
+    this.hpBarBg.setPosition(this.x - this.barWidth / 2, this.y + yOffset);
+    this.hpBarFill.setPosition(this.x - this.barWidth / 2, this.y + yOffset);
 
     for (let i = this.damageTexts.length - 1; i >= 0; i--) {
       const dt = this.damageTexts[i];
@@ -265,7 +185,7 @@ export class EnemySprite {
   }
 
   setVisible(visible: boolean): void {
-    this.graphics.setVisible(visible);
+    this.bodyImage.setVisible(visible);
     this.hpBarBg.setVisible(visible);
     this.hpBarFill.setVisible(visible);
   }
@@ -275,10 +195,10 @@ export class EnemySprite {
   }
 
   destroy(): void {
-    this.graphics.destroy();
+    this.bodyImage.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
     for (const dt of this.damageTexts) dt.text.destroy();
-    this.damageTexts.length = 0;
+    this.damageTexts = [];
   }
 }
