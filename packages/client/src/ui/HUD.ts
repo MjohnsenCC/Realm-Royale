@@ -6,6 +6,8 @@ import { LootBagUI } from "./LootBagUI";
 import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
 import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UIScale";
+import { isFpsVisible, isPingVisible } from "./OptionsUI";
+import { NetworkManager } from "../network/NetworkManager";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -86,6 +88,27 @@ export class HUD {
 
   // Player count
   private playerCountText: Phaser.GameObjects.Text;
+
+  // FPS / Ping display
+  private fpsText: Phaser.GameObjects.Text | null = null;
+  private pingText: Phaser.GameObjects.Text | null = null;
+
+  // Dirty tracking — avoid redrawing unchanged values
+  private lastHp: number = -1;
+  private lastMaxHp: number = -1;
+  private lastHpRegen: number = -1;
+  private lastMana: number = -1;
+  private lastMaxMana: number = -1;
+  private lastXp: number = -1;
+  private lastLevel: number = -1;
+  private lastZone: string = "";
+  private lastPlayerCount: number = -1;
+  private lastFps: number = -1;
+  private lastPing: number = -1;
+  private lastMmX: number = -1;
+  private lastMmY: number = -1;
+  private cachedHpRegen: number = 0;
+  private equipmentVersion: number = -1;
 
 
   // Drag state
@@ -219,6 +242,28 @@ export class HUD {
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(100);
+
+    // --- FPS / Ping display (top-left) ---
+    const perfFontSize = `${Math.round(10 * S)}px`;
+    this.fpsText = scene.add
+      .text(Math.round(8 * S), Math.round(8 * S), "", {
+        fontSize: perfFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setVisible(false);
+
+    this.pingText = scene.add
+      .text(Math.round(8 * S), Math.round(8 * S) + Math.round(14 * S), "", {
+        fontSize: perfFontSize,
+        color: "#aaaaaa",
+        fontFamily: "monospace",
+      })
+      .setScrollFactor(0)
+      .setDepth(100)
+      .setVisible(false);
 
     // --- Player count (inside minimap, bottom-left) ---
     const mmPad = Math.round(16 * S);
@@ -511,8 +556,26 @@ export class HUD {
     this.minimapZoomOutBtn.setFontSize(btnFontSize);
     this.fullscreenBtn.setFontSize(btnFontSize);
 
-    // Invalidate minimap cache on resize
+    // FPS / Ping repositioning
+    const perfFontSize = `${Math.round(10 * S)}px`;
+    if (this.fpsText) {
+      this.fpsText.setPosition(Math.round(8 * S), Math.round(8 * S));
+      this.fpsText.setFontSize(perfFontSize);
+    }
+    if (this.pingText) {
+      this.pingText.setPosition(Math.round(8 * S), Math.round(8 * S) + Math.round(14 * S));
+      this.pingText.setFontSize(perfFontSize);
+    }
+
+    // Invalidate all caches on resize so everything redraws at new positions
     this.invalidateMinimapCache();
+    this.lastMmX = -1;
+    this.lastMmY = -1;
+    this.lastHp = -1;
+    this.lastMana = -1;
+    this.lastXp = -1;
+    this.lastZone = "";
+    this.lastPlayerCount = -1;
 
     // Relayout sub-UIs
     this.inventoryUI.relayout({
@@ -632,43 +695,95 @@ export class HUD {
     dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
     dungeonMap: DungeonMapData | null = null
   ): void {
-    // Compute hpRegen from equipment
-    const equipment = this.inventoryUI.getEquipment();
-    const stats = computePlayerStats(level, equipment);
-
-    this.drawHealthBar(hp, maxHp, Math.round(stats.hpRegen));
-    this.drawManaBar(mana, maxMana);
-    this.drawLvlBar(xp, level);
-
-    if (zone === "nexus") {
-      this.zoneText.setText("Nexus (Safe Zone)");
-      this.zoneText.setColor("#44aa66");
-    } else if (isVaultZone(zone)) {
-      this.zoneText.setText("Vault");
-      this.zoneText.setColor("#ddaa55");
-    } else if (isDungeonZone(zone)) {
-      const dungeonType = getDungeonTypeFromZone(zone);
-      const dungeonVisual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
-      const dungeonName = dungeonVisual ? dungeonVisual.name : "Dungeon";
-      this.zoneText.setText(dungeonName);
-      const color = dungeonType === 0 ? "#ff4400" : "#6600cc";
-      this.zoneText.setColor(color);
-    } else {
-      const mapData = getRealmMap();
-      if (mapData) {
-        const diffZone = getDifficultyAt(localX, localY);
-        const zoneName = DIFFICULTY_ZONE_NAMES[diffZone] ?? "Unknown";
-        this.zoneText.setText(zoneName);
-      } else {
-        this.zoneText.setText("Hostile");
-      }
-      this.zoneText.setColor("#e94560");
+    // Compute hpRegen from equipment (only when equipment changes)
+    if (this.equipmentVersion !== this.inventoryUI.equipmentVersion) {
+      this.equipmentVersion = this.inventoryUI.equipmentVersion;
+      const equipment = this.inventoryUI.getEquipment();
+      const stats = computePlayerStats(level, equipment);
+      this.cachedHpRegen = Math.round(stats.hpRegen);
     }
-    this.zoneText.setX(this.scene.scale.width / 2);
-    this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
+    const hpRegen = this.cachedHpRegen;
+
+    // Only redraw bars when values change
+    if (hp !== this.lastHp || maxHp !== this.lastMaxHp || hpRegen !== this.lastHpRegen) {
+      this.drawHealthBar(hp, maxHp, hpRegen);
+      this.lastHp = hp;
+      this.lastMaxHp = maxHp;
+      this.lastHpRegen = hpRegen;
+    }
+    if (mana !== this.lastMana || maxMana !== this.lastMaxMana) {
+      this.drawManaBar(mana, maxMana);
+      this.lastMana = mana;
+      this.lastMaxMana = maxMana;
+    }
+    if (xp !== this.lastXp || level !== this.lastLevel) {
+      this.drawLvlBar(xp, level);
+      this.lastXp = xp;
+      this.lastLevel = level;
+    }
+
+    // Only update zone text when zone changes
+    if (zone !== this.lastZone) {
+      this.lastZone = zone;
+      if (zone === "nexus") {
+        this.zoneText.setText("Nexus (Safe Zone)");
+        this.zoneText.setColor("#44aa66");
+      } else if (isVaultZone(zone)) {
+        this.zoneText.setText("Vault");
+        this.zoneText.setColor("#ddaa55");
+      } else if (isDungeonZone(zone)) {
+        const dungeonType = getDungeonTypeFromZone(zone);
+        const dungeonVisual = dungeonType !== undefined ? DUNGEON_VISUALS[dungeonType] : undefined;
+        const dungeonName = dungeonVisual ? dungeonVisual.name : "Dungeon";
+        this.zoneText.setText(dungeonName);
+        const color = dungeonType === 0 ? "#ff4400" : "#6600cc";
+        this.zoneText.setColor(color);
+      } else {
+        const mapData = getRealmMap();
+        if (mapData) {
+          const diffZone = getDifficultyAt(localX, localY);
+          const zoneName = DIFFICULTY_ZONE_NAMES[diffZone] ?? "Unknown";
+          this.zoneText.setText(zoneName);
+        } else {
+          this.zoneText.setText("Hostile");
+        }
+        this.zoneText.setColor("#e94560");
+      }
+      this.zoneText.setX(this.scene.scale.width / 2);
+    }
+    if (playerCount !== this.lastPlayerCount) {
+      this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
+      this.lastPlayerCount = playerCount;
+    }
 
     // Track portal gem count for minimap teleport check
     this.portalGemCount = portalGemCount;
+
+    // FPS / Ping display
+    if (this.fpsText) {
+      if (isFpsVisible()) {
+        const fps = Math.round(this.scene.game.loop.actualFps);
+        if (fps !== this.lastFps) {
+          this.fpsText.setText(`FPS: ${fps}`);
+          this.lastFps = fps;
+        }
+        this.fpsText.setVisible(true);
+      } else {
+        this.fpsText.setVisible(false);
+      }
+    }
+    if (this.pingText) {
+      if (isPingVisible()) {
+        const rtt = NetworkManager.getInstance().getRtt();
+        if (rtt !== this.lastPing) {
+          this.pingText.setText(`Ping: ${rtt}ms`);
+          this.lastPing = rtt;
+        }
+        this.pingText.setVisible(true);
+      } else {
+        this.pingText.setVisible(false);
+      }
+    }
 
     // Draw minimap
     this.drawMinimap(localX, localY, players, enemies, zone, dungeonPortals, dungeonMap);
@@ -819,12 +934,17 @@ export class HUD {
     this.mmVisibleW = visibleW;
     this.mmVisibleH = visibleH;
 
-    // Background
-    this.minimapBg.clear();
-    this.minimapBg.fillStyle(0x111122, 0.7);
-    this.minimapBg.fillRect(mmX, mmY, this.mmWidth, this.mmHeight);
-    this.minimapBg.lineStyle(1, 0x444466, 1);
-    this.minimapBg.strokeRect(mmX, mmY, this.mmWidth, this.mmHeight);
+    // Background + button positioning — only redraw when position changes (resize)
+    const mmMoved = mmX !== this.lastMmX || mmY !== this.lastMmY;
+    if (mmMoved) {
+      this.lastMmX = mmX;
+      this.lastMmY = mmY;
+      this.minimapBg.clear();
+      this.minimapBg.fillStyle(0x111122, 0.7);
+      this.minimapBg.fillRect(mmX, mmY, this.mmWidth, this.mmHeight);
+      this.minimapBg.lineStyle(1, 0x444466, 1);
+      this.minimapBg.strokeRect(mmX, mmY, this.mmWidth, this.mmHeight);
+    }
 
     // Update dungeon fog of war — reveal tiles near the player
     const FOG_REVEAL_RADIUS = 20;
@@ -943,25 +1063,23 @@ export class HUD {
     // Landmark icons
     this.drawMinimapIcons(mmX, mmY, viewX, viewY, scaleX, scaleY, zone, dungeonPortals);
 
-    // Reposition zoom buttons inside bottom-right corner of minimap
-    const btnPad = Math.round(3 * this.S);
-    this.minimapZoomOutBtn.setPosition(
-      mmX + this.mmWidth - btnPad,
-      mmY + this.mmHeight - btnPad
-    );
-    this.minimapZoomInBtn.setPosition(
-      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
-      mmY + this.mmHeight - btnPad
-    );
-
-    // Reposition fullscreen button below minimap
-    this.fullscreenBtn.setPosition(
-      mmX + this.mmWidth,
-      mmY + this.mmHeight + Math.round(4 * this.S)
-    );
-
-    // Reposition player count inside bottom-left corner of minimap
-    this.playerCountText.setPosition(mmX + btnPad, mmY + this.mmHeight - btnPad);
+    // Reposition zoom buttons only when minimap position changes
+    if (mmMoved) {
+      const btnPad = Math.round(3 * this.S);
+      this.minimapZoomOutBtn.setPosition(
+        mmX + this.mmWidth - btnPad,
+        mmY + this.mmHeight - btnPad
+      );
+      this.minimapZoomInBtn.setPosition(
+        this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
+        mmY + this.mmHeight - btnPad
+      );
+      this.fullscreenBtn.setPosition(
+        mmX + this.mmWidth,
+        mmY + this.mmHeight + Math.round(4 * this.S)
+      );
+      this.playerCountText.setPosition(mmX + btnPad, mmY + this.mmHeight - btnPad);
+    }
 
     // Hide zoom buttons in nexus/vault (full map always shown)
     const hideZoom = zone === "nexus" || isVaultZone(zone);

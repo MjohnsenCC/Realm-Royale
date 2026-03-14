@@ -681,8 +681,8 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private drawSettingsPanel(cx: number, width: number, height: number) {
-    const panelW = 280;
-    const panelH = 130;
+    const panelW = 200;
+    const panelH = 60;
     const panelX = cx - panelW / 2;
     const panelY = height - panelH - 30;
 
@@ -698,7 +698,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     panel.strokePath();
 
     // Server selector
-    const serverLabelY = panelY + 18;
+    const serverLabelY = panelY + 12;
     this.add
       .text(cx, serverLabelY, "SERVER", {
         fontSize: "10px",
@@ -708,10 +708,10 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(6);
 
-    const serverBtnY = serverLabelY + 20;
+    const serverBtnY = serverLabelY + 16;
     const currentServerId = getSelectedServerId();
     const serverButtons: Phaser.GameObjects.Text[] = [];
-    const totalServerBtnWidth = 180;
+    const totalServerBtnWidth = 140;
     const serverBtnSpacing = totalServerBtnWidth / SERVERS.length;
     const serverStartX = cx - totalServerBtnWidth / 2 + serverBtnSpacing / 2;
 
@@ -719,7 +719,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       const server = SERVERS[i];
       const btn = this.add
         .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "16px",
+          fontSize: "13px",
           color: server.id === currentServerId ? "#4488ff" : "#555566",
           fontFamily: "monospace",
         })

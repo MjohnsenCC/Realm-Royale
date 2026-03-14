@@ -22,6 +22,8 @@ export class EnemySprite {
   private radius: number;
   private damageTexts: DamageText[] = [];
   private lastHp: number;
+  private lastDrawnHp: number = -1;
+  private lastDrawnMaxHp: number = -1;
   private pendingPredictedDamage: number = 0;
   private pendingPredictedDamageAge: number = 0;
 
@@ -162,6 +164,10 @@ export class EnemySprite {
   }
 
   private drawHpBar(hp: number, maxHp: number): void {
+    if (hp === this.lastDrawnHp && maxHp === this.lastDrawnMaxHp) return;
+    this.lastDrawnHp = hp;
+    this.lastDrawnMaxHp = maxHp;
+
     const barWidth = 28;
     const barHeight = 3;
     const xOffset = -barWidth / 2;

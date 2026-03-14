@@ -11,6 +11,7 @@ import { StatsPanel } from "../ui/StatsPanel";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
+import { OptionsUI } from "../ui/OptionsUI";
 import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
@@ -85,6 +86,8 @@ import {
   PORTAL_GEM_ID,
   ChatChannel,
   ABILITY_TEMPLATES,
+  getItemTier,
+  getTierColor,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -155,6 +158,7 @@ export class GameScene extends Phaser.Scene {
 
   // Zone tracking
   private localZone: string = "nexus";
+  private lastVisibilityZone: string = "";
   // Cached dungeon stats for in-dungeon shift tooltip
   private cachedDungeonStats: {
     portalType: number;
@@ -179,6 +183,7 @@ export class GameScene extends Phaser.Scene {
   private statsPanel!: StatsPanel;
   private chatUI!: ChatUI;
   private escapeMenuUI!: EscapeMenuUI;
+  private optionsUI!: OptionsUI;
   private nearCraftingTable: boolean = false;
   private nearVaultChest: boolean = false;
   private vaultOrbCounts: number[] = new Array(10).fill(0);
@@ -367,12 +372,24 @@ export class GameScene extends Phaser.Scene {
         this.escapeMenuUI.hide();
       },
       onOptions: () => {
-        // Placeholder — no functionality yet
+        this.escapeMenuUI.hide();
+        this.optionsUI.show({
+          onClose: () => {
+            this.escapeMenuUI.show();
+          },
+          onToggleChanged: () => {
+            // HUD picks up changes from localStorage on next update tick
+          },
+        });
       },
       onExitToCharacterSelect: () => {
         this.escapeMenuUI.hide();
         this.network.leave();
-        this.scene.start("CharacterSelectScene");
+        if (AuthManager.getInstance().isAuthenticated()) {
+          this.scene.start("CharacterSelectScene");
+        } else {
+          this.scene.start("MenuScene");
+        }
       },
       onLogOut: () => {
         this.escapeMenuUI.hide();
@@ -381,6 +398,9 @@ export class GameScene extends Phaser.Scene {
         this.scene.start("MenuScene");
       },
     });
+
+    // Create options UI
+    this.optionsUI = new OptionsUI(this);
 
     // Listen for chat messages
     room.onMessage(ServerMessage.ChatMessage, (data: { playerId: string; playerName: string; text: string; channel: ChatChannel }) => {
@@ -1681,8 +1701,10 @@ export class GameScene extends Phaser.Scene {
         player.name as string,
         isLocal
       );
-      sprite.setZone((player.zone as string) ?? "nexus");
+      const playerZone = (player.zone as string) ?? "nexus";
+      sprite.setZone(playerZone);
       sprite.updateLevel((player.level as number) ?? 1);
+      sprite.setVisible(playerZone === this.localZone);
       this.playerSprites.set(sessionId, sprite);
 
       // Listen for zone changes on this player
@@ -1690,6 +1712,7 @@ export class GameScene extends Phaser.Scene {
         const s = this.playerSprites.get(sessionId);
         if (s) {
           s.setZone(newZone as string);
+          s.setVisible((newZone as string) === this.localZone);
         }
       });
 
@@ -1820,6 +1843,7 @@ export class GameScene extends Phaser.Scene {
         cachedBuffer
       );
       this.enemySprites.set(id, sprite);
+      sprite.setVisible(this.localZone !== "nexus");
 
       enemy.onChange(() => {
         const s = this.enemySprites.get(id);
@@ -1891,7 +1915,8 @@ export class GameScene extends Phaser.Scene {
           EntityType.Player,
           proj.angle as number,
           proj.speed as number,
-          pt
+          pt,
+          (proj.projColor as number) ?? 0
         );
         this.predictedProjectiles.push({
           sprite: projSprite,
@@ -1925,7 +1950,8 @@ export class GameScene extends Phaser.Scene {
         proj.ownerType as number,
         proj.angle as number,
         proj.speed as number,
-        (proj.projType as number) ?? 0
+        (proj.projType as number) ?? 0,
+        (proj.projColor as number) ?? 0
       );
 
       this.projectileSprites.set(id, sprite);
@@ -2214,6 +2240,8 @@ export class GameScene extends Phaser.Scene {
               spreadAngle = weaponDef?.weaponStats?.spreadAngle ?? 0;
             }
 
+            const projColor = getTierColor(getItemTier(weaponItem.baseItemId));
+
             for (let p = 0; p < projectileCount; p++) {
               let angle = aimAngle;
               if (projectileCount > 1 && spreadAngle > 0) {
@@ -2227,7 +2255,8 @@ export class GameScene extends Phaser.Scene {
                 EntityType.Player,
                 angle,
                 stats.weaponProjSpeed,
-                projType
+                projType,
+                projColor
               );
               this.predictedProjectiles.push({
                 sprite: projSprite,
@@ -2484,25 +2513,22 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Zone-based visibility filtering
+    // Zone-based visibility filtering — only update when zone changes
     const inNexus = this.localZone === "nexus";
-
-    // Enemies only visible outside nexus; projectiles and bags visible everywhere
-    this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
-    this.projectileSprites.forEach((sprite) => sprite.setVisible(true));
-    for (const pp of this.predictedProjectiles) pp.sprite.setVisible(true);
-    this.bagSprites.forEach((sprite) => sprite.setVisible(true));
-
-    // Dungeon portal sprites: always visible (server filterChildren handles zone filtering)
-    this.dungeonPortalSprites.forEach((ps) => {
-      ps.graphics.setVisible(true);
-      ps.label.setVisible(true);
-    });
-
-    // Players: only show players in the same zone
-    this.playerSprites.forEach((sprite) => {
-      sprite.setVisible(sprite.zone === this.localZone);
-    });
+    if (this.localZone !== this.lastVisibilityZone) {
+      this.lastVisibilityZone = this.localZone;
+      this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
+      this.projectileSprites.forEach((sprite) => sprite.setVisible(true));
+      for (const pp of this.predictedProjectiles) pp.sprite.setVisible(true);
+      this.bagSprites.forEach((sprite) => sprite.setVisible(true));
+      this.dungeonPortalSprites.forEach((ps) => {
+        ps.graphics.setVisible(true);
+        ps.label.setVisible(true);
+      });
+      this.playerSprites.forEach((sprite) => {
+        sprite.setVisible(sprite.zone === this.localZone);
+      });
+    }
 
     // Update camera — always center on player's display position (rounded to avoid tile seams)
     if (localSprite) {
@@ -3055,6 +3081,7 @@ export class GameScene extends Phaser.Scene {
     this.dungeonTooltip.relayout();
     this.chatUI.relayout();
     this.escapeMenuUI.relayout();
+    this.optionsUI.relayout();
   }
 
   private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {

@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { EntityType, ProjectileType, PROJECTILE_RADIUS } from "@rotmg-lite/shared";
+import { EntityType, ProjectileType, PROJECTILE_RADIUS, lightenColor } from "@rotmg-lite/shared";
 
 export class ProjectileSprite {
   private graphics: Phaser.GameObjects.Graphics;
@@ -21,7 +21,8 @@ export class ProjectileSprite {
     ownerType: number,
     angle: number,
     speed: number,
-    projType: number = ProjectileType.EnemyBullet
+    projType: number = ProjectileType.EnemyBullet,
+    projColor: number = 0
   ) {
     this.x = x;
     this.y = y;
@@ -44,8 +45,8 @@ export class ProjectileSprite {
     } else {
       switch (projType) {
         case ProjectileType.SwordSlash:
-          // Wide white/gray arc shape for melee
-          this.graphics.fillStyle(0xccccff, 0.8);
+          // Wide arc shape for melee
+          this.graphics.fillStyle(projColor || 0xccccff, 0.8);
           this.graphics.fillEllipse(0, 0, 24, 8);
           break;
         case ProjectileType.QuiverShot:
@@ -62,13 +63,16 @@ export class ProjectileSprite {
           this.graphics.fillStyle(0xffaa44, 1);
           this.graphics.fillEllipse(0, 0, 20, 8);
           break;
-        case ProjectileType.WandBolt:
-          // Purple/violet elongated bolt
-          this.graphics.fillStyle(0xaa44ff, 0.7);
+        case ProjectileType.WandBolt: {
+          // Elongated bolt with inner glow
+          const wOuter = projColor || 0xaa44ff;
+          const wInner = projColor ? lightenColor(projColor, 0.4) : 0xcc88ff;
+          this.graphics.fillStyle(wOuter, 0.7);
           this.graphics.fillEllipse(0, 0, 14, 5);
-          this.graphics.fillStyle(0xcc88ff, 1);
+          this.graphics.fillStyle(wInner, 1);
           this.graphics.fillEllipse(0, 0, 8, 3);
           break;
+        }
         case ProjectileType.RelicExpand:
           // Expanding AoE circle — initial state
           this.isExpandingAoe = true;
@@ -80,8 +84,8 @@ export class ProjectileSprite {
           break;
         case ProjectileType.BowArrow:
         default:
-          // Yellow elongated shape
-          this.graphics.fillStyle(0xffff44, 1);
+          // Elongated arrow shape
+          this.graphics.fillStyle(projColor || 0xffff44, 1);
           this.graphics.fillEllipse(0, 0, 10, 4);
           break;
       }

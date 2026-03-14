@@ -31,6 +31,7 @@ export interface AuthenticatedJoinOptions {
 
 export interface GuestJoinOptions {
   name: string;
+  characterClass?: number;
 }
 
 export type JoinOptions = AuthenticatedJoinOptions | GuestJoinOptions;

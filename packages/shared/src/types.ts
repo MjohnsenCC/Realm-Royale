@@ -364,6 +364,7 @@ export const ServerMessage = {
   CraftingOpened: "craftingOpened",
   CraftingOrbsUpdated: "craftingOrbsUpdated",
   ChatMessage: "chatMessage",
+  Pong: "pong",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -388,6 +389,7 @@ export const ClientMessage = {
   StackConsumables: "stackConsumables",
   OpenCraftingTable: "openCraftingTable",
   ChatMessage: "chatMessage",
+  Ping: "ping",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 

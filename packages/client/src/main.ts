@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { BootScene } from "./scenes/BootScene";
 import { MenuScene } from "./scenes/MenuScene";
+import { GuestSetupScene } from "./scenes/GuestSetupScene";
 import { CharacterSelectScene } from "./scenes/CharacterSelectScene";
 import { GameScene } from "./scenes/GameScene";
 import { AuthManager } from "./auth/AuthManager";
@@ -9,14 +10,17 @@ import { AuthManager } from "./auth/AuthManager";
 AuthManager.getInstance().initialize();
 
 const config: Phaser.Types.Core.GameConfig = {
-  type: Phaser.AUTO,
+  type: Phaser.WEBGL,
   width: 800,
   height: 600,
   backgroundColor: "#1a1a2e",
   parent: "game-container",
   dom: { createContainer: true },
-  scene: [BootScene, MenuScene, CharacterSelectScene, GameScene],
-  render: { roundPixels: true },
+  scene: [BootScene, MenuScene, GuestSetupScene, CharacterSelectScene, GameScene],
+  render: {
+    roundPixels: true,
+    powerPreference: "high-performance",
+  },
   scale: {
     mode: Phaser.Scale.RESIZE,
     autoCenter: Phaser.Scale.CENTER_BOTH,

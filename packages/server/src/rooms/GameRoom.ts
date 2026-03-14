@@ -116,6 +116,8 @@ import {
   ABILITY_TEMPLATES,
   CharacterClass,
   CLASS_EQUIPMENT_MAP,
+  getItemTier,
+  getTierColor,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
@@ -1089,6 +1091,11 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Ping/pong for latency measurement
+    this.onMessage(ClientMessage.Ping, (client, data: { t: number }) => {
+      client.send(ServerMessage.Pong, { t: data.t });
+    });
+
     // Spawn permanent test portals in nexus (bottom area)
     this.spawnNexusTestPortals();
 
@@ -1148,8 +1155,10 @@ export class GameRoom extends Room<GameState> {
       player.level = 1;
       player.xp = 0;
 
-      // Default equipment: T1 items based on class (guests default to Archer)
-      const guestClass = CharacterClass.Archer;
+      // Default equipment: T1 items based on class
+      const rawClass = typeof options?.characterClass === "number" ? options.characterClass : CharacterClass.Archer;
+      const validClasses: number[] = [CharacterClass.Archer, CharacterClass.Warrior, CharacterClass.Arcanist];
+      const guestClass = validClasses.includes(rawClass) ? rawClass : CharacterClass.Archer;
       player.characterClass = guestClass;
       const guestMapping = CLASS_EQUIPMENT_MAP[guestClass];
       updateSchemaFromData(player.equipment[ItemCategory.Weapon]!, generateItemInstance(ItemCategory.Weapon, guestMapping.weapon, 1, false));
@@ -1568,6 +1577,7 @@ export class GameRoom extends Room<GameState> {
                   proj.piercing = false;
                   break;
               }
+              proj.projColor = getTierColor(getItemTier(weaponSchema.baseItemId));
               proj.zone = player.zone;
 
               this.state.projectiles.set(proj.id, proj);

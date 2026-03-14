@@ -1,11 +1,5 @@
 import Phaser from "phaser";
-import { NetworkManager } from "../network/NetworkManager";
 import { AuthManager } from "../auth/AuthManager";
-import {
-  SERVERS,
-  getSelectedServerId,
-  setSelectedServerId,
-} from "../network/ServerConfig";
 
 interface Particle {
   graphics: Phaser.GameObjects.Graphics;
@@ -27,13 +21,6 @@ interface FloatingShape {
 export class MenuScene extends Phaser.Scene {
   private particles: Particle[] = [];
   private floatingShapes: FloatingShape[] = [];
-  private playBtnGlowGraphics!: Phaser.GameObjects.Graphics;
-  private playBtnGraphics!: Phaser.GameObjects.Graphics;
-  private playBtnText!: Phaser.GameObjects.Text;
-  private playBtnZone!: Phaser.GameObjects.Zone;
-  private playBtnHovered = false;
-  private playBtnPulsePhase = 0;
-  private playBtnY = 0;
   private elapsed = 0;
 
   constructor() {
@@ -234,19 +221,19 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(11);
 
-    // ─── 5b. SIGN IN WITH GOOGLE ───
-    const googleBtnY = height * 0.37;
-    const googleBtnW = 240;
-    const googleBtnH = 40;
+    // ─── 6. SIGN IN WITH GOOGLE ───
+    const btnW = 240;
+    const btnH = 44;
+    const googleBtnY = height * 0.42;
 
     const googleBtnGfx = this.add.graphics().setDepth(5);
     googleBtnGfx.fillStyle(0x222244, 0.9);
-    googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+    googleBtnGfx.fillRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
     googleBtnGfx.lineStyle(1, 0x4488ff, 0.4);
-    googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+    googleBtnGfx.strokeRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
 
     const googleBtnText = this.add
-      .text(cx, googleBtnY + googleBtnH / 2, "SIGN IN WITH GOOGLE", {
+      .text(cx, googleBtnY + btnH / 2, "SIGN IN WITH GOOGLE", {
         fontSize: "15px",
         color: "#4488ff",
         fontFamily: "monospace",
@@ -256,33 +243,33 @@ export class MenuScene extends Phaser.Scene {
       .setDepth(6);
 
     const googleBtnZone = this.add
-      .zone(cx, googleBtnY + googleBtnH / 2, googleBtnW, googleBtnH)
+      .zone(cx, googleBtnY + btnH / 2, btnW, btnH)
       .setDepth(7)
       .setInteractive({ useHandCursor: true });
 
     googleBtnZone.on("pointerover", () => {
       googleBtnGfx.clear();
       googleBtnGfx.fillStyle(0x333366, 0.9);
-      googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.fillRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
       googleBtnGfx.lineStyle(1, 0x4488ff, 0.7);
-      googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.strokeRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
       googleBtnText.setColor("#66aaff");
     });
     googleBtnZone.on("pointerout", () => {
       googleBtnGfx.clear();
       googleBtnGfx.fillStyle(0x222244, 0.9);
-      googleBtnGfx.fillRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.fillRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
       googleBtnGfx.lineStyle(1, 0x4488ff, 0.4);
-      googleBtnGfx.strokeRoundedRect(cx - googleBtnW / 2, googleBtnY, googleBtnW, googleBtnH, 6);
+      googleBtnGfx.strokeRoundedRect(cx - btnW / 2, googleBtnY, btnW, btnH, 6);
       googleBtnText.setColor("#4488ff");
     });
     googleBtnZone.on("pointerdown", () => {
       window.location.href = "/auth/google";
     });
 
-    // Divider: "or"
+    // ─── 7. DIVIDER ───
     this.add
-      .text(cx, googleBtnY + googleBtnH + 14, "— or play as guest —", {
+      .text(cx, googleBtnY + btnH + 18, "— or —", {
         fontSize: "11px",
         color: "#445566",
         fontFamily: "monospace",
@@ -290,201 +277,62 @@ export class MenuScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // ─── 6. SETTINGS PANEL ───
-    const panelW = 280;
-    const panelH = 130;
-    const panelX = cx - panelW / 2;
-    const panelY = googleBtnY + googleBtnH + 38;
+    // ─── 8. PLAY AS GUEST BUTTON ───
+    const guestBtnY = googleBtnY + btnH + 40;
 
-    const panel = this.add.graphics().setDepth(5);
-    panel.fillStyle(0x222222, 0.85);
-    panel.fillRoundedRect(panelX, panelY, panelW, panelH, 8);
-    panel.lineStyle(1, 0x555555, 0.6);
-    panel.strokeRoundedRect(panelX, panelY, panelW, panelH, 8);
-    // Top accent line
-    panel.lineStyle(1, 0x4488ff, 0.2);
-    panel.beginPath();
-    panel.moveTo(panelX + 8, panelY);
-    panel.lineTo(panelX + panelW - 8, panelY);
-    panel.strokePath();
+    const guestBtnGfx = this.add.graphics().setDepth(5);
+    guestBtnGfx.fillStyle(0x222244, 0.9);
+    guestBtnGfx.fillRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
+    guestBtnGfx.lineStyle(1, 0x4488ff, 0.4);
+    guestBtnGfx.strokeRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
 
-    // Server selector
-    const serverLabelY = panelY + 18;
-    this.add
-      .text(cx, serverLabelY, "SERVER", {
-        fontSize: "10px",
-        color: "#667788",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5)
-      .setDepth(6);
-
-    const serverBtnY = serverLabelY + 20;
-    const currentServerId = getSelectedServerId();
-    const serverButtons: Phaser.GameObjects.Text[] = [];
-    const totalServerBtnWidth = 180;
-    const serverBtnSpacing = totalServerBtnWidth / SERVERS.length;
-    const serverStartX = cx - totalServerBtnWidth / 2 + serverBtnSpacing / 2;
-
-    for (let i = 0; i < SERVERS.length; i++) {
-      const server = SERVERS[i];
-      const btn = this.add
-        .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "16px",
-          color: server.id === currentServerId ? "#4488ff" : "#555566",
-          fontFamily: "monospace",
-        })
-        .setOrigin(0.5)
-        .setDepth(6)
-        .setInteractive({ useHandCursor: true });
-
-      btn.on("pointerdown", () => {
-        setSelectedServerId(server.id);
-        for (let j = 0; j < serverButtons.length; j++) {
-          serverButtons[j].setColor(
-            SERVERS[j].id === server.id ? "#4488ff" : "#555566"
-          );
-        }
-      });
-      btn.on("pointerover", () => {
-        if (getSelectedServerId() !== server.id) btn.setColor("#8888aa");
-      });
-      btn.on("pointerout", () => {
-        btn.setColor(
-          getSelectedServerId() === server.id ? "#4488ff" : "#555566"
-        );
-      });
-      serverButtons.push(btn);
-    }
-
-    // ─── 7. NAME INPUT ───
-    const nameY = panelY + panelH + 25;
-
-    this.add
-      .text(cx, nameY - 12, "PLAYER NAME", {
-        fontSize: "10px",
-        color: "#667788",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5)
-      .setDepth(6);
-
-    const inputHTML = `
-      <input type="text" id="nameInput" maxlength="16" placeholder="Enter your name..."
-        style="
-          width: 240px;
-          padding: 10px 16px;
-          font-size: 18px;
-          font-family: monospace;
-          background: rgba(22, 33, 62, 0.9);
-          border: 1px solid rgba(68, 136, 255, 0.5);
-          border-radius: 6px;
-          color: #ffffff;
-          text-align: center;
-          outline: none;
-          box-shadow: 0 0 10px rgba(68, 136, 255, 0.1);
-          transition: border-color 0.2s, box-shadow 0.2s;
-        "
-        onfocus="this.style.borderColor='rgba(68,136,255,0.8)';this.style.boxShadow='0 0 15px rgba(68,136,255,0.3)'"
-        onblur="this.style.borderColor='rgba(68,136,255,0.5)';this.style.boxShadow='0 0 10px rgba(68,136,255,0.1)'"
-      />
-    `;
-    const inputElement = this.add
-      .dom(cx, nameY + 12)
-      .createFromHTML(inputHTML)
-      .setDepth(6);
-
-    const htmlInput = inputElement.getChildByID(
-      "nameInput"
-    ) as HTMLInputElement;
-    if (htmlInput) {
-      htmlInput.addEventListener("focus", () => {
-        if (this.input.keyboard) this.input.keyboard.enabled = false;
-      });
-      htmlInput.addEventListener("blur", () => {
-        if (this.input.keyboard) this.input.keyboard.enabled = true;
-      });
-    }
-
-    // ─── 8. PLAY BUTTON ───
-    const playBtnW = 220;
-    const playBtnH = 52;
-    this.playBtnY = nameY + 65;
-
-    this.playBtnGlowGraphics = this.add.graphics().setDepth(7);
-    this.playBtnGraphics = this.add.graphics().setDepth(8);
-
-    this.playBtnText = this.add
-      .text(cx, this.playBtnY + playBtnH / 2, "PLAY", {
-        fontSize: "28px",
-        color: "#ffffff",
+    const guestBtnText = this.add
+      .text(cx, guestBtnY + btnH / 2, "PLAY AS GUEST", {
+        fontSize: "15px",
+        color: "#4488ff",
         fontFamily: "monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
-      .setDepth(9);
-
-    this.playBtnZone = this.add
-      .zone(cx, this.playBtnY + playBtnH / 2, playBtnW, playBtnH)
-      .setDepth(10)
-      .setInteractive({ useHandCursor: true });
-
-    this.playBtnZone.on("pointerover", () => {
-      this.playBtnHovered = true;
-    });
-    this.playBtnZone.on("pointerout", () => {
-      this.playBtnHovered = false;
-    });
-
-    // Status text
-    const statusText = this.add
-      .text(cx, this.playBtnY + playBtnH + 20, "", {
-        fontSize: "14px",
-        color: "#aaaaaa",
-        fontFamily: "monospace",
-      })
-      .setOrigin(0.5)
       .setDepth(6);
 
-    // Connect handler
-    this.playBtnZone.on("pointerdown", async () => {
-      this.playBtnZone.disableInteractive();
-      statusText.setText("Connecting...");
+    const guestBtnZone = this.add
+      .zone(cx, guestBtnY + btnH / 2, btnW, btnH)
+      .setDepth(7)
+      .setInteractive({ useHandCursor: true });
 
-      htmlInput?.blur();
-      if (this.input.keyboard) this.input.keyboard.enabled = true;
-
-      const rawName = htmlInput?.value?.trim() ?? "";
-      const playerName = rawName.length > 0 ? rawName : "Player";
-
-      try {
-        const network = NetworkManager.getInstance();
-        await network.joinGame(playerName);
-        statusText.setText("Connected!");
-
-        // Fade out transition
-        const fadeOut = this.add.graphics().setDepth(100);
-        fadeOut.fillStyle(0x000000, 1);
-        fadeOut.fillRect(0, 0, width, height);
-        fadeOut.setAlpha(0);
-        this.tweens.add({
-          targets: fadeOut,
-          alpha: { from: 0, to: 1 },
-          duration: 400,
-          ease: "Power2",
-          onComplete: () => {
-            this.scene.start("GameScene");
-          },
-        });
-      } catch (err) {
-        const message = err instanceof Error ? err.message : "Unknown error";
-        statusText.setText(`Error: ${message}`);
-        this.playBtnZone.setInteractive({ useHandCursor: true });
-      }
+    guestBtnZone.on("pointerover", () => {
+      guestBtnGfx.clear();
+      guestBtnGfx.fillStyle(0x333366, 0.9);
+      guestBtnGfx.fillRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
+      guestBtnGfx.lineStyle(1, 0x4488ff, 0.7);
+      guestBtnGfx.strokeRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
+      guestBtnText.setColor("#66aaff");
     });
-
-    // Draw initial play button state
-    this.drawPlayButton();
+    guestBtnZone.on("pointerout", () => {
+      guestBtnGfx.clear();
+      guestBtnGfx.fillStyle(0x222244, 0.9);
+      guestBtnGfx.fillRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
+      guestBtnGfx.lineStyle(1, 0x4488ff, 0.4);
+      guestBtnGfx.strokeRoundedRect(cx - btnW / 2, guestBtnY, btnW, btnH, 6);
+      guestBtnText.setColor("#4488ff");
+    });
+    guestBtnZone.on("pointerdown", () => {
+      // Fade out transition to guest setup
+      const fadeOut = this.add.graphics().setDepth(100);
+      fadeOut.fillStyle(0x000000, 1);
+      fadeOut.fillRect(0, 0, width, height);
+      fadeOut.setAlpha(0);
+      this.tweens.add({
+        targets: fadeOut,
+        alpha: { from: 0, to: 1 },
+        duration: 400,
+        ease: "Power2",
+        onComplete: () => {
+          this.scene.start("GuestSetupScene");
+        },
+      });
+    });
 
     // ─── 9. CONTROLS HINT & VERSION ───
     this.add
@@ -557,49 +405,6 @@ export class MenuScene extends Phaser.Scene {
       if (s.graphics.x < -80) s.graphics.x = width + 80;
       if (s.graphics.x > width + 80) s.graphics.x = -80;
     }
-
-    // Play button pulse
-    this.playBtnPulsePhase += dt * 2.5;
-    this.drawPlayButton();
-  }
-
-  private drawPlayButton(): void {
-    const { width } = this.scale;
-    const cx = width / 2;
-    const btnW = 220;
-    const btnH = 52;
-    const btnX = cx - btnW / 2;
-    const btnY = this.playBtnY;
-    const hovered = this.playBtnHovered;
-    const pulse = Math.sin(this.playBtnPulsePhase) * 0.5 + 0.5;
-
-    // Glow
-    this.playBtnGlowGraphics.clear();
-    const glowExpand = hovered ? 12 : 6 + pulse * 4;
-    const glowAlpha = hovered ? 0.25 : 0.08 + pulse * 0.1;
-    this.playBtnGlowGraphics.fillStyle(0x4488ff, glowAlpha);
-    this.playBtnGlowGraphics.fillRoundedRect(
-      btnX - glowExpand,
-      btnY - glowExpand,
-      btnW + glowExpand * 2,
-      btnH + glowExpand * 2,
-      12 + glowExpand / 2
-    );
-
-    // Body
-    this.playBtnGraphics.clear();
-    const bodyColor = hovered ? 0x3366cc : 0x2a2a44;
-    const borderColor = hovered ? 0x66aaff : 0x4488ff;
-    const borderAlpha = hovered ? 1.0 : 0.6 + pulse * 0.3;
-
-    this.playBtnGraphics.fillStyle(bodyColor, 0.9);
-    this.playBtnGraphics.fillRoundedRect(btnX, btnY, btnW, btnH, 10);
-    this.playBtnGraphics.lineStyle(2, borderColor, borderAlpha);
-    this.playBtnGraphics.strokeRoundedRect(btnX, btnY, btnW, btnH, 10);
-
-    // Text
-    this.playBtnText.setColor(hovered ? "#ffffff" : "#ddddff");
-    this.playBtnText.setScale(hovered ? 1.05 : 1.0);
   }
 
   private drawDiamond(

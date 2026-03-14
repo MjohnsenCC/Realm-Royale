@@ -25,6 +25,9 @@ export class PlayerSprite {
   private snapshots: SnapshotBuffer;
   private hitFlashTimer: number = 0;
   private lastHp: number = PLAYER_MAX_HP;
+  private lastBodyColor: number = -1;
+  private lastDrawnHp: number = -1;
+  private lastDrawnMaxHp: number = -1;
   private damageTexts: DamageText[] = [];
   private chatBubble: { text: Phaser.GameObjects.Text; elapsed: number } | null = null;
 
@@ -89,6 +92,8 @@ export class PlayerSprite {
   }
 
   private drawBody(color: number): void {
+    if (color === this.lastBodyColor) return;
+    this.lastBodyColor = color;
     this.graphics.clear();
     this.graphics.fillStyle(color, 1);
     this.graphics.fillCircle(0, 0, PLAYER_RADIUS);
@@ -103,6 +108,10 @@ export class PlayerSprite {
   }
 
   private drawHpBar(hp: number, maxHp: number): void {
+    if (hp === this.lastDrawnHp && maxHp === this.lastDrawnMaxHp) return;
+    this.lastDrawnHp = hp;
+    this.lastDrawnMaxHp = maxHp;
+
     const barWidth = 36;
     const barHeight = 4;
     const xOffset = -barWidth / 2;

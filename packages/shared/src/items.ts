@@ -161,6 +161,15 @@ export function getTierColor(tier: number): number {
   return TIER_COLORS[tier] ?? 0x888888;
 }
 
+export function lightenColor(color: number, factor: number): number {
+  const r = (color >> 16) & 0xff;
+  const g = (color >> 8) & 0xff;
+  const b = color & 0xff;
+  return (Math.round(r + (255 - r) * factor) << 16)
+       | (Math.round(g + (255 - g) * factor) << 8)
+       | Math.round(b + (255 - b) * factor);
+}
+
 export function isUTItem(itemId: number): boolean {
   return getItemTier(itemId) === ItemTier.UT;
 }

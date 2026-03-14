@@ -52,6 +52,7 @@ export class InventoryUI {
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
+  public equipmentVersion: number = 0;
   private currentEquipment: ItemInstanceData[] = Array.from(
     { length: EQUIPMENT_SLOTS },
     () => createEmptyItemInstance()
@@ -340,6 +341,7 @@ export class InventoryUI {
       }
     }
     if (changed) {
+      this.equipmentVersion++;
       this.drawEquipmentSlots();
     }
   }
