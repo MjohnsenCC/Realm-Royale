@@ -27,7 +27,6 @@ import {
   PORTAL_RADIUS,
   CRAFTING_TABLE_X,
   CRAFTING_TABLE_Y,
-  CRAFTING_TABLE_RADIUS,
   CRAFTING_TABLE_INTERACT_RADIUS,
   TILE_SIZE,
   PLAYER_RADIUS,
@@ -189,7 +188,7 @@ export class GameScene extends Phaser.Scene {
   private portalGraphics!: Phaser.GameObjects.Graphics;
   private zoneTilemap: Phaser.Tilemaps.Tilemap | null = null;
   private zoneLayer: Phaser.Tilemaps.TilemapLayer | null = null;
-  private nexusLabels: Phaser.GameObjects.Text[] = [];
+  private nexusLabels: Phaser.GameObjects.GameObject[] = [];
   private decodedState!: DecodedState;
 
   // Zone tracking
@@ -350,6 +349,43 @@ export class GameScene extends Phaser.Scene {
     this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
       updateScreenDimensions(gameSize.width, gameSize.height);
       this.relayoutUI();
+    });
+
+    // Fullscreen transitions may not trigger a resize event with correct
+    // dimensions immediately — relayout after the browser has finished.
+    const fullscreenRelayout = () => {
+      setTimeout(() => {
+        updateScreenDimensions(this.scale.width, this.scale.height);
+        this.relayoutUI();
+      }, 100);
+    };
+    this.scale.on("enterfullscreen", fullscreenRelayout);
+    this.scale.on("leavefullscreen", fullscreenRelayout);
+
+    // Recover from black screen when alt-tabbing back to fullscreen.
+    // On Windows, alt-tab exits fullscreen and Phaser pauses the game loop.
+    // When the tab regains focus the WebGL viewport/framebuffer is stale,
+    // so we force the renderer to resize and relayout the UI.
+    const recoverFromBlur = () => {
+      const canvas = this.game.canvas;
+      const w = canvas.clientWidth;
+      const h = canvas.clientHeight;
+      // Force WebGL viewport to match actual canvas size
+      this.game.renderer.resize(w, h);
+      this.scale.refresh();
+      updateScreenDimensions(this.scale.width, this.scale.height);
+      this.relayoutUI();
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) {
+        // Small delay so the browser finishes any fullscreen exit / resize
+        setTimeout(recoverFromBlur, 300);
+      }
+    });
+
+    window.addEventListener("focus", () => {
+      setTimeout(recoverFromBlur, 300);
     });
 
     // Draw ground for current zone
@@ -891,26 +927,16 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Draw crafting table in east room
-    const ctx = CRAFTING_TABLE_X;
-    const cty = CRAFTING_TABLE_Y;
-    const ctr = CRAFTING_TABLE_RADIUS;
-
-    // Table surface
-    this.groundGraphics.fillStyle(0x553311, 0.9);
-    this.groundGraphics.fillRoundedRect(ctx - ctr, cty - ctr * 0.6, ctr * 2, ctr * 1.2, 6);
-    this.groundGraphics.lineStyle(2, 0x886633, 0.8);
-    this.groundGraphics.strokeRoundedRect(ctx - ctr, cty - ctr * 0.6, ctr * 2, ctr * 1.2, 6);
-
-    // Anvil/rune symbol
-    this.groundGraphics.fillStyle(0xaa8844, 0.7);
-    this.groundGraphics.fillCircle(ctx, cty, 12);
-    this.groundGraphics.lineStyle(2, 0xddaa55, 0.6);
-    this.groundGraphics.strokeCircle(ctx, cty, 12);
-    this.groundGraphics.strokeCircle(ctx, cty, 18);
-
     // Nexus label at spawn center
     this.clearNexusLabels();
+
+    // Draw crafting table sprite in east room
+    const ctx = CRAFTING_TABLE_X;
+    const cty = CRAFTING_TABLE_Y;
+
+    const craftImg = this.add.image(ctx, cty, "deco-crafting-table").setDepth(-0.3);
+    this.nexusLabels.push(craftImg);
+
     const label = this.add
       .text(mapData.spawnRoom.centerX, mapData.spawnRoom.centerY + 60, "~ The Nexus ~", {
         fontSize: "11px",
@@ -925,7 +951,7 @@ export class GameScene extends Phaser.Scene {
 
     // Crafting table label
     const craftLabel = this.add
-      .text(ctx, cty + ctr * 0.6 + 14, "Crafting Table", {
+      .text(ctx, cty + 31 + 14, "Crafting Table", {
         fontSize: "7px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
@@ -967,28 +993,18 @@ export class GameScene extends Phaser.Scene {
       }
     }
 
-    // Draw vault chest at center-upper area
+    this.clearNexusLabels();
+
+    // Draw vault chest sprite
     const chestX = VAULT_CHEST_X;
     const chestY = VAULT_CHEST_Y;
-    const chestW = 32;
-    const chestH = 24;
 
-    // Chest body
-    this.groundGraphics.fillStyle(0x553311, 0.9);
-    this.groundGraphics.fillRoundedRect(chestX - chestW / 2, chestY - chestH / 2, chestW, chestH, 4);
-    this.groundGraphics.lineStyle(2, 0xddaa55, 0.8);
-    this.groundGraphics.strokeRoundedRect(chestX - chestW / 2, chestY - chestH / 2, chestW, chestH, 4);
-
-    // Chest lock/clasp
-    this.groundGraphics.fillStyle(0xddaa55, 0.7);
-    this.groundGraphics.fillCircle(chestX, chestY, 5);
-    this.groundGraphics.lineStyle(1, 0xffcc66, 0.8);
-    this.groundGraphics.strokeCircle(chestX, chestY, 5);
+    const chestImg = this.add.image(chestX, chestY, "deco-chest").setDepth(-0.3);
+    this.nexusLabels.push(chestImg);
 
     // Chest label
-    this.clearNexusLabels();
     const chestLabel = this.add
-      .text(chestX, chestY + chestH / 2 + 14, "Vault Chest", {
+      .text(chestX, chestY + 31 + 14, "Vault Chest", {
         fontSize: "7px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
@@ -999,25 +1015,16 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(0.6);
     this.nexusLabels.push(chestLabel);
 
-    // Draw return portal near spawn area
+    // Draw return portal sprite near spawn area
     const rpx = VAULT_RETURN_PORTAL_X;
     const rpy = VAULT_RETURN_PORTAL_Y;
-    const rpr = 20;
 
-    this.portalGraphics.lineStyle(3, 0xddaa55, 0.3);
-    this.portalGraphics.strokeCircle(rpx, rpy, rpr + 8);
-    this.portalGraphics.lineStyle(2, 0xddaa55, 0.5);
-    this.portalGraphics.strokeCircle(rpx, rpy, rpr + 2);
-    this.portalGraphics.lineStyle(2, 0xddaa55, 0.8);
-    this.portalGraphics.strokeCircle(rpx, rpy, rpr);
-    this.portalGraphics.fillStyle(0x886622, 0.4);
-    this.portalGraphics.fillCircle(rpx, rpy, rpr - 2);
-    this.portalGraphics.fillStyle(0xddaa55, 0.2);
-    this.portalGraphics.fillCircle(rpx, rpy, rpr / 2);
+    const returnPortalImg = this.add.image(rpx, rpy, "portal-vault").setDepth(-0.3);
+    this.nexusLabels.push(returnPortalImg);
 
     const returnLabel = this.enteredVaultViaPortalGem ? "Return" : "Return to Nexus";
     const portalLabel = this.add
-      .text(rpx, rpy + rpr + 14, returnLabel, {
+      .text(rpx, rpy + 31 + 14, returnLabel, {
         fontSize: "6px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
@@ -1028,27 +1035,16 @@ export class GameScene extends Phaser.Scene {
       .setAlpha(0.5);
     this.nexusLabels.push(portalLabel);
 
-    // Draw crafting table in vault (same style as nexus crafting table)
+    // Draw crafting table sprite in vault
     const vctx = VAULT_CRAFTING_TABLE_X;
     const vcty = VAULT_CRAFTING_TABLE_Y;
-    const vctr = CRAFTING_TABLE_RADIUS;
 
-    // Table surface
-    this.groundGraphics.fillStyle(0x553311, 0.9);
-    this.groundGraphics.fillRoundedRect(vctx - vctr, vcty - vctr * 0.6, vctr * 2, vctr * 1.2, 6);
-    this.groundGraphics.lineStyle(2, 0x886633, 0.8);
-    this.groundGraphics.strokeRoundedRect(vctx - vctr, vcty - vctr * 0.6, vctr * 2, vctr * 1.2, 6);
-
-    // Anvil/rune symbol
-    this.groundGraphics.fillStyle(0xaa8844, 0.7);
-    this.groundGraphics.fillCircle(vctx, vcty, 12);
-    this.groundGraphics.lineStyle(2, 0xddaa55, 0.6);
-    this.groundGraphics.strokeCircle(vctx, vcty, 12);
-    this.groundGraphics.strokeCircle(vctx, vcty, 18);
+    const vaultCraftImg = this.add.image(vctx, vcty, "deco-crafting-table").setDepth(-0.3);
+    this.nexusLabels.push(vaultCraftImg);
 
     // Crafting table label
     const vaultCraftLabel = this.add
-      .text(vctx, vcty + vctr * 0.6 + 14, "Crafting Table", {
+      .text(vctx, vcty + 31 + 14, "Crafting Table", {
         fontSize: "7px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
@@ -1702,22 +1698,14 @@ export class GameScene extends Phaser.Scene {
       this.realmPortalLabels.push(lbl);
     }
 
-    // Vault portal (gold-themed, in west room — no sprite, keep graphics)
+    // Vault portal sprite in west room
     const vpx = VAULT_PORTAL_X;
     const vpy = VAULT_PORTAL_Y;
 
-    this.portalGraphics.lineStyle(4, 0xddaa55, 0.3);
-    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS + 12);
-    this.portalGraphics.lineStyle(3, 0xddaa55, 0.5);
-    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS + 4);
-    this.portalGraphics.lineStyle(3, 0xddaa55, 0.8);
-    this.portalGraphics.strokeCircle(vpx, vpy, PORTAL_RADIUS);
-    this.portalGraphics.fillStyle(0x886622, 0.4);
-    this.portalGraphics.fillCircle(vpx, vpy, PORTAL_RADIUS - 4);
-    this.portalGraphics.fillStyle(0xddaa55, 0.25);
-    this.portalGraphics.fillCircle(vpx, vpy, PORTAL_RADIUS / 2);
+    const vaultPortalImg = this.add.image(vpx, vpy, "portal-vault").setDepth(-0.3);
+    this.realmPortalImages.push(vaultPortalImg);
 
-    const vaultLbl = this.add.text(vpx, vpy - PORTAL_RADIUS - 14, "Vault", {
+    const vaultLbl = this.add.text(vpx, vpy - 31 - 14, "Vault", {
       fontSize: "7px",
       color: "#ddaa55",
       fontFamily: "'Press Start 2P', monospace",

@@ -31,4 +31,17 @@ const config: Phaser.Types.Core.GameConfig = {
   },
 };
 
-new Phaser.Game(config);
+const game = new Phaser.Game(config);
+
+// Prevent permanent WebGL context destruction on alt-tab from fullscreen
+game.canvas.addEventListener("webglcontextlost", (e) => {
+  e.preventDefault();
+});
+
+// Rebuild renderer state when WebGL context is restored after alt-tab
+game.canvas.addEventListener("webglcontextrestored", () => {
+  const w = game.canvas.clientWidth;
+  const h = game.canvas.clientHeight;
+  game.renderer.resize(w, h);
+  game.scale.refresh();
+});

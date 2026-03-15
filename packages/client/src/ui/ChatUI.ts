@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
 import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX } from "@rotmg-lite/shared";
-import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { getUIScale } from "./UIScale";
 
 interface ChatEntry {
   playerName: string;
@@ -122,7 +122,7 @@ export class ChatUI {
 
   private computeLayout(): void {
     const S = getUIScale();
-    const H = getScreenHeight();
+    const H = this.scene.scale.height;
 
     this.panelW = Math.round(PANEL_WIDTH_REF * S);
     this.panelX = Math.round(8 * S);
@@ -167,8 +167,8 @@ export class ChatUI {
     // The Phaser DOM container overlays the canvas 1:1, so we position
     // using percentages of the game resolution. This works in both
     // windowed and fullscreen modes.
-    const W = getScreenWidth();
-    const H = getScreenHeight();
+    const W = this.scene.scale.width;
+    const H = this.scene.scale.height;
     const pad = Math.round(PANEL_PADDING * getUIScale());
 
     this.inputEl.style.left = `${((this.panelX + pad) / W) * 100}%`;

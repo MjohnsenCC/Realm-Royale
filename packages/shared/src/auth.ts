@@ -49,6 +49,6 @@ export function isAuthenticatedJoin(
 
 // --- Constants ---
 
-export const MAX_CHARACTERS_PER_ACCOUNT = 3;
+export const MAX_CHARACTERS_PER_ACCOUNT = 5;
 export const CHARACTER_NAME_MAX_LENGTH = 16;
 export const CHARACTER_NAME_MIN_LENGTH = 2;

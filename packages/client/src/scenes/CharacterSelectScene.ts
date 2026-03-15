@@ -8,38 +8,114 @@ import {
   CHARACTER_NAME_MIN_LENGTH,
   CharacterClass,
   CLASS_NAMES,
-  CLASS_EQUIPMENT_MAP,
-  ItemCategory,
-  getSubtypeName,
 } from "@rotmg-lite/shared";
-import { getItemSpriteKey, getItemOutlinedSize } from "../ui/ItemTextures";
+import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import {
   SERVERS,
   getSelectedServerId,
   setSelectedServerId,
 } from "../network/ServerConfig";
+
 export class CharacterSelectScene extends Phaser.Scene {
   private characters: CharacterSummary[] = [];
   private statusText!: Phaser.GameObjects.Text;
   private characterContainer!: Phaser.GameObjects.Container;
-  private createBtn!: Phaser.GameObjects.Container;
+  private currentIndex: number = 0;
+  private leftArrow!: Phaser.GameObjects.Text;
+  private rightArrow!: Phaser.GameObjects.Text;
+  private slotIndicator!: Phaser.GameObjects.Text;
+  private resizeHandler?: (gameSize: Phaser.Structs.Size) => void;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private resizeTimer?: ReturnType<typeof setTimeout>;
+  private dialogOpen = false;
 
   constructor() {
     super({ key: "CharacterSelectScene" });
   }
 
-  async create() {
+  async create(data?: { characters?: CharacterSummary[]; currentIndex?: number }) {
     const { width, height } = this.scale;
     const cx = width / 2;
+
+    // Restore cached data if restarting from resize
+    if (data?.characters) {
+      this.characters = data.characters;
+      this.currentIndex = data.currentIndex ?? 0;
+    }
+
+    // Handle window resize — debounced, only on real dimension changes
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.resizeHandler = (gameSize: Phaser.Structs.Size) => {
+      if (this.dialogOpen) return;
+      const newW = gameSize.width;
+      const newH = gameSize.height;
+      if (Math.abs(newW - this.lastWidth) < 2 && Math.abs(newH - this.lastHeight) < 2) return;
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        this.scale.off("resize", this.resizeHandler!);
+        this.scene.restart({ characters: this.characters, currentIndex: this.currentIndex });
+      }, 200);
+    };
+    this.scale.on("resize", this.resizeHandler);
+    this.events.once("shutdown", this.shutdown, this);
 
     // Background
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.drawBackground(width, height);
 
+    // ─── LOGOUT BUTTON (top-right, pill) ───
+    const logoutBtnW = 120;
+    const logoutBtnH = 32;
+    const logoutBtnX = width - logoutBtnW - 16;
+    const logoutBtnY = 16;
+
+    const logoutBtnGfx = this.add.graphics().setDepth(5);
+    logoutBtnGfx.fillStyle(0x441111, 0.6);
+    logoutBtnGfx.fillRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+    logoutBtnGfx.lineStyle(1, 0x664444, 0.5);
+    logoutBtnGfx.strokeRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+
+    const logoutBtnText = this.add
+      .text(logoutBtnX + logoutBtnW / 2, logoutBtnY + logoutBtnH / 2, "LOG OUT", {
+        fontSize: "11px",
+        color: "#aa6666",
+        fontFamily: "'Press Start 2P', monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(6);
+
+    const logoutBtnZone = this.add
+      .zone(logoutBtnX + logoutBtnW / 2, logoutBtnY + logoutBtnH / 2, logoutBtnW, logoutBtnH)
+      .setDepth(7)
+      .setInteractive({ useHandCursor: true });
+
+    logoutBtnZone.on("pointerover", () => {
+      logoutBtnGfx.clear();
+      logoutBtnGfx.fillStyle(0x662222, 0.7);
+      logoutBtnGfx.fillRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+      logoutBtnGfx.lineStyle(1, 0x884444, 0.6);
+      logoutBtnGfx.strokeRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+      logoutBtnText.setColor("#ff6666");
+    });
+    logoutBtnZone.on("pointerout", () => {
+      logoutBtnGfx.clear();
+      logoutBtnGfx.fillStyle(0x441111, 0.6);
+      logoutBtnGfx.fillRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+      logoutBtnGfx.lineStyle(1, 0x664444, 0.5);
+      logoutBtnGfx.strokeRoundedRect(logoutBtnX, logoutBtnY, logoutBtnW, logoutBtnH, 6);
+      logoutBtnText.setColor("#aa6666");
+    });
+    logoutBtnZone.on("pointerdown", () => {
+      AuthManager.getInstance().logout();
+      this.scene.start("MenuScene");
+    });
+
     // Title
     this.add
       .text(cx, height * 0.1, "SELECT CHARACTER", {
-        fontSize: "18px",
+        fontSize: "16px",
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
@@ -49,7 +125,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     // Status text
     this.statusText = this.add
-      .text(cx, height * 0.18, "", {
+      .text(cx, height * 0.17, "", {
         fontSize: "8px",
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -57,32 +133,89 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setOrigin(0.5)
       .setDepth(5);
 
-    // Character list container
+    // Character display container
     this.characterContainer = this.add.container(0, 0).setDepth(5);
 
-    // Settings panel (server + UI scale) at bottom
-    this.drawSettingsPanel(cx, width, height);
+    // Compute the vertical center of the card area:
+    // Available area is between header (height * 0.20) and server panel top (height - 104)
+    const areaTop = height * 0.20;
+    const areaBottom = height - 120;
+    const cardH = 260;
+    const areaCenterY = (areaTop + areaBottom) / 2;
 
-    // Log out button (top right)
-    const logoutBtn = this.add
-      .text(width - 20, 20, "LOG OUT", {
-        fontSize: "8px",
-        color: "#aa4444",
+    // Navigation arrows — vertically centered in the card area
+    this.leftArrow = this.add
+      .text(cx - 200, areaCenterY, "<", {
+        fontSize: "24px",
+        color: "#4488ff",
         fontFamily: "'Press Start 2P', monospace",
       })
-      .setOrigin(1, 0)
-      .setDepth(5)
+      .setOrigin(0.5)
+      .setDepth(6)
       .setInteractive({ useHandCursor: true });
 
-    logoutBtn.on("pointerover", () => logoutBtn.setColor("#ff6666"));
-    logoutBtn.on("pointerout", () => logoutBtn.setColor("#aa4444"));
-    logoutBtn.on("pointerdown", () => {
-      AuthManager.getInstance().logout();
-      this.scene.start("MenuScene");
+    this.rightArrow = this.add
+      .text(cx + 200, areaCenterY, ">", {
+        fontSize: "24px",
+        color: "#4488ff",
+        fontFamily: "'Press Start 2P', monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(6)
+      .setInteractive({ useHandCursor: true });
+
+    this.leftArrow.on("pointerdown", () => {
+      if (this.currentIndex > 0) {
+        this.currentIndex--;
+        this.renderCurrentCard();
+      }
+    });
+    this.leftArrow.on("pointerover", () => {
+      if (this.currentIndex > 0) this.leftArrow.setColor("#66aaff");
+    });
+    this.leftArrow.on("pointerout", () => {
+      this.leftArrow.setColor(this.currentIndex > 0 ? "#4488ff" : "#222244");
     });
 
-    // Load characters
-    await this.loadCharacters();
+    this.rightArrow.on("pointerdown", () => {
+      if (this.currentIndex < MAX_CHARACTERS_PER_ACCOUNT - 1) {
+        this.currentIndex++;
+        this.renderCurrentCard();
+      }
+    });
+    this.rightArrow.on("pointerover", () => {
+      if (this.currentIndex < MAX_CHARACTERS_PER_ACCOUNT - 1) this.rightArrow.setColor("#66aaff");
+    });
+    this.rightArrow.on("pointerout", () => {
+      this.rightArrow.setColor(this.currentIndex < MAX_CHARACTERS_PER_ACCOUNT - 1 ? "#4488ff" : "#222244");
+    });
+
+    // Slot indicator — below the card
+    this.slotIndicator = this.add
+      .text(cx, areaCenterY + cardH / 2 + 16, "", {
+        fontSize: "8px",
+        color: "#667788",
+        fontFamily: "'Press Start 2P', monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(5);
+
+    // Server selector
+    this.drawServerSelector(cx, width, height);
+
+    // Load characters (or render from cache if we already have them)
+    if (data?.characters) {
+      this.renderCurrentCard();
+    } else {
+      await this.loadCharacters();
+    }
+  }
+
+  shutdown() {
+    if (this.resizeHandler) {
+      this.scale.off("resize", this.resizeHandler);
+    }
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
   }
 
   private async loadCharacters() {
@@ -91,7 +224,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       const auth = AuthManager.getInstance();
       this.characters = await auth.fetchCharacters();
       this.statusText.setText("");
-      this.renderCharacters();
+      this.renderCurrentCard();
     } catch (err) {
       const msg = err instanceof Error ? err.message : "Failed to load";
       this.statusText.setText(`Error: ${msg}`);
@@ -101,168 +234,251 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
   }
 
-  private renderCharacters() {
+  private renderCurrentCard() {
     const { width, height } = this.scale;
     const cx = width / 2;
 
-    // Clear existing
+    // Clear existing card
     this.characterContainer.removeAll(true);
 
-    const cardW = 340;
-    const cardH = 70;
-    const cardGap = 12;
-    const startY = height * 0.26;
+    // Update arrows
+    this.leftArrow.setColor(this.currentIndex > 0 ? "#4488ff" : "#222244");
+    this.rightArrow.setColor(this.currentIndex < MAX_CHARACTERS_PER_ACCOUNT - 1 ? "#4488ff" : "#222244");
 
-    // Character cards
-    for (let i = 0; i < this.characters.length; i++) {
-      const char = this.characters[i];
-      const cardY = startY + i * (cardH + cardGap);
-      this.createCharacterCard(cx, cardY, cardW, cardH, char);
-    }
+    // Update slot indicator
+    this.slotIndicator.setText(`${this.currentIndex + 1} / ${MAX_CHARACTERS_PER_ACCOUNT}`);
 
-    // Create new character button
-    if (this.characters.length < MAX_CHARACTERS_PER_ACCOUNT) {
-      const btnY = startY + this.characters.length * (cardH + cardGap);
-      this.createNewCharacterButton(cx, btnY, cardW, cardH);
+    const cardW = 300;
+    const cardH = 260;
+    // Center the card in the available area (same math as arrows)
+    const areaTop = height * 0.20;
+    const areaBottom = height - 120;
+    const areaCenterY = (areaTop + areaBottom) / 2;
+    const cardY = areaCenterY - cardH / 2;
+    const cardX = cx - cardW / 2;
+
+    if (this.currentIndex < this.characters.length) {
+      // Existing character card
+      const char = this.characters[this.currentIndex];
+      this.renderCharacterCard(cx, cardX, cardY, cardW, cardH, char);
+    } else {
+      // Empty slot — create character card
+      this.renderCreateSlot(cx, cardX, cardY, cardW, cardH);
     }
   }
 
-  private createCharacterCard(
+  private renderCharacterCard(
     cx: number,
-    y: number,
-    w: number,
-    h: number,
+    cardX: number,
+    cardY: number,
+    cardW: number,
+    cardH: number,
     char: CharacterSummary
   ) {
-    const x = cx - w / 2;
-
     // Card background
     const bg = this.add.graphics();
     bg.fillStyle(0x222244, 0.9);
-    bg.fillRoundedRect(x, y, w, h, 6);
-    bg.lineStyle(1, 0x4488ff, 0.3);
-    bg.strokeRoundedRect(x, y, w, h, 6);
+    bg.fillRoundedRect(cardX, cardY, cardW, cardH, 8);
+    bg.lineStyle(1, 0x4488ff, 0.4);
+    bg.strokeRoundedRect(cardX, cardY, cardW, cardH, 8);
+
+    // Delete button (top-right of card)
+    const delBtn = this.add
+      .text(cardX + cardW - 14, cardY + 14, "DELETE", {
+        fontSize: "7px",
+        color: "#664444",
+        fontFamily: "'Press Start 2P', monospace",
+      })
+      .setOrigin(1, 0)
+      .setDepth(7)
+      .setInteractive({ useHandCursor: true });
+
+    delBtn.on("pointerover", () => delBtn.setColor("#ff4444"));
+    delBtn.on("pointerout", () => delBtn.setColor("#664444"));
+    delBtn.on("pointerdown", () => this.confirmDeleteCharacter(char));
+
+    // Player sprite with outline
+    const spriteKey = getPlayerSpriteKey(char.characterClass);
+    const sprite = this.add.image(cx, cardY + 70, spriteKey)
+      .setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE)
+      .setDepth(6);
 
     // Character name
     const nameText = this.add
-      .text(x + 16, y + 16, char.name, {
-        fontSize: "12px",
+      .text(cx, cardY + 115, char.name, {
+        fontSize: "14px",
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
+      .setOrigin(0.5)
       .setDepth(6);
 
     // Level and class
     const className = CLASS_NAMES[char.characterClass] ?? "Unknown";
     const levelText = this.add
-      .text(x + 16, y + 42, `Level ${char.level} ${className}`, {
-        fontSize: "8px",
+      .text(cx, cardY + 142, `Level ${char.level} ${className}`, {
+        fontSize: "9px",
         color: "#8888aa",
         fontFamily: "'Press Start 2P', monospace",
       })
+      .setOrigin(0.5)
       .setDepth(6);
 
     // Last played
     const lastPlayed = this.formatLastPlayed(char.lastPlayed);
     const lastPlayedText = this.add
-      .text(x + w - 80, y + 42, lastPlayed, {
+      .text(cx, cardY + 164, lastPlayed, {
         fontSize: "7px",
         color: "#666688",
         fontFamily: "'Press Start 2P', monospace",
       })
-      .setOrigin(0, 0)
+      .setOrigin(0.5)
       .setDepth(6);
 
-    // Play button zone (the entire card)
-    const zone = this.add
-      .zone(cx, y + h / 2, w, h)
-      .setDepth(7)
-      .setInteractive({ useHandCursor: true });
+    // PLAY button
+    const playBtnW = 180;
+    const playBtnH = 40;
+    const playBtnX = cx - playBtnW / 2;
+    const playBtnY = cardY + cardH - playBtnH - 20;
 
-    zone.on("pointerover", () => {
-      bg.clear();
-      bg.fillStyle(0x333366, 0.9);
-      bg.fillRoundedRect(x, y, w, h, 6);
-      bg.lineStyle(1, 0x4488ff, 0.6);
-      bg.strokeRoundedRect(x, y, w, h, 6);
-    });
-    zone.on("pointerout", () => {
-      bg.clear();
-      bg.fillStyle(0x222244, 0.9);
-      bg.fillRoundedRect(x, y, w, h, 6);
-      bg.lineStyle(1, 0x4488ff, 0.3);
-      bg.strokeRoundedRect(x, y, w, h, 6);
-    });
-    zone.on("pointerdown", () => this.selectCharacter(char.id));
+    const playBtnGfx = this.add.graphics().setDepth(6);
+    playBtnGfx.fillStyle(0x224433, 0.9);
+    playBtnGfx.fillRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
+    playBtnGfx.lineStyle(2, 0x44ff88, 0.6);
+    playBtnGfx.strokeRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
 
-    // Delete button
-    const delBtn = this.add
-      .text(x + w - 16, y + 16, "X", {
-        fontSize: "10px",
-        color: "#664444",
+    const playBtnText = this.add
+      .text(cx, playBtnY + playBtnH / 2, "PLAY", {
+        fontSize: "12px",
+        color: "#44ff88",
         fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
-      .setOrigin(1, 0)
+      .setOrigin(0.5)
+      .setDepth(7);
+
+    const playBtnZone = this.add
+      .zone(cx, playBtnY + playBtnH / 2, playBtnW, playBtnH)
       .setDepth(8)
       .setInteractive({ useHandCursor: true });
 
-    delBtn.on("pointerover", () => delBtn.setColor("#ff4444"));
-    delBtn.on("pointerout", () => delBtn.setColor("#664444"));
-    delBtn.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
-      pointer.event.stopPropagation();
-      this.confirmDeleteCharacter(char);
+    playBtnZone.on("pointerover", () => {
+      playBtnGfx.clear();
+      playBtnGfx.fillStyle(0x335544, 0.9);
+      playBtnGfx.fillRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
+      playBtnGfx.lineStyle(2, 0x66ffaa, 0.8);
+      playBtnGfx.strokeRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
+      playBtnText.setColor("#66ffaa");
     });
+    playBtnZone.on("pointerout", () => {
+      playBtnGfx.clear();
+      playBtnGfx.fillStyle(0x224433, 0.9);
+      playBtnGfx.fillRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
+      playBtnGfx.lineStyle(2, 0x44ff88, 0.6);
+      playBtnGfx.strokeRoundedRect(playBtnX, playBtnY, playBtnW, playBtnH, 6);
+      playBtnText.setColor("#44ff88");
+    });
+    playBtnZone.on("pointerdown", () => this.selectCharacter(char.id));
 
-    this.characterContainer.add([bg, nameText, levelText, lastPlayedText, zone, delBtn]);
+    this.characterContainer.add([
+      bg, delBtn, sprite, nameText, levelText, lastPlayedText,
+      playBtnGfx, playBtnText, playBtnZone,
+    ]);
   }
 
-  private createNewCharacterButton(cx: number, y: number, w: number, h: number) {
-    const x = cx - w / 2;
-
+  private renderCreateSlot(
+    cx: number,
+    cardX: number,
+    cardY: number,
+    cardW: number,
+    cardH: number
+  ) {
     const bg = this.add.graphics();
-    bg.fillStyle(0x1a1a33, 0.7);
-    bg.fillRoundedRect(x, y, w, h, 6);
-    bg.lineStyle(1, 0x4488ff, 0.15);
-    bg.strokeRoundedRect(x, y, w, h, 6);
+    const dashLen = 8;
+    const gapLen = 6;
 
-    const label = this.add
-      .text(cx, y + h / 2, "+ CREATE CHARACTER", {
-        fontSize: "11px",
+    const drawDashedCard = (fillColor: number, fillAlpha: number, lineAlpha: number) => {
+      bg.clear();
+      bg.fillStyle(fillColor, fillAlpha);
+      bg.fillRoundedRect(cardX, cardY, cardW, cardH, 8);
+      bg.lineStyle(1, 0x4488ff, lineAlpha);
+      // Top edge
+      for (let x = cardX + 8; x < cardX + cardW - 8; x += dashLen + gapLen) {
+        bg.beginPath();
+        bg.moveTo(x, cardY);
+        bg.lineTo(Math.min(x + dashLen, cardX + cardW - 8), cardY);
+        bg.strokePath();
+      }
+      // Bottom edge
+      for (let x = cardX + 8; x < cardX + cardW - 8; x += dashLen + gapLen) {
+        bg.beginPath();
+        bg.moveTo(x, cardY + cardH);
+        bg.lineTo(Math.min(x + dashLen, cardX + cardW - 8), cardY + cardH);
+        bg.strokePath();
+      }
+      // Left edge
+      for (let y = cardY + 8; y < cardY + cardH - 8; y += dashLen + gapLen) {
+        bg.beginPath();
+        bg.moveTo(cardX, y);
+        bg.lineTo(cardX, Math.min(y + dashLen, cardY + cardH - 8));
+        bg.strokePath();
+      }
+      // Right edge
+      for (let y = cardY + 8; y < cardY + cardH - 8; y += dashLen + gapLen) {
+        bg.beginPath();
+        bg.moveTo(cardX + cardW, y);
+        bg.lineTo(cardX + cardW, Math.min(y + dashLen, cardY + cardH - 8));
+        bg.strokePath();
+      }
+    };
+
+    drawDashedCard(0x1a1a33, 0.5, 0.25);
+
+    // Plus icon
+    const plusText = this.add
+      .text(cx, cardY + cardH / 2 - 20, "+", {
+        fontSize: "32px",
         color: "#4488ff",
         fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
 
+    // Create label
+    const createLabel = this.add
+      .text(cx, cardY + cardH / 2 + 24, "CREATE CHARACTER", {
+        fontSize: "10px",
+        color: "#4488ff",
+        fontFamily: "'Press Start 2P', monospace",
+      })
+      .setOrigin(0.5)
+      .setDepth(6);
+
+    // Interactive zone for entire card
     const zone = this.add
-      .zone(cx, y + h / 2, w, h)
+      .zone(cx, cardY + cardH / 2, cardW, cardH)
       .setDepth(7)
       .setInteractive({ useHandCursor: true });
 
     zone.on("pointerover", () => {
-      bg.clear();
-      bg.fillStyle(0x222255, 0.7);
-      bg.fillRoundedRect(x, y, w, h, 6);
-      bg.lineStyle(1, 0x4488ff, 0.4);
-      bg.strokeRoundedRect(x, y, w, h, 6);
-      label.setColor("#66aaff");
+      drawDashedCard(0x222255, 0.6, 0.4);
+      plusText.setColor("#66aaff");
+      createLabel.setColor("#66aaff");
     });
     zone.on("pointerout", () => {
-      bg.clear();
-      bg.fillStyle(0x1a1a33, 0.7);
-      bg.fillRoundedRect(x, y, w, h, 6);
-      bg.lineStyle(1, 0x4488ff, 0.15);
-      bg.strokeRoundedRect(x, y, w, h, 6);
-      label.setColor("#4488ff");
+      drawDashedCard(0x1a1a33, 0.5, 0.25);
+      plusText.setColor("#4488ff");
+      createLabel.setColor("#4488ff");
     });
     zone.on("pointerdown", () => this.showCreateCharacterInput());
 
-    this.characterContainer.add([bg, label, zone]);
+    this.characterContainer.add([bg, plusText, createLabel, zone]);
   }
 
   private showCreateCharacterInput() {
+    if (this.dialogOpen) return;
+    this.dialogOpen = true;
     const { width, height } = this.scale;
     const cx = width / 2;
 
@@ -270,10 +486,11 @@ export class CharacterSelectScene extends Phaser.Scene {
     const overlay = this.add.graphics().setDepth(20);
     overlay.fillStyle(0x000000, 0.7);
     overlay.fillRect(0, 0, width, height);
+    overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 
     // Dialog box
     const dialogW = 500;
-    const dialogH = 380;
+    const dialogH = 340;
     const dialogX = cx - dialogW / 2;
     const dialogY = height / 2 - dialogH / 2;
 
@@ -310,9 +527,9 @@ export class CharacterSelectScene extends Phaser.Scene {
       { id: CharacterClass.Arcanist, name: "ARCANIST" },
     ];
 
-    // Class cards
+    // Class cards with player sprites
     const cardW = 140;
-    const cardH = 120;
+    const cardH = 100;
     const cardGap = 16;
     const totalCardsW = classOptions.length * cardW + (classOptions.length - 1) * cardGap;
     const cardsStartX = cx - totalCardsW / 2;
@@ -321,16 +538,15 @@ export class CharacterSelectScene extends Phaser.Scene {
     const cardGraphics = this.add.graphics().setDepth(21);
     const cardElements: Phaser.GameObjects.GameObject[] = [cardGraphics];
 
-    // Create weapon sprite Images for each class card
-    const weaponImages: Phaser.GameObjects.Image[] = [];
+    // Create player sprite images for each class card
+    const playerImages: Phaser.GameObjects.Image[] = [];
     for (let i = 0; i < classOptions.length; i++) {
-      const equip = CLASS_EQUIPMENT_MAP[classOptions[i].id];
-      const spriteKey = getItemSpriteKey(ItemCategory.Weapon, equip.weapon);
-      if (spriteKey) {
-        const img = this.add.image(0, 0, spriteKey).setDepth(22).setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
-        weaponImages.push(img);
-        cardElements.push(img);
-      }
+      const spriteKey = getPlayerSpriteKey(classOptions[i].id);
+      const img = this.add.image(0, 0, spriteKey)
+        .setDepth(22)
+        .setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+      playerImages.push(img);
+      cardElements.push(img);
     }
 
     const drawCards = () => {
@@ -345,54 +561,32 @@ export class CharacterSelectScene extends Phaser.Scene {
         cardGraphics.lineStyle(isSelected ? 2 : 1, isSelected ? 0x4488ff : 0x333355, isSelected ? 0.8 : 0.4);
         cardGraphics.strokeRoundedRect(cardX, cardTopY, cardW, cardH, 6);
 
-        // Position weapon sprite
-        if (weaponImages[i]) {
-          weaponImages[i].setPosition(cardX + cardW / 2, cardTopY + 48);
+        // Position player sprite
+        if (playerImages[i]) {
+          playerImages[i].setPosition(cardX + cardW / 2, cardTopY + 40);
           if (isSelected) {
-            weaponImages[i].clearTint().setAlpha(1);
+            playerImages[i].clearTint().setAlpha(1);
           } else {
-            weaponImages[i].setTint(0x555577).setAlpha(0.7);
+            playerImages[i].setTint(0x555577).setAlpha(0.7);
           }
         }
       }
     };
 
-    // Text elements for each card
+    // Text elements for each card (class name only)
     const cardTextElements: Phaser.GameObjects.Text[] = [];
     for (let i = 0; i < classOptions.length; i++) {
       const opt = classOptions[i];
       const cardX = cardsStartX + i * (cardW + cardGap);
       const cardCx = cardX + cardW / 2;
-      const equip = CLASS_EQUIPMENT_MAP[opt.id];
       const isSelected = opt.id === selectedClass;
 
       const nameText = this.add
-        .text(cardCx, cardTopY + 16, opt.name, {
+        .text(cardCx, cardTopY + 82, opt.name, {
           fontSize: "8px",
           color: isSelected ? "#ffffff" : "#666688",
           fontFamily: "'Press Start 2P', monospace",
           fontStyle: "bold",
-        })
-        .setOrigin(0.5)
-        .setDepth(22);
-
-      const weaponName = getSubtypeName(ItemCategory.Weapon, equip.weapon);
-      const abilityName = getSubtypeName(ItemCategory.Ability, equip.ability);
-      const info1Text = this.add
-        .text(cardCx, cardTopY + 78, `${weaponName} · ${abilityName}`, {
-          fontSize: "6px",
-          color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "'Press Start 2P', monospace",
-        })
-        .setOrigin(0.5)
-        .setDepth(22);
-
-      const armorName = getSubtypeName(ItemCategory.Armor, equip.armor);
-      const info2Text = this.add
-        .text(cardCx, cardTopY + 94, armorName, {
-          fontSize: "6px",
-          color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(22);
@@ -407,18 +601,15 @@ export class CharacterSelectScene extends Phaser.Scene {
         updateClassCards();
       });
 
-      cardTextElements.push(nameText, info1Text, info2Text);
-      cardElements.push(nameText, info1Text, info2Text, zone);
+      cardTextElements.push(nameText);
+      cardElements.push(nameText, zone);
     }
 
     const updateClassCards = () => {
       drawCards();
       for (let i = 0; i < classOptions.length; i++) {
         const isSelected = classOptions[i].id === selectedClass;
-        const base = i * 3;
-        cardTextElements[base].setColor(isSelected ? "#ffffff" : "#666688");
-        cardTextElements[base + 1].setColor(isSelected ? "#8888aa" : "#555566");
-        cardTextElements[base + 2].setColor(isSelected ? "#8888aa" : "#555566");
+        cardTextElements[i].setColor(isSelected ? "#ffffff" : "#666688");
       }
     };
 
@@ -430,8 +621,8 @@ export class CharacterSelectScene extends Phaser.Scene {
         style="
           width: 220px;
           padding: 10px 16px;
-          font-size: 18px;
-          font-family: monospace;
+          font-size: 14px;
+          font-family: 'Press Start 2P', monospace;
           background: rgba(22, 33, 62, 0.9);
           border: 1px solid rgba(68, 136, 255, 0.5);
           border-radius: 6px;
@@ -442,7 +633,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       />
     `;
     const inputElement = this.add
-      .dom(cx, dialogY + 218)
+      .dom(cx, dialogY + 200)
       .createFromHTML(inputHTML)
       .setDepth(22);
 
@@ -458,7 +649,7 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
 
     const errorText = this.add
-      .text(cx, dialogY + 258, "", {
+      .text(cx, dialogY + 235, "", {
         fontSize: "7px",
         color: "#ff4444",
         fontFamily: "'Press Start 2P', monospace",
@@ -468,7 +659,7 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     // Buttons
     const confirmBtn = this.add
-      .text(cx - 50, dialogY + 305, "CREATE", {
+      .text(cx - 50, dialogY + 280, "CREATE", {
         fontSize: "10px",
         color: "#44ff88",
         fontFamily: "'Press Start 2P', monospace",
@@ -479,7 +670,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const cancelBtn = this.add
-      .text(cx + 50, dialogY + 305, "CANCEL", {
+      .text(cx + 50, dialogY + 280, "CANCEL", {
         fontSize: "10px",
         color: "#aa6666",
         fontFamily: "'Press Start 2P', monospace",
@@ -489,6 +680,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const cleanup = () => {
+      this.dialogOpen = false;
       overlay.destroy();
       dialogBg.destroy();
       title.destroy();
@@ -525,12 +717,15 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private confirmDeleteCharacter(char: CharacterSummary) {
+    if (this.dialogOpen) return;
+    this.dialogOpen = true;
     const { width, height } = this.scale;
     const cx = width / 2;
 
     const overlay = this.add.graphics().setDepth(20);
     overlay.fillStyle(0x000000, 0.7);
     overlay.fillRect(0, 0, width, height);
+    overlay.setInteractive(new Phaser.Geom.Rectangle(0, 0, width, height), Phaser.Geom.Rectangle.Contains);
 
     const dialogW = 320;
     const dialogH = 140;
@@ -593,6 +788,7 @@ export class CharacterSelectScene extends Phaser.Scene {
       .setInteractive({ useHandCursor: true });
 
     const cleanup = () => {
+      this.dialogOpen = false;
       overlay.destroy();
       dialogBg.destroy();
       title.destroy();
@@ -609,6 +805,10 @@ export class CharacterSelectScene extends Phaser.Scene {
       try {
         await AuthManager.getInstance().deleteCharacter(char.id);
         cleanup();
+        // Adjust index if we deleted the last character in the list
+        if (this.currentIndex >= this.characters.length - 1 && this.currentIndex > 0) {
+          this.currentIndex--;
+        }
         await this.loadCharacters();
       } catch (err) {
         const errMsg = err instanceof Error ? err.message : "Failed to delete";
@@ -660,7 +860,7 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private drawBackground(width: number, height: number) {
-    // Grid background (matching MenuScene style)
+    // Grid background
     const grid = this.add.graphics().setDepth(0);
     const gridSpacing = 40;
     grid.lineStyle(1, 0x4488ff, 0.04);
@@ -697,71 +897,98 @@ export class CharacterSelectScene extends Phaser.Scene {
     }
   }
 
-  private drawSettingsPanel(cx: number, width: number, height: number) {
-    const panelW = 200;
-    const panelH = 60;
+  private drawServerSelector(cx: number, _width: number, height: number) {
+    // Server selector panel
+    const panelW = 280;
+    const panelH = 80;
     const panelX = cx - panelW / 2;
-    const panelY = height - panelH - 30;
+    const panelY = height - panelH - 24;
 
     const panel = this.add.graphics().setDepth(5);
-    panel.fillStyle(0x222222, 0.85);
+    panel.fillStyle(0x191930, 0.9);
     panel.fillRoundedRect(panelX, panelY, panelW, panelH, 8);
-    panel.lineStyle(1, 0x555555, 0.6);
+    panel.lineStyle(1, 0x333355, 0.5);
     panel.strokeRoundedRect(panelX, panelY, panelW, panelH, 8);
-    panel.lineStyle(1, 0x4488ff, 0.2);
-    panel.beginPath();
-    panel.moveTo(panelX + 8, panelY);
-    panel.lineTo(panelX + panelW - 8, panelY);
-    panel.strokePath();
 
-    // Server selector
-    const serverLabelY = panelY + 12;
+    // Server label
     this.add
-      .text(cx, serverLabelY, "SERVER", {
-        fontSize: "6px",
-        color: "#667788",
+      .text(cx, panelY + 16, "SERVER", {
+        fontSize: "8px",
+        color: "#8899aa",
         fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
 
-    const serverBtnY = serverLabelY + 16;
+    // Pill-shaped server buttons
+    const serverBtnW = 120;
+    const serverBtnH = 32;
+    const serverBtnGap = 12;
+    const totalW = SERVERS.length * serverBtnW + (SERVERS.length - 1) * serverBtnGap;
+    const startX = cx - totalW / 2;
+    const btnY = panelY + 34;
+
     const currentServerId = getSelectedServerId();
-    const serverButtons: Phaser.GameObjects.Text[] = [];
-    const totalServerBtnWidth = 140;
-    const serverBtnSpacing = totalServerBtnWidth / SERVERS.length;
-    const serverStartX = cx - totalServerBtnWidth / 2 + serverBtnSpacing / 2;
+    const btnGraphics = this.add.graphics().setDepth(5);
+    const btnTexts: Phaser.GameObjects.Text[] = [];
+
+    const drawBtns = () => {
+      btnGraphics.clear();
+      const selId = getSelectedServerId();
+      for (let i = 0; i < SERVERS.length; i++) {
+        const btnX = startX + i * (serverBtnW + serverBtnGap);
+        const isSel = SERVERS[i].id === selId;
+
+        btnGraphics.fillStyle(isSel ? 0x222255 : 0x1a1a33, 1);
+        btnGraphics.fillRoundedRect(btnX, btnY, serverBtnW, serverBtnH, 6);
+        btnGraphics.lineStyle(isSel ? 2 : 1, isSel ? 0x4488ff : 0x333355, isSel ? 0.8 : 0.4);
+        btnGraphics.strokeRoundedRect(btnX, btnY, serverBtnW, serverBtnH, 6);
+
+        if (btnTexts[i]) {
+          btnTexts[i].setColor(isSel ? "#4488ff" : "#667788");
+          btnTexts[i].setFontStyle(isSel ? "bold" : "");
+        }
+      }
+    };
 
     for (let i = 0; i < SERVERS.length; i++) {
       const server = SERVERS[i];
-      const btn = this.add
-        .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "8px",
-          color: server.id === currentServerId ? "#4488ff" : "#555566",
+      const btnX = startX + i * (serverBtnW + serverBtnGap);
+      const btnCx = btnX + serverBtnW / 2;
+      const btnCy = btnY + serverBtnH / 2;
+
+      const txt = this.add
+        .text(btnCx, btnCy, server.name, {
+          fontSize: "9px",
+          color: server.id === currentServerId ? "#4488ff" : "#667788",
           fontFamily: "'Press Start 2P', monospace",
+          fontStyle: server.id === currentServerId ? "bold" : "",
         })
         .setOrigin(0.5)
-        .setDepth(6)
+        .setDepth(6);
+      btnTexts.push(txt);
+
+      const zone = this.add
+        .zone(btnCx, btnCy, serverBtnW, serverBtnH)
+        .setDepth(7)
         .setInteractive({ useHandCursor: true });
 
-      btn.on("pointerdown", () => {
+      zone.on("pointerdown", () => {
         setSelectedServerId(server.id);
-        for (let j = 0; j < serverButtons.length; j++) {
-          serverButtons[j].setColor(
-            SERVERS[j].id === server.id ? "#4488ff" : "#555566"
-          );
+        drawBtns();
+      });
+      zone.on("pointerover", () => {
+        if (getSelectedServerId() !== server.id) {
+          btnTexts[i].setColor("#8888aa");
         }
       });
-      btn.on("pointerover", () => {
-        if (getSelectedServerId() !== server.id) btn.setColor("#8888aa");
-      });
-      btn.on("pointerout", () => {
-        btn.setColor(
-          getSelectedServerId() === server.id ? "#4488ff" : "#555566"
+      zone.on("pointerout", () => {
+        btnTexts[i].setColor(
+          getSelectedServerId() === server.id ? "#4488ff" : "#667788"
         );
       });
-      serverButtons.push(btn);
     }
 
+    drawBtns();
   }
 }

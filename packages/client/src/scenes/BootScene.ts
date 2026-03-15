@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { generateItemTextures } from "../ui/ItemTextures";
+import { generateEntityTextures } from "../ui/EntityTextures";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -90,6 +91,10 @@ export class BootScene extends Phaser.Scene {
       this.load.image(`deco-flowers-${i}`, `assets/sprites/decorations/scenery_flowers_${i}.png`);
     }
 
+    // Interactive decoration sprites (12x12 pixel art)
+    this.load.image("deco-chest", "assets/sprites/decorations/chest.png");
+    this.load.image("deco-crafting-table", "assets/sprites/decorations/crafting_table.png");
+
     // Item sprites (12x12 pixel art) — one sprite per subtype, used for all tiers
     this.load.image("item-sword", "assets/sprites/items/sword.png");
     this.load.image("item-bow", "assets/sprites/items/bow.png");
@@ -119,6 +124,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("portal-the-wild", "assets/sprites/decorations/portals/the_wild_portal.png");
     this.load.image("portal-infernal-pit", "assets/sprites/decorations/portals/infernal_pit_portal.png");
     this.load.image("portal-void-sanctum", "assets/sprites/decorations/portals/void_sanctum_portal.png");
+    this.load.image("portal-vault", "assets/sprites/decorations/portals/vault_portal.png");
 
     // Loot bag sprites
     this.load.image("bag-green", "assets/sprites/items/bags/green_bag.png");
@@ -129,6 +135,16 @@ export class BootScene extends Phaser.Scene {
 
   create() {
     generateItemTextures(this);
-    this.scene.start("MenuScene");
+    generateEntityTextures(this);
+
+    // Explicitly load the Google Font before showing the menu
+    document.fonts.load('16px "Press Start 2P"').then(() => {
+      const loadingScreen = document.getElementById("loading-screen");
+      if (loadingScreen) {
+        loadingScreen.classList.add("fade-out");
+        loadingScreen.addEventListener("transitionend", () => loadingScreen.remove());
+      }
+      this.scene.start("MenuScene");
+    });
   }
 }

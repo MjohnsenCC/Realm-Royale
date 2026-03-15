@@ -22,6 +22,10 @@ export class MenuScene extends Phaser.Scene {
   private particles: Particle[] = [];
   private floatingShapes: FloatingShape[] = [];
   private elapsed = 0;
+  private resizeHandler?: (gameSize: Phaser.Structs.Size) => void;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private resizeTimer?: ReturnType<typeof setTimeout>;
 
   constructor() {
     super({ key: "MenuScene" });
@@ -36,6 +40,22 @@ export class MenuScene extends Phaser.Scene {
       this.scene.start("CharacterSelectScene");
       return;
     }
+
+    // Handle window resize — debounced, only on real dimension changes
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.resizeHandler = (gameSize: Phaser.Structs.Size) => {
+      const newW = gameSize.width;
+      const newH = gameSize.height;
+      if (Math.abs(newW - this.lastWidth) < 2 && Math.abs(newH - this.lastHeight) < 2) return;
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        this.scale.off("resize", this.resizeHandler!);
+        this.scene.restart();
+      }, 200);
+    };
+    this.scale.on("resize", this.resizeHandler);
+    this.events.once("shutdown", this.shutdown, this);
 
     // ─── 1. GRID BACKGROUND ───
     const grid = this.add.graphics().setDepth(0);
@@ -136,7 +156,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Glow text (behind, larger, pulsing)
     const titleGlow = this.add
-      .text(cx, titleY, "REALM ROYALE", {
+      .text(cx, titleY, "PIXEL REALM", {
         fontSize: "32px",
         color: "#4488ff",
         fontFamily: "'Press Start 2P', monospace",
@@ -159,7 +179,7 @@ export class MenuScene extends Phaser.Scene {
 
     // Main title with color shimmer
     const titleMain = this.add
-      .text(cx, titleY, "REALM ROYALE", {
+      .text(cx, titleY, "PIXEL REALM", {
         fontSize: "28px",
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -334,31 +354,7 @@ export class MenuScene extends Phaser.Scene {
       });
     });
 
-    // ─── 9. CONTROLS HINT & VERSION ───
-    this.add
-      .text(
-        cx,
-        height - 25,
-        "WASD move  |  Mouse aim  |  Click shoot  |  Q return to nexus",
-        {
-          fontSize: "7px",
-          color: "#334455",
-          fontFamily: "'Press Start 2P', monospace",
-        }
-      )
-      .setOrigin(0.5)
-      .setDepth(5);
-
-    this.add
-      .text(width - 10, height - 10, "v0.0.28", {
-        fontSize: "6px",
-        color: "#333344",
-        fontFamily: "'Press Start 2P', monospace",
-      })
-      .setOrigin(1, 1)
-      .setDepth(5);
-
-    // ─── 10. FADE IN ───
+    // ─── 9. FADE IN ───
     const fadeIn = this.add.graphics().setDepth(100);
     fadeIn.fillStyle(0x000000, 1);
     fadeIn.fillRect(0, 0, width, height);
@@ -425,5 +421,9 @@ export class MenuScene extends Phaser.Scene {
   shutdown(): void {
     this.particles = [];
     this.floatingShapes = [];
+    if (this.resizeHandler) {
+      this.scale.off("resize", this.resizeHandler);
+    }
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
   }
 }

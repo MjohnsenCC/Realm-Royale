@@ -3,11 +3,8 @@ import { NetworkManager } from "../network/NetworkManager";
 import {
   CharacterClass,
   CLASS_NAMES,
-  CLASS_EQUIPMENT_MAP,
-  ItemCategory,
-  getSubtypeName,
 } from "@rotmg-lite/shared";
-import { getItemSpriteKey, getItemOutlinedSize } from "../ui/ItemTextures";
+import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import {
   SERVERS,
   getSelectedServerId,
@@ -28,33 +25,88 @@ export class GuestSetupScene extends Phaser.Scene {
     super({ key: "GuestSetupScene" });
   }
 
+  private resizeHandler?: (gameSize: Phaser.Structs.Size) => void;
+  private lastWidth = 0;
+  private lastHeight = 0;
+  private resizeTimer?: ReturnType<typeof setTimeout>;
+
   create() {
     const { width, height } = this.scale;
     const cx = width / 2;
+
+    // Handle window resize — debounced, only on real dimension changes
+    this.lastWidth = width;
+    this.lastHeight = height;
+    this.resizeHandler = (gameSize: Phaser.Structs.Size) => {
+      const newW = gameSize.width;
+      const newH = gameSize.height;
+      if (Math.abs(newW - this.lastWidth) < 2 && Math.abs(newH - this.lastHeight) < 2) return;
+      if (this.resizeTimer) clearTimeout(this.resizeTimer);
+      this.resizeTimer = setTimeout(() => {
+        this.scale.off("resize", this.resizeHandler!);
+        this.scene.restart();
+      }, 200);
+    };
+    this.scale.on("resize", this.resizeHandler);
+    this.events.once("shutdown", this.shutdown, this);
 
     // ─── BACKGROUND ───
     this.cameras.main.setBackgroundColor("#1a1a2e");
     this.drawBackground(width, height);
 
-    // ─── BACK BUTTON ───
+    // ─── BACK BUTTON (with pill background) ───
+    const backBtnW = 110;
+    const backBtnH = 32;
+    const backBtnX = 16;
+    const backBtnY = 16;
+
+    const backBtnGfx = this.add.graphics().setDepth(5);
+    backBtnGfx.fillStyle(0x222244, 0.6);
+    backBtnGfx.fillRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+    backBtnGfx.lineStyle(1, 0x445566, 0.5);
+    backBtnGfx.strokeRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+
     const backBtn = this.add
-      .text(20, 20, "< BACK", {
-        fontSize: "8px",
-        color: "#667788",
+      .text(backBtnX + backBtnW / 2, backBtnY + backBtnH / 2, "< BACK", {
+        fontSize: "11px",
+        color: "#8899aa",
         fontFamily: "'Press Start 2P', monospace",
       })
-      .setDepth(5)
+      .setOrigin(0.5)
+      .setDepth(6);
+
+    const backBtnZone = this.add
+      .zone(backBtnX + backBtnW / 2, backBtnY + backBtnH / 2, backBtnW, backBtnH)
+      .setDepth(7)
       .setInteractive({ useHandCursor: true });
 
-    backBtn.on("pointerover", () => backBtn.setColor("#aaaacc"));
-    backBtn.on("pointerout", () => backBtn.setColor("#667788"));
-    backBtn.on("pointerdown", () => {
+    backBtnZone.on("pointerover", () => {
+      backBtnGfx.clear();
+      backBtnGfx.fillStyle(0x333366, 0.7);
+      backBtnGfx.fillRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+      backBtnGfx.lineStyle(1, 0x5566aa, 0.6);
+      backBtnGfx.strokeRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+      backBtn.setColor("#aabbcc");
+    });
+    backBtnZone.on("pointerout", () => {
+      backBtnGfx.clear();
+      backBtnGfx.fillStyle(0x222244, 0.6);
+      backBtnGfx.fillRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+      backBtnGfx.lineStyle(1, 0x445566, 0.5);
+      backBtnGfx.strokeRoundedRect(backBtnX, backBtnY, backBtnW, backBtnH, 6);
+      backBtn.setColor("#8899aa");
+    });
+    backBtnZone.on("pointerdown", () => {
       this.scene.start("MenuScene");
     });
 
+    // ─── LAYOUT: vertically center content block ───
+    const contentH = 410;
+    const startY = Math.max(16, (height - contentH) / 2);
+
     // ─── TITLE ───
     this.add
-      .text(cx, height * 0.08, "PLAY AS GUEST", {
+      .text(cx, startY, "PLAY AS GUEST", {
         fontSize: "16px",
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -65,7 +117,7 @@ export class GuestSetupScene extends Phaser.Scene {
 
     // ─── CLASS SELECTION ───
     this.add
-      .text(cx, height * 0.16, "SELECT CLASS", {
+      .text(cx, startY + 48, "SELECT CLASS", {
         fontSize: "7px",
         color: "#667788",
         fontFamily: "'Press Start 2P', monospace",
@@ -82,23 +134,22 @@ export class GuestSetupScene extends Phaser.Scene {
     ];
 
     const cardW = 140;
-    const cardH = 120;
+    const cardH = 100;
     const cardGap = 16;
     const totalCardsW = classOptions.length * cardW + (classOptions.length - 1) * cardGap;
     const cardsStartX = cx - totalCardsW / 2;
-    const cardTopY = height * 0.19;
+    const cardTopY = startY + 66;
 
     const cardGraphics = this.add.graphics().setDepth(5);
 
-    // Create weapon sprite Images for each class card
-    const weaponImages: Phaser.GameObjects.Image[] = [];
+    // Create player sprite images for each class card
+    const playerImages: Phaser.GameObjects.Image[] = [];
     for (let i = 0; i < classOptions.length; i++) {
-      const equip = CLASS_EQUIPMENT_MAP[classOptions[i].id];
-      const spriteKey = getItemSpriteKey(ItemCategory.Weapon, equip.weapon);
-      if (spriteKey) {
-        const img = this.add.image(0, 0, spriteKey).setDepth(6).setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
-        weaponImages.push(img);
-      }
+      const spriteKey = getPlayerSpriteKey(classOptions[i].id);
+      const img = this.add.image(0, 0, spriteKey)
+        .setDepth(6)
+        .setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+      playerImages.push(img);
     }
 
     const drawCards = () => {
@@ -113,54 +164,32 @@ export class GuestSetupScene extends Phaser.Scene {
         cardGraphics.lineStyle(isSelected ? 2 : 1, isSelected ? 0x4488ff : 0x333355, isSelected ? 0.8 : 0.4);
         cardGraphics.strokeRoundedRect(cardX, cardTopY, cardW, cardH, 6);
 
-        // Position weapon sprite
-        if (weaponImages[i]) {
-          weaponImages[i].setPosition(cardX + cardW / 2, cardTopY + 48);
+        // Position player sprite
+        if (playerImages[i]) {
+          playerImages[i].setPosition(cardX + cardW / 2, cardTopY + 42);
           if (isSelected) {
-            weaponImages[i].clearTint().setAlpha(1);
+            playerImages[i].clearTint().setAlpha(1);
           } else {
-            weaponImages[i].setTint(0x555577).setAlpha(0.7);
+            playerImages[i].setTint(0x555577).setAlpha(0.7);
           }
         }
       }
     };
 
-    // Text elements for each card
+    // Text elements for each card (just class name, no equipment details)
     const cardTextElements: Phaser.GameObjects.Text[] = [];
     for (let i = 0; i < classOptions.length; i++) {
       const opt = classOptions[i];
       const cardX = cardsStartX + i * (cardW + cardGap);
       const cardCx = cardX + cardW / 2;
-      const equip = CLASS_EQUIPMENT_MAP[opt.id];
       const isSelected = opt.id === selectedClass;
 
       const nameText = this.add
-        .text(cardCx, cardTopY + 16, opt.name, {
+        .text(cardCx, cardTopY + 82, opt.name, {
           fontSize: "8px",
           color: isSelected ? "#ffffff" : "#666688",
           fontFamily: "'Press Start 2P', monospace",
           fontStyle: "bold",
-        })
-        .setOrigin(0.5)
-        .setDepth(6);
-
-      const weaponName = getSubtypeName(ItemCategory.Weapon, equip.weapon);
-      const abilityName = getSubtypeName(ItemCategory.Ability, equip.ability);
-      const info1Text = this.add
-        .text(cardCx, cardTopY + 78, `${weaponName} · ${abilityName}`, {
-          fontSize: "6px",
-          color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "'Press Start 2P', monospace",
-        })
-        .setOrigin(0.5)
-        .setDepth(6);
-
-      const armorName = getSubtypeName(ItemCategory.Armor, equip.armor);
-      const info2Text = this.add
-        .text(cardCx, cardTopY + 94, armorName, {
-          fontSize: "6px",
-          color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(6);
@@ -175,24 +204,21 @@ export class GuestSetupScene extends Phaser.Scene {
         updateClassCards();
       });
 
-      cardTextElements.push(nameText, info1Text, info2Text);
+      cardTextElements.push(nameText);
     }
 
     const updateClassCards = () => {
       drawCards();
       for (let i = 0; i < classOptions.length; i++) {
         const isSelected = classOptions[i].id === selectedClass;
-        const base = i * 3;
-        cardTextElements[base].setColor(isSelected ? "#ffffff" : "#666688");
-        cardTextElements[base + 1].setColor(isSelected ? "#8888aa" : "#555566");
-        cardTextElements[base + 2].setColor(isSelected ? "#8888aa" : "#555566");
+        cardTextElements[i].setColor(isSelected ? "#ffffff" : "#666688");
       }
     };
 
     drawCards();
 
     // ─── NAME INPUT ───
-    const nameY = cardTopY + cardH + 30;
+    const nameY = cardTopY + cardH + 24;
 
     this.add
       .text(cx, nameY, "PLAYER NAME", {
@@ -208,8 +234,8 @@ export class GuestSetupScene extends Phaser.Scene {
         style="
           width: 240px;
           padding: 10px 16px;
-          font-size: 18px;
-          font-family: monospace;
+          font-size: 14px;
+          font-family: 'Press Start 2P', monospace;
           background: rgba(22, 33, 62, 0.9);
           border: 1px solid rgba(68, 136, 255, 0.5);
           border-radius: 6px;
@@ -230,6 +256,8 @@ export class GuestSetupScene extends Phaser.Scene {
 
     const htmlInput = inputElement.getChildByID("nameInput") as HTMLInputElement;
     if (htmlInput) {
+      htmlInput.addEventListener("keydown", (e) => e.stopPropagation());
+      htmlInput.addEventListener("keyup", (e) => e.stopPropagation());
       htmlInput.addEventListener("focus", () => {
         if (this.input.keyboard) this.input.keyboard.enabled = false;
       });
@@ -238,60 +266,94 @@ export class GuestSetupScene extends Phaser.Scene {
       });
     }
 
-    // ─── SERVER SELECTOR (compact) ───
-    const serverY = nameY + 72;
+    // ─── SERVER SELECTOR (pill buttons) ───
+    const serverY = nameY + 64;
 
     this.add
       .text(cx, serverY, "SERVER", {
-        fontSize: "6px",
-        color: "#667788",
+        fontSize: "8px",
+        color: "#8899aa",
         fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
 
-    const serverBtnY = serverY + 16;
+    const serverBtnY = serverY + 18;
     const currentServerId = getSelectedServerId();
-    const serverButtons: Phaser.GameObjects.Text[] = [];
-    const totalServerBtnWidth = 140;
-    const serverBtnSpacing = totalServerBtnWidth / SERVERS.length;
-    const serverStartX = cx - totalServerBtnWidth / 2 + serverBtnSpacing / 2;
+    const serverBtnW = 120;
+    const serverBtnH = 32;
+    const serverBtnGap = 12;
+    const totalServerW = SERVERS.length * serverBtnW + (SERVERS.length - 1) * serverBtnGap;
+    const serverStartX = cx - totalServerW / 2;
+
+    const serverBtnGraphics = this.add.graphics().setDepth(5);
+    const serverBtnTexts: Phaser.GameObjects.Text[] = [];
+    const serverBtnZones: Phaser.GameObjects.Zone[] = [];
+
+    const drawServerButtons = () => {
+      serverBtnGraphics.clear();
+      const selId = getSelectedServerId();
+      for (let i = 0; i < SERVERS.length; i++) {
+        const btnX = serverStartX + i * (serverBtnW + serverBtnGap);
+        const isSel = SERVERS[i].id === selId;
+
+        serverBtnGraphics.fillStyle(isSel ? 0x222255 : 0x1a1a33, 1);
+        serverBtnGraphics.fillRoundedRect(btnX, serverBtnY, serverBtnW, serverBtnH, 6);
+        serverBtnGraphics.lineStyle(isSel ? 2 : 1, isSel ? 0x4488ff : 0x333355, isSel ? 0.8 : 0.4);
+        serverBtnGraphics.strokeRoundedRect(btnX, serverBtnY, serverBtnW, serverBtnH, 6);
+
+        if (serverBtnTexts[i]) {
+          serverBtnTexts[i].setColor(isSel ? "#4488ff" : "#667788");
+          serverBtnTexts[i].setFontStyle(isSel ? "bold" : "");
+        }
+      }
+    };
 
     for (let i = 0; i < SERVERS.length; i++) {
       const server = SERVERS[i];
-      const btn = this.add
-        .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "8px",
-          color: server.id === currentServerId ? "#4488ff" : "#555566",
+      const btnX = serverStartX + i * (serverBtnW + serverBtnGap);
+      const btnCx = btnX + serverBtnW / 2;
+      const btnCy = serverBtnY + serverBtnH / 2;
+
+      const txt = this.add
+        .text(btnCx, btnCy, server.name, {
+          fontSize: "9px",
+          color: server.id === currentServerId ? "#4488ff" : "#667788",
           fontFamily: "'Press Start 2P', monospace",
+          fontStyle: server.id === currentServerId ? "bold" : "",
         })
         .setOrigin(0.5)
-        .setDepth(6)
+        .setDepth(6);
+      serverBtnTexts.push(txt);
+
+      const zone = this.add
+        .zone(btnCx, btnCy, serverBtnW, serverBtnH)
+        .setDepth(7)
         .setInteractive({ useHandCursor: true });
 
-      btn.on("pointerdown", () => {
+      zone.on("pointerdown", () => {
         setSelectedServerId(server.id);
-        for (let j = 0; j < serverButtons.length; j++) {
-          serverButtons[j].setColor(
-            SERVERS[j].id === server.id ? "#4488ff" : "#555566"
-          );
+        drawServerButtons();
+      });
+      zone.on("pointerover", () => {
+        if (getSelectedServerId() !== server.id) {
+          serverBtnTexts[i].setColor("#8888aa");
         }
       });
-      btn.on("pointerover", () => {
-        if (getSelectedServerId() !== server.id) btn.setColor("#8888aa");
-      });
-      btn.on("pointerout", () => {
-        btn.setColor(
-          getSelectedServerId() === server.id ? "#4488ff" : "#555566"
+      zone.on("pointerout", () => {
+        serverBtnTexts[i].setColor(
+          getSelectedServerId() === server.id ? "#4488ff" : "#667788"
         );
       });
-      serverButtons.push(btn);
+      serverBtnZones.push(zone);
     }
+
+    drawServerButtons();
 
     // ─── PLAY BUTTON ───
     const playBtnW = 220;
     const playBtnH = 52;
-    this.playBtnY = serverBtnY + 35;
+    this.playBtnY = serverBtnY + serverBtnH + 20;
 
     this.playBtnGlowGraphics = this.add.graphics().setDepth(7);
     this.playBtnGraphics = this.add.graphics().setDepth(8);
@@ -368,30 +430,6 @@ export class GuestSetupScene extends Phaser.Scene {
     // Draw initial play button state
     this.drawPlayButton();
 
-    // ─── CONTROLS HINT & VERSION ───
-    this.add
-      .text(
-        cx,
-        height - 25,
-        "WASD move  |  Mouse aim  |  Click shoot  |  Q return to nexus",
-        {
-          fontSize: "7px",
-          color: "#334455",
-          fontFamily: "'Press Start 2P', monospace",
-        }
-      )
-      .setOrigin(0.5)
-      .setDepth(5);
-
-    this.add
-      .text(width - 10, height - 10, "v0.0.28", {
-        fontSize: "6px",
-        color: "#333344",
-        fontFamily: "'Press Start 2P', monospace",
-      })
-      .setOrigin(1, 1)
-      .setDepth(5);
-
     // ─── FADE IN ───
     const fadeIn = this.add.graphics().setDepth(100);
     fadeIn.fillStyle(0x000000, 1);
@@ -403,6 +441,13 @@ export class GuestSetupScene extends Phaser.Scene {
       ease: "Power2",
       onComplete: () => fadeIn.destroy(),
     });
+  }
+
+  shutdown() {
+    if (this.resizeHandler) {
+      this.scale.off("resize", this.resizeHandler);
+    }
+    if (this.resizeTimer) clearTimeout(this.resizeTimer);
   }
 
   update(_time: number, delta: number): void {
