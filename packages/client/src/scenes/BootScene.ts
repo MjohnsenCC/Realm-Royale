@@ -18,6 +18,10 @@ export class BootScene extends Phaser.Scene {
       this.load.image(`sprite-enemy-${i}`, `assets/sprites/enemies/enemy_${i}.png`);
     }
 
+    // Boss sprites (24x24 pixel art)
+    this.load.image("sprite-boss-infernal", "assets/sprites/enemies/infernal_pit_boss.png");
+    this.load.image("sprite-boss-void", "assets/sprites/enemies/void_sanctum_boss.png");
+
     // Player projectile sprites (8x8 pixel art, facing RIGHT — rotated at runtime)
     this.load.image("proj-archer-attack", "assets/sprites/projectiles/archer_attack.png");
     this.load.image("proj-archer-ability", "assets/sprites/projectiles/archer_ability.png");

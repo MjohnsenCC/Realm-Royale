@@ -1,11 +1,21 @@
 import Phaser from "phaser";
-import { CharacterClass, PIXEL_SCALE } from "@rotmg-lite/shared";
+import { CharacterClass, EnemyType, PIXEL_SCALE } from "@rotmg-lite/shared";
 
 const ENEMY_SPRITE_COUNT = 6;
 const SPRITE_SOURCE_SIZE = 12;
+const BOSS_SPRITE_SOURCE_SIZE = 24;
 
 /** Display size of outlined sprites (upscaled + 1px outline on each side). */
 export const OUTLINED_DISPLAY_SIZE = SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
+
+/** Display size of boss outlined sprites (24x24 source). */
+export const BOSS_OUTLINED_DISPLAY_SIZE = BOSS_SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
+
+/** Boss enemy type → sprite key mapping. */
+const BOSS_SPRITE_KEYS: Record<number, string> = {
+  [EnemyType.MoltenWyrm]: "sprite-boss-infernal",
+  [EnemyType.TheArchitect]: "sprite-boss-void",
+};
 
 /** Maps a CharacterClass id to its loaded sprite texture key. */
 const CLASS_SPRITE_KEYS: Record<number, string> = {
@@ -21,7 +31,14 @@ export function getPlayerSpriteKey(characterClass: number): string {
 
 /** Returns the sprite texture key for a given enemy type number. */
 export function getEnemySpriteKey(enemyType: number): string {
+  if (enemyType in BOSS_SPRITE_KEYS) return BOSS_SPRITE_KEYS[enemyType];
   return `sprite-enemy-${(enemyType % ENEMY_SPRITE_COUNT) + 1}`;
+}
+
+/** Returns the outlined display size for a given enemy type. */
+export function getEnemyDisplaySize(enemyType: number): number {
+  if (enemyType in BOSS_SPRITE_KEYS) return BOSS_OUTLINED_DISPLAY_SIZE;
+  return OUTLINED_DISPLAY_SIZE;
 }
 
 /**
@@ -44,6 +61,11 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
   }
   for (let i = 1; i <= ENEMY_SPRITE_COUNT; i++) {
     upscaleAndOutline(scene, `sprite-enemy-${i}`);
+  }
+
+  // Boss sprites
+  for (const key of Object.values(BOSS_SPRITE_KEYS)) {
+    upscaleAndOutline(scene, key);
   }
 
   // Portal sprites

@@ -1,7 +1,7 @@
 import Phaser from "phaser";
 import { ENEMY_DEFS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
-import { getEnemySpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
+import { getEnemySpriteKey, getEnemyDisplaySize } from "../ui/EntityTextures";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -28,6 +28,7 @@ export class EnemySprite {
   private lastHp: number;
   private lastDrawnHp: number = -1;
   private lastDrawnMaxHp: number = -1;
+  private displaySize: number;
   private pendingPredictedDamage: number = 0;
   private pendingPredictedDamageAge: number = 0;
 
@@ -53,13 +54,14 @@ export class EnemySprite {
     this.snapshots = existingBuffer ?? new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    // Body — use loaded 12×12 sprite (scaled with PIXEL_SCALE for uniform pixel size)
+    // Body — use loaded sprite (scaled with PIXEL_SCALE for uniform pixel size)
     const textureKey = getEnemySpriteKey(enemyType);
+    this.displaySize = getEnemyDisplaySize(enemyType);
     this.bodyImage = scene.add.image(x, y, textureKey);
-    this.bodyImage.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+    this.bodyImage.setDisplaySize(this.displaySize, this.displaySize);
 
     // HP bar — use shared pixel texture (tinted + scaled)
-    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    const yOffset = this.displaySize / 2 + 1;
     this.hpBarBorder = scene.add.image(x - this.barWidth / 2 - 1, y + yOffset - 1, "pixel")
       .setOrigin(0, 0)
       .setDisplaySize(this.barWidth + 2, this.barHeight + 2)
@@ -166,7 +168,7 @@ export class EnemySprite {
     }
 
     this.bodyImage.setPosition(this.x, this.y);
-    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    const yOffset = this.displaySize / 2 + 1;
     this.hpBarBorder.setPosition(this.x - this.barWidth / 2 - 1, this.y + yOffset - 1);
     this.hpBarBg.setPosition(this.x - this.barWidth / 2, this.y + yOffset);
     this.hpBarFill.setPosition(this.x - this.barWidth / 2, this.y + yOffset);

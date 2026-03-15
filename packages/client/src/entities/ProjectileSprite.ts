@@ -60,8 +60,9 @@ export class ProjectileSprite {
     this.bodyImage.setDisplaySize(spriteCanvas * PIXEL_SCALE, spriteCanvas * PIXEL_SCALE);
     this.bodyImage.setRotation(angle);
 
-    // All projectiles render above trees (trunk depth 5, canopy depth 10)
-    this.bodyImage.setDepth(11);
+    // Player projectiles render above trees (trunk depth 5, canopy depth 10);
+    // enemy projectiles render under enemy sprites (depth 0)
+    this.bodyImage.setDepth(ownerType === EntityType.Enemy ? -0.1 : 11);
   }
 
   updateFromServer(x: number, y: number): void {
