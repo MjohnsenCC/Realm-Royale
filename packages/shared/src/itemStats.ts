@@ -243,7 +243,8 @@ export const ABILITY_TEMPLATES: Record<number, AbilityTemplate> = {
     baseManaCost: 45,
     baseCooldown: 1200,
     piercing: true,
-    expandingAoe: true,
+    aoeRing: true,
+    projectileCount: 6,
   },
 };
 

@@ -21,6 +21,7 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 
 const ORB_KEYS = [
   CraftingOrbType.Blank,
@@ -49,6 +50,7 @@ export class CraftingUI {
   private titleText: Phaser.GameObjects.Text;
   // Central item slot
   private itemSlotGraphics: Phaser.GameObjects.Graphics;
+  private itemImage: Phaser.GameObjects.Image | null = null;
   private placeholderText: Phaser.GameObjects.Text;
   private itemNameText: Phaser.GameObjects.Text;
   private tierText: Phaser.GameObjects.Text;
@@ -64,6 +66,7 @@ export class CraftingUI {
 
   // Orb slots (standalone for proper input handling)
   private orbSlotGraphics: Phaser.GameObjects.Graphics;
+  private orbImages: Phaser.GameObjects.Image[] = [];
   private orbZones: Phaser.GameObjects.Zone[] = [];
   private orbCountTexts: Phaser.GameObjects.Text[] = [];
 
@@ -115,13 +118,13 @@ export class CraftingUI {
 
     this.computeLayout();
 
-    const titleFontSize = `${Math.round(13 * S)}px`;
-    const nameFontSize = `${Math.round(12 * S)}px`;
-    const tierFontSize = `${Math.round(10 * S)}px`;
-    const statsFontSize = `${Math.round(10 * S)}px`;
-    const tieredStatFontSize = `${Math.round(9 * S)}px`;
-    const dividerFontSize = `${Math.round(9 * S)}px`;
-    const smallFontSize = `${Math.round(8 * S)}px`;
+    const titleFontSize = `${Math.round(9 * S)}px`;
+    const nameFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+    const statsFontSize = `${Math.round(7 * S)}px`;
+    const tieredStatFontSize = `${Math.round(6 * S)}px`;
+    const dividerFontSize = `${Math.round(6 * S)}px`;
+    const smallFontSize = `${Math.round(6 * S)}px`;
 
     // --- Panel container (non-interactive visuals only) ---
     this.panelContainer = scene.add.container(0, 0).setScrollFactor(0).setDepth(250).setVisible(false);
@@ -131,6 +134,9 @@ export class CraftingUI {
 
     this.itemSlotGraphics = scene.add.graphics();
     this.panelContainer.add(this.itemSlotGraphics);
+
+    this.itemImage = scene.add.image(0, 0, "item-sword").setVisible(false);
+    this.panelContainer.add(this.itemImage);
 
     this.separatorGraphics = scene.add.graphics();
     this.panelContainer.add(this.separatorGraphics);
@@ -143,8 +149,10 @@ export class CraftingUI {
       .text(this.px + this.statsColumnWidth / 2, this.py + pad, "Crafting", {
         fontSize: titleFontSize,
         color: "#aaaaff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -154,32 +162,36 @@ export class CraftingUI {
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText = scene.add
       .text(this.px + this.statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
-        fontSize: `${Math.round(9 * S)}px`,
+        fontSize: `${Math.round(6 * S)}px`,
         color: "#666688",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "italic",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(251);
 
     // --- Central item slot ---
-    this.itemSlotSize = Math.round(44 * S);
+    this.itemSlotSize = Math.round(43 * S);
     this.itemSlotCx = this.px + Math.round(this.statsColumnWidth / 2);
-    this.itemSlotCy = placeholderY + Math.round(14 * S) + Math.round(this.itemSlotSize / 2);
+    this.itemSlotCy = placeholderY + Math.round(13 * S) + Math.round(this.itemSlotSize / 2);
 
     const cx = this.px + this.statsColumnWidth / 2;
     const wrapWidth = this.statsColumnWidth - pad * 2;
 
     // Item name (below slot)
-    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(6 * S);
+    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
     this.itemNameText = scene.add
       .text(cx, nameY, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -187,13 +199,15 @@ export class CraftingUI {
       .setWordWrapWidth(wrapWidth);
 
     // Tier label (below name)
-    const tierY = nameY + Math.round(16 * S);
+    const tierY = nameY + Math.round(17 * S);
     this.tierText = scene.add
       .text(cx, tierY, "", {
         fontSize: tierFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -204,8 +218,10 @@ export class CraftingUI {
       .text(cx, 0, "", {
         fontSize: dividerFontSize,
         color: "#555566",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -216,9 +232,11 @@ export class CraftingUI {
       .text(cx, 0, "", {
         fontSize: tieredStatFontSize,
         color: "#ffffff",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -230,8 +248,10 @@ export class CraftingUI {
       .text(cx, 0, "", {
         fontSize: dividerFontSize,
         color: "#555566",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -242,9 +262,11 @@ export class CraftingUI {
       .text(cx, 0, "", {
         fontSize: tieredStatFontSize,
         color: "#4488ff",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -256,9 +278,11 @@ export class CraftingUI {
       .text(cx, 0, "", {
         fontSize: tieredStatFontSize,
         color: "#aaffaa",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -268,25 +292,29 @@ export class CraftingUI {
     // Shift hint
     this.shiftHintText = scene.add
       .text(cx, 0, "[SHIFT] for more info", {
-        fontSize: `${Math.round(9 * S)}px`,
+        fontSize: `${Math.round(6 * S)}px`,
         color: "#888888",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "italic",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(251);
 
     // Pool of tier label + stat line pairs for detailed stat display
-    const tierLabelFontSize = `${Math.round(8 * S)}px`;
+    const tierLabelFontSize = `${Math.round(6 * S)}px`;
     for (let i = 0; i < 8; i++) {
       const tierLabel = scene.add
         .text(cx, 0, "", {
           fontSize: tierLabelFontSize,
           color: "#888888",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5, 0)
         .setScrollFactor(0)
@@ -297,8 +325,10 @@ export class CraftingUI {
         .text(cx, 0, "", {
           fontSize: tieredStatFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5, 0)
         .setScrollFactor(0)
@@ -317,11 +347,13 @@ export class CraftingUI {
 
     this.orbInfoNameText = scene.add
       .text(0, 0, "", {
-        fontSize: `${Math.round(11 * S)}px`,
+        fontSize: `${Math.round(8 * S)}px`,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -331,11 +363,13 @@ export class CraftingUI {
 
     this.orbInfoDescText = scene.add
       .text(0, 0, "", {
-        fontSize: `${Math.round(9 * S)}px`,
+        fontSize: `${Math.round(6 * S)}px`,
         color: "#888899",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "italic",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -344,10 +378,10 @@ export class CraftingUI {
       .setWordWrapWidth(orbInfoWidth - orbInfoPad * 2);
 
     // --- Orb slots (vertical strip on right side of panel) ---
-    this.orbSlotW = Math.round(56 * S);
+    this.orbSlotW = Math.round(57 * S);
     this.orbSlotH = Math.round(32 * S);
-    this.orbGapX = Math.round(4 * S);
-    this.orbGapY = Math.round(4 * S);
+    this.orbGapX = Math.round(8 * S);
+    this.orbGapY = Math.round(8 * S);
 
     // Position in the right column, vertically centered
     const orbRows = Math.ceil(ORB_KEYS.length / ORB_COLS);
@@ -377,12 +411,26 @@ export class CraftingUI {
 
       this.orbZones.push(zone);
 
+      // Orb sprite image (centered in slot)
+      const orbSpriteKey = getItemSpriteKey(ItemCategory.CraftingOrb, orbType);
+      if (orbSpriteKey) {
+        const orbImg = scene.add
+          .image(sx + this.orbSlotW / 2, sy + this.orbSlotH / 2, orbSpriteKey)
+          .setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize())
+          .setScrollFactor(0)
+          .setDepth(251);
+        this.panelContainer.add(orbImg);
+        this.orbImages.push(orbImg);
+      }
+
       // Count text (bottom-right of slot)
       const countText = scene.add
-        .text(sx + this.orbSlotW - Math.round(2 * S), sy + this.orbSlotH - Math.round(2 * S), "x0", {
+        .text(sx + this.orbSlotW - Math.round(8 * S), sy + this.orbSlotH - Math.round(8 * S), "x0", {
           fontSize: smallFontSize,
           color: "#888888",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
@@ -403,7 +451,7 @@ export class CraftingUI {
 
     // Left panel: 30% width
     const totalPanelW = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
-    this.orbColumnWidth = Math.round(76 * S);
+    this.orbColumnWidth = Math.round(77 * S);
     this.columnGap = Math.round(8 * S);
     this.statsColumnWidth = totalPanelW - this.columnGap - this.orbColumnWidth;
     this.panelWidth = totalPanelW;
@@ -414,16 +462,16 @@ export class CraftingUI {
     this.py = margin;
 
     // Item slot
-    this.itemSlotSize = Math.round(44 * S);
+    this.itemSlotSize = Math.round(43 * S);
     this.itemSlotCx = this.px + Math.round(this.statsColumnWidth / 2);
     const placeholderY = this.py + pad + Math.round(22 * S);
-    this.itemSlotCy = placeholderY + Math.round(14 * S) + Math.round(this.itemSlotSize / 2);
+    this.itemSlotCy = placeholderY + Math.round(13 * S) + Math.round(this.itemSlotSize / 2);
 
     // Orb slot sizes
-    this.orbSlotW = Math.round(56 * S);
+    this.orbSlotW = Math.round(57 * S);
     this.orbSlotH = Math.round(32 * S);
-    this.orbGapX = Math.round(4 * S);
-    this.orbGapY = Math.round(4 * S);
+    this.orbGapX = Math.round(8 * S);
+    this.orbGapY = Math.round(8 * S);
 
     const orbRows = Math.ceil(ORB_KEYS.length / ORB_COLS);
     const totalGridH = orbRows * this.orbSlotH + (orbRows - 1) * this.orbGapY;
@@ -442,24 +490,24 @@ export class CraftingUI {
 
     // Reposition title
     this.titleText.setPosition(this.px + this.statsColumnWidth / 2, this.py + pad);
-    this.titleText.setFontSize(`${Math.round(13 * S)}px`);
+    this.titleText.setFontSize(`${Math.round(9 * S)}px`);
 
     // Reposition placeholder
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText.setPosition(this.px + this.statsColumnWidth / 2, placeholderY);
-    this.placeholderText.setFontSize(`${Math.round(9 * S)}px`);
+    this.placeholderText.setFontSize(`${Math.round(6 * S)}px`);
 
     // Update text positions
     const cx = this.px + this.statsColumnWidth / 2;
     const wrapWidth = this.statsColumnWidth - pad * 2;
-    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(6 * S);
+    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
     this.itemNameText.setPosition(cx, nameY);
-    this.itemNameText.setFontSize(`${Math.round(12 * S)}px`);
+    this.itemNameText.setFontSize(`${Math.round(8 * S)}px`);
     this.itemNameText.setWordWrapWidth(wrapWidth);
 
-    const tierY = nameY + Math.round(16 * S);
+    const tierY = nameY + Math.round(17 * S);
     this.tierText.setPosition(cx, tierY);
-    this.tierText.setFontSize(`${Math.round(10 * S)}px`);
+    this.tierText.setFontSize(`${Math.round(7 * S)}px`);
 
     this.dividerAboveLockedText.setX(cx);
     this.lockedStatsText.setX(cx);
@@ -471,8 +519,8 @@ export class CraftingUI {
     this.hiddenStatsText.setWordWrapWidth(wrapWidth);
     this.shiftHintText.setX(cx);
 
-    const tieredStatFontSize = `${Math.round(9 * S)}px`;
-    const dividerFontSize = `${Math.round(9 * S)}px`;
+    const tieredStatFontSize = `${Math.round(6 * S)}px`;
+    const dividerFontSize = `${Math.round(6 * S)}px`;
     this.dividerAboveLockedText.setFontSize(dividerFontSize);
     this.lockedStatsText.setFontSize(tieredStatFontSize);
     this.dividerBelowLockedText.setFontSize(dividerFontSize);
@@ -481,14 +529,14 @@ export class CraftingUI {
 
     for (const entry of this.statPool) {
       entry.tier.setX(cx);
-      entry.tier.setFontSize(`${Math.round(8 * S)}px`);
+      entry.tier.setFontSize(`${Math.round(6 * S)}px`);
       entry.stat.setX(cx);
       entry.stat.setFontSize(tieredStatFontSize);
       entry.stat.setWordWrapWidth(wrapWidth);
     }
 
     // Reposition orb zones and count texts
-    const smallFontSize = `${Math.round(8 * S)}px`;
+    const smallFontSize = `${Math.round(6 * S)}px`;
     for (let i = 0; i < ORB_KEYS.length; i++) {
       const col = i % ORB_COLS;
       const row = Math.floor(i / ORB_COLS);
@@ -496,16 +544,20 @@ export class CraftingUI {
       const sy = this.orbStartY + row * (this.orbSlotH + this.orbGapY);
       this.orbZones[i].setPosition(sx + this.orbSlotW / 2, sy + this.orbSlotH / 2);
       this.orbZones[i].setSize(this.orbSlotW, this.orbSlotH);
-      this.orbCountTexts[i].setPosition(sx + this.orbSlotW - Math.round(2 * S), sy + this.orbSlotH - Math.round(2 * S));
+      this.orbCountTexts[i].setPosition(sx + this.orbSlotW - Math.round(8 * S), sy + this.orbSlotH - Math.round(8 * S));
       this.orbCountTexts[i].setFontSize(smallFontSize);
+      if (this.orbImages[i]) {
+        const nativeSize = getItemOutlinedSize();
+        this.orbImages[i].setPosition(sx + this.orbSlotW / 2, sy + this.orbSlotH / 2).setDisplaySize(nativeSize, nativeSize);
+      }
     }
 
     // Reposition orb info texts
     const orbInfoWidth = Math.round(160 * S);
-    this.orbInfoNameText.setWordWrapWidth(orbInfoWidth - Math.round(16 * S));
-    this.orbInfoNameText.setFontSize(`${Math.round(11 * S)}px`);
-    this.orbInfoDescText.setWordWrapWidth(orbInfoWidth - Math.round(16 * S));
-    this.orbInfoDescText.setFontSize(`${Math.round(9 * S)}px`);
+    this.orbInfoNameText.setWordWrapWidth(orbInfoWidth - Math.round(17 * S));
+    this.orbInfoNameText.setFontSize(`${Math.round(8 * S)}px`);
+    this.orbInfoDescText.setWordWrapWidth(orbInfoWidth - Math.round(17 * S));
+    this.orbInfoDescText.setFontSize(`${Math.round(6 * S)}px`);
 
     if (this.visible) this.redraw();
   }
@@ -655,7 +707,7 @@ export class CraftingUI {
     const S = this.S;
     const pad = Math.round(12 * S);
     // Vertical separator between stats column and orb column
-    const sepX = this.px + this.statsColumnWidth + Math.round(4 * S);
+    const sepX = this.px + this.statsColumnWidth + Math.round(8 * S);
     this.separatorGraphics.lineStyle(1, 0x444466, 0.6);
     this.separatorGraphics.lineBetween(sepX, this.py + pad, sepX, this.py + this.panelHeight - pad);
   }
@@ -667,6 +719,7 @@ export class CraftingUI {
 
     if (!this.currentItem) {
       this.placeholderText.setVisible(true);
+      this.itemImage?.setVisible(false);
       this.itemSlotGraphics.fillStyle(0x222233, 0.6);
       this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
       this.itemSlotGraphics.lineStyle(1, 0x333344, 1);
@@ -698,8 +751,21 @@ export class CraftingUI {
     // Item icon
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
-    const color = getItemColor(item);
-    drawItemIcon(this.itemSlotGraphics, this.itemSlotCx, this.itemSlotCy, this.itemSlotSize * 0.6, category, subtype, color);
+    const spriteKey = getItemSpriteKey(category, subtype);
+    if (spriteKey && this.itemImage) {
+      const nativeSize = getItemOutlinedSize();
+      this.itemImage
+        .setTexture(spriteKey)
+        .setPosition(this.itemSlotCx, this.itemSlotCy)
+        .setDisplaySize(nativeSize, nativeSize)
+        .setAlpha(1)
+        .clearTint()
+        .setVisible(true);
+    } else {
+      this.itemImage?.setVisible(false);
+      const color = getItemColor(item);
+      drawItemIcon(this.itemSlotGraphics, this.itemSlotCx, this.itemSlotCy, this.itemSlotSize * 0.6, category, subtype, color);
+    }
 
     // Item name
     this.itemNameText.setText(getItemInstanceName(item));
@@ -753,7 +819,7 @@ export class CraftingUI {
     }
 
     // === Layout using pool with tier labels ===
-    let currentY = this.tierText.y + this.tierText.height + Math.round(2 * S);
+    let currentY = this.tierText.y + this.tierText.height + Math.round(8 * S);
     let poolIdx = 0;
 
     // Hide multi-line text objects (using pool instead)
@@ -852,18 +918,13 @@ export class CraftingUI {
       this.orbSlotGraphics.lineStyle(1, 0x333344, 1);
       this.orbSlotGraphics.strokeRoundedRect(sx, sy, this.orbSlotW, this.orbSlotH, 4);
 
-      // Orb circle icon centered in slot (always shown with orb color, dimmed if count is 0)
-      const iconCx = sx + this.orbSlotW / 2;
-      const iconCy = sy + this.orbSlotH / 2;
-      const iconR = Math.round(8 * this.S);
-      this.orbSlotGraphics.fillStyle(orbDef.color, available ? 0.9 : 0.35);
-      this.orbSlotGraphics.fillCircle(iconCx, iconCy, iconR);
-      this.orbSlotGraphics.lineStyle(1, 0xffffff, available ? 0.3 : 0.1);
-      this.orbSlotGraphics.strokeCircle(iconCx, iconCy, iconR);
-      // Highlight dot
-      if (available) {
-        this.orbSlotGraphics.fillStyle(0xffffff, 0.25);
-        this.orbSlotGraphics.fillCircle(iconCx - iconR * 0.25, iconCy - iconR * 0.3, iconR * 0.3);
+      // Orb sprite icon (dimmed if count is 0)
+      if (this.orbImages[i]) {
+        const nativeSize = getItemOutlinedSize();
+        this.orbImages[i]
+          .setPosition(sx + this.orbSlotW / 2, sy + this.orbSlotH / 2)
+          .setDisplaySize(nativeSize, nativeSize)
+          .setAlpha(available ? 1 : 0.35);
       }
     }
 
@@ -887,7 +948,7 @@ export class CraftingUI {
     const S = this.S;
     const infoPad = Math.round(8 * S);
     const infoWidth = Math.round(160 * S);
-    const gap = Math.round(6 * S);
+    const gap = Math.round(8 * S);
 
     // Set text content
     const colorStr = `#${orbDef.color.toString(16).padStart(6, "0")}`;
@@ -898,7 +959,7 @@ export class CraftingUI {
     // Calculate height
     const nameH = this.orbInfoNameText.height;
     const descH = this.orbInfoDescText.height;
-    const infoHeight = infoPad + nameH + Math.round(4 * S) + descH + infoPad;
+    const infoHeight = infoPad + nameH + Math.round(8 * S) + descH + infoPad;
 
     // Position to the right of the crafting panel; flip left if no room
     const screenW = this.scene.scale.width;
@@ -926,7 +987,7 @@ export class CraftingUI {
     this.orbInfoNameText.setPosition(cx, infoY + infoPad);
     this.orbInfoNameText.setVisible(true);
 
-    this.orbInfoDescText.setPosition(cx, infoY + infoPad + nameH + Math.round(4 * S));
+    this.orbInfoDescText.setPosition(cx, infoY + infoPad + nameH + Math.round(8 * S));
     this.orbInfoDescText.setVisible(true);
   }
 

@@ -1,14 +1,10 @@
 import Phaser from "phaser";
-import { EntityType, ProjectileType } from "@rotmg-lite/shared";
+import { EntityType, ProjectileType, PIXEL_SCALE } from "@rotmg-lite/shared";
 
 export class ProjectileSprite {
-  private bodyImage: Phaser.GameObjects.Image | null = null;
-  private graphics: Phaser.GameObjects.Graphics | null = null;
+  private bodyImage: Phaser.GameObjects.Image;
   private angle: number = 0;
   private speed: number = 0;
-  private isExpandingAoe: boolean = false;
-  private expandElapsed: number = 0;
-  private expandSpeed: number = 0;
 
   public x: number = 0;
   public y: number = 0;
@@ -21,69 +17,51 @@ export class ProjectileSprite {
     angle: number,
     speed: number,
     projType: number = ProjectileType.EnemyBullet,
-    projColor: number = 0
+    projColor: number = 0,
+    projSpriteIndex: number = 0
   ) {
     this.x = x;
     this.y = y;
     this.angle = angle;
     this.speed = speed;
 
-    if (projType === ProjectileType.RelicExpand) {
-      // Expanding AoE — must use Graphics since it changes every frame
-      this.isExpandingAoe = true;
-      this.expandSpeed = speed;
-      this.graphics = scene.add.graphics();
-      this.graphics.fillStyle(0x8844ff, 0.3);
-      this.graphics.fillCircle(0, 0, 15);
-      this.graphics.lineStyle(2, 0xaa66ff, 0.6);
-      this.graphics.strokeCircle(0, 0, 15);
-      this.graphics.setPosition(x, y);
-      return;
-    }
-
-    // All other projectile types use pre-generated textures (batched draw calls)
     let textureKey: string;
-    let tint: number | null = null;
 
     if (ownerType === EntityType.Enemy) {
-      textureKey = "proj-enemy";
+      textureKey = `proj-enemy-${projSpriteIndex}`;
     } else {
       switch (projType) {
+        case ProjectileType.BowArrow:
+          textureKey = "proj-archer-attack";
+          break;
         case ProjectileType.SwordSlash:
-          textureKey = "proj-sword";
-          tint = projColor || 0xccccff;
-          break;
-        case ProjectileType.QuiverShot:
-          textureKey = "proj-quiver";
-          break;
-        case ProjectileType.HelmSpin:
-          textureKey = "proj-helm";
+          textureKey = "proj-warrior-attack";
           break;
         case ProjectileType.WandBolt:
-          textureKey = "proj-wand";
-          // Wand has baked-in colors, tint only if custom color
-          if (projColor && projColor !== 0xaa44ff) {
-            tint = projColor;
-          }
+          textureKey = "proj-arcanist-attack";
           break;
-        case ProjectileType.BowArrow:
+        case ProjectileType.QuiverShot:
+          textureKey = "proj-archer-ability";
+          break;
+        case ProjectileType.HelmSpin:
+          textureKey = "proj-warrior-ability";
+          break;
+        case ProjectileType.RelicExpand:
+          textureKey = "proj-arcanist-ability";
+          break;
         default:
-          textureKey = "proj-arrow";
-          tint = projColor || 0xffff44;
+          textureKey = "proj-archer-attack";
           break;
       }
     }
 
     this.bodyImage = scene.add.image(x, y, textureKey);
+    const spriteCanvas = 8; // projectile sprites are 8×8
+    this.bodyImage.setDisplaySize(spriteCanvas * PIXEL_SCALE, spriteCanvas * PIXEL_SCALE);
     this.bodyImage.setRotation(angle);
-    if (tint !== null) {
-      this.bodyImage.setTint(tint);
-    }
 
-    // Player projectiles render below the player sprite
-    if (ownerType !== EntityType.Enemy) {
-      this.bodyImage.setDepth(-0.25);
-    }
+    // All projectiles render above trees (trunk depth 5, canopy depth 10)
+    this.bodyImage.setDepth(11);
   }
 
   updateFromServer(x: number, y: number): void {
@@ -94,36 +72,19 @@ export class ProjectileSprite {
   }
 
   update(delta: number): void {
-    if (this.isExpandingAoe && this.graphics) {
-      // Expanding AoE: grow circle each frame, position stays fixed
-      this.expandElapsed += delta / 1000;
-      const currentRadius = 15 + this.expandSpeed * this.expandElapsed;
-      this.graphics.clear();
-      const alpha = Math.max(0.05, 0.3 - (currentRadius / 300) * 0.25);
-      this.graphics.fillStyle(0x8844ff, alpha);
-      this.graphics.fillCircle(0, 0, currentRadius);
-      this.graphics.lineStyle(2, 0xaa66ff, Math.max(0.1, 0.6 - (currentRadius / 300) * 0.5));
-      this.graphics.strokeCircle(0, 0, currentRadius);
-      this.graphics.setPosition(this.x, this.y);
-      return;
-    }
     // Client-side extrapolation: move projectile forward using known angle + speed
     // This provides smooth 60fps movement between 20Hz server ticks
     const dt = delta / 1000;
     this.x += Math.cos(this.angle) * this.speed * dt;
     this.y += Math.sin(this.angle) * this.speed * dt;
-    if (this.bodyImage) {
-      this.bodyImage.setPosition(this.x, this.y);
-    }
+    this.bodyImage.setPosition(this.x, this.y);
   }
 
   setVisible(visible: boolean): void {
-    if (this.bodyImage) this.bodyImage.setVisible(visible);
-    if (this.graphics) this.graphics.setVisible(visible);
+    this.bodyImage.setVisible(visible);
   }
 
   destroy(): void {
-    if (this.bodyImage) this.bodyImage.destroy();
-    if (this.graphics) this.graphics.destroy();
+    this.bodyImage.destroy();
   }
 }

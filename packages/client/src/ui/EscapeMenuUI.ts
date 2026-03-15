@@ -36,10 +36,12 @@ export class EscapeMenuUI {
     scene.add.existing(this.panelBg);
 
     this.titleText = new Phaser.GameObjects.Text(scene, 0, 0, "MENU", {
-      fontSize: "16px",
+      fontSize: "10px",
       color: "#ffffff",
-      fontFamily: "monospace",
+      fontFamily: "'Press Start 2P', monospace",
       fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 2,
     });
     this.titleText.setOrigin(0.5, 0.5).setDepth(301).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.titleText);
@@ -75,9 +77,11 @@ export class EscapeMenuUI {
       this.buttonBgs.push(bg);
 
       const text = new Phaser.GameObjects.Text(this.scene, 0, 0, def.label, {
-        fontSize: "14px",
+        fontSize: "8px",
         color: def.color,
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       });
       text.setOrigin(0.5, 0.5).setDepth(302).setScrollFactor(0).setVisible(false);
       this.scene.add.existing(text);
@@ -128,7 +132,7 @@ export class EscapeMenuUI {
     const screenH = getScreenHeight();
 
     const panelW = Math.round(220 * S);
-    const btnH = Math.round(34 * S);
+    const btnH = Math.round(33 * S);
     const btnGap = Math.round(10 * S);
     const titleH = Math.round(30 * S);
     const pad = Math.round(20 * S);
@@ -155,7 +159,7 @@ export class EscapeMenuUI {
 
     // Title
     this.titleText.setPosition(px + panelW / 2, py + pad + titleH / 2);
-    this.titleText.setFontSize(Math.round(16 * S));
+    this.titleText.setFontSize(Math.round(10 * S));
 
     // Buttons
     const btnW = panelW - pad * 2;
@@ -174,7 +178,7 @@ export class EscapeMenuUI {
       // Text
       const text = this.buttonTexts[i];
       text.setPosition(bx + btnW / 2, by + btnH / 2);
-      text.setFontSize(Math.round(11 * S));
+      text.setFontSize(Math.round(7 * S));
 
       // Zone
       const zone = this.buttonZones[i];

@@ -121,6 +121,13 @@ export const DecorationType = {
   Mushroom: 9,
   Bones: 10,
   Ruins: 11,
+  Grass1: 12,
+  Grass2: 13,
+  Grass3: 14,
+  Grass4: 15,
+  Flowers1: 16,
+  Flowers2: 17,
+  Flowers3: 18,
 } as const;
 export type DecorationType =
   (typeof DecorationType)[keyof typeof DecorationType];

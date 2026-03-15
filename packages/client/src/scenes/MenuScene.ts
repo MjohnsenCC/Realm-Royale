@@ -137,9 +137,9 @@ export class MenuScene extends Phaser.Scene {
     // Glow text (behind, larger, pulsing)
     const titleGlow = this.add
       .text(cx, titleY, "REALM ROYALE", {
-        fontSize: "68px",
+        fontSize: "32px",
         color: "#4488ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -160,9 +160,9 @@ export class MenuScene extends Phaser.Scene {
     // Main title with color shimmer
     const titleMain = this.add
       .text(cx, titleY, "REALM ROYALE", {
-        fontSize: "62px",
+        fontSize: "28px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -214,9 +214,9 @@ export class MenuScene extends Phaser.Scene {
     // Subtitle
     this.add
       .text(cx, titleY + 48, "MULTIPLAYER  TOP-DOWN  SHOOTER", {
-        fontSize: "13px",
+        fontSize: "8px",
         color: "#556688",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(11);
@@ -234,9 +234,9 @@ export class MenuScene extends Phaser.Scene {
 
     const googleBtnText = this.add
       .text(cx, googleBtnY + btnH / 2, "SIGN IN WITH GOOGLE", {
-        fontSize: "15px",
+        fontSize: "9px",
         color: "#4488ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -270,9 +270,9 @@ export class MenuScene extends Phaser.Scene {
     // ─── 7. DIVIDER ───
     this.add
       .text(cx, googleBtnY + btnH + 18, "— or —", {
-        fontSize: "11px",
+        fontSize: "7px",
         color: "#445566",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(5);
@@ -288,9 +288,9 @@ export class MenuScene extends Phaser.Scene {
 
     const guestBtnText = this.add
       .text(cx, guestBtnY + btnH / 2, "PLAY AS GUEST", {
-        fontSize: "15px",
+        fontSize: "9px",
         color: "#4488ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -341,9 +341,9 @@ export class MenuScene extends Phaser.Scene {
         height - 25,
         "WASD move  |  Mouse aim  |  Click shoot  |  Q return to nexus",
         {
-          fontSize: "11px",
+          fontSize: "7px",
           color: "#334455",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         }
       )
       .setOrigin(0.5)
@@ -351,9 +351,9 @@ export class MenuScene extends Phaser.Scene {
 
     this.add
       .text(width - 10, height - 10, "v0.0.28", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#333344",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(1, 1)
       .setDepth(5);

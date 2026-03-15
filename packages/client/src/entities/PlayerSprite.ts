@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS, TILE_SIZE } from "@rotmg-lite/shared";
+import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
-import { getPlayerSpriteKey } from "../ui/EntityTextures";
+import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -16,6 +16,7 @@ export class PlayerSprite {
   private scene: Phaser.Scene;
   private bodyImage: Phaser.GameObjects.Image;
   private nameText: Phaser.GameObjects.Text;
+  private hpBarBorder: Phaser.GameObjects.Image;
   private hpBarBg: Phaser.GameObjects.Image;
   private hpBarFill: Phaser.GameObjects.Image;
 
@@ -72,18 +73,19 @@ export class PlayerSprite {
     this.snapshots = new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    // Body — use loaded 8×8 class sprite (scaled to tile size for uniform pixel scale)
+    // Body — use loaded 12×12 class sprite (scaled with PIXEL_SCALE for uniform pixel size)
     this.normalTextureKey = getPlayerSpriteKey(characterClass);
     this.currentTextureKey = this.normalTextureKey;
     this.bodyImage = scene.add.image(x, y, this.normalTextureKey);
-    this.bodyImage.setDisplaySize(TILE_SIZE, TILE_SIZE);
-
+    this.bodyImage.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
 
     // Name label (hidden for local player)
     this.nameText = scene.add.text(x, y - PLAYER_RADIUS - 20, name, {
-      fontFamily: "monospace",
-      fontSize: "12px",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "7px",
       color: isLocal ? "#88aaff" : "#66cc66",
+      stroke: "#000000",
+      strokeThickness: 1,
     });
     this.nameText.setOrigin(0.5, 0.5);
     if (isLocal) this.nameText.setVisible(false);
@@ -91,7 +93,12 @@ export class PlayerSprite {
     // HP bar — use shared pixel texture (tinted + scaled)
     const barWidth = 36;
     const barHeight = 4;
-    const yOffset = PLAYER_RADIUS + 8;
+    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    this.hpBarBorder = scene.add.image(x - barWidth / 2 - 1, y + yOffset - 1, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(barWidth + 2, barHeight + 2)
+      .setTint(0x000000);
+
     this.hpBarBg = scene.add.image(x - barWidth / 2, y + yOffset, "pixel")
       .setOrigin(0, 0)
       .setDisplaySize(barWidth, barHeight)
@@ -125,11 +132,13 @@ export class PlayerSprite {
     const dx = this._isLocal ? this.displayX : this.x;
     const dy = this._isLocal ? this.displayY : this.y;
     const text = this.scene.add.text(dx, dy - PLAYER_RADIUS - 38, msg, {
-      fontFamily: "monospace",
-      fontSize: "11px",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "8px",
       color: "#ffffff",
       wordWrap: { width: 150 },
       align: "center",
+      stroke: "#000000",
+      strokeThickness: 1,
     });
     text.setOrigin(0.5, 1);
     text.setDepth(999);
@@ -142,10 +151,12 @@ export class PlayerSprite {
     const startY = -PLAYER_RADIUS - 30;
     const color = isMagic ? "#4488ff" : "#ff4444";
     const text = this.scene.add.text(dx, dy + startY, `-${Math.round(amount)}`, {
-      fontFamily: "monospace",
-      fontSize: "14px",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "12px",
       fontStyle: "bold",
       color: color,
+      stroke: "#000000",
+      strokeThickness: 1,
     });
     text.setOrigin(0.5, 1);
     text.setDepth(1000);
@@ -208,7 +219,8 @@ export class PlayerSprite {
     this.bodyImage.setPosition(dx, dy);
     this.nameText.setPosition(dx, dy - PLAYER_RADIUS - 20);
     const barWidth = 36;
-    const yOffset = PLAYER_RADIUS + 8;
+    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    this.hpBarBorder.setPosition(dx - barWidth / 2 - 1, dy + yOffset - 1);
     this.hpBarBg.setPosition(dx - barWidth / 2, dy + yOffset);
     this.hpBarFill.setPosition(dx - barWidth / 2, dy + yOffset);
 
@@ -287,6 +299,7 @@ export class PlayerSprite {
   setVisible(visible: boolean): void {
     this.bodyImage.setVisible(visible);
     this.nameText.setVisible(this._isLocal ? false : visible);
+    this.hpBarBorder.setVisible(visible);
     this.hpBarBg.setVisible(visible);
     this.hpBarFill.setVisible(visible);
   }
@@ -298,6 +311,7 @@ export class PlayerSprite {
   destroy(): void {
     this.bodyImage.destroy();
     this.nameText.destroy();
+    this.hpBarBorder.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
     if (this.chatBubble) {

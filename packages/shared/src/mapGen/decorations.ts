@@ -15,10 +15,13 @@ interface DecorationRule {
 const DECORATION_TABLE: Partial<Record<number, DecorationRule[]>> = {
   [RealmBiome.Beach]: [
     { type: DecorationType.RockSmall, density: 0.02 },
+    { type: DecorationType.Grass4, density: 0.01 },
   ],
   [RealmBiome.Marsh]: [
     { type: DecorationType.Bush, density: 0.06 },
     { type: DecorationType.Mushroom, density: 0.02 },
+    { type: DecorationType.Grass1, density: 0.02 },
+    { type: DecorationType.Grass4, density: 0.02 },
   ],
   [RealmBiome.Desert]: [
     { type: DecorationType.Cactus, density: 0.02 },
@@ -28,28 +31,41 @@ const DECORATION_TABLE: Partial<Record<number, DecorationRule[]>> = {
   [RealmBiome.DryPlains]: [
     { type: DecorationType.Bush, density: 0.03 },
     { type: DecorationType.RockSmall, density: 0.01 },
+    { type: DecorationType.Grass3, density: 0.02 },
+    { type: DecorationType.Flowers3, density: 0.01 },
   ],
   [RealmBiome.Grassland]: [
-    { type: DecorationType.TreeOak, density: 0.03 },
+    { type: DecorationType.TreeOak, density: 0.015 },
     { type: DecorationType.Bush, density: 0.04 },
     { type: DecorationType.Flower, density: 0.02 },
+    { type: DecorationType.Grass1, density: 0.03 },
+    { type: DecorationType.Grass2, density: 0.02 },
+    { type: DecorationType.Flowers1, density: 0.015 },
+    { type: DecorationType.Flowers3, density: 0.01 },
   ],
   [RealmBiome.Forest]: [
-    { type: DecorationType.TreeOak, density: 0.084 },
+    { type: DecorationType.TreeOak, density: 0.042 },
     { type: DecorationType.Bush, density: 0.035 },
     { type: DecorationType.Mushroom, density: 0.014 },
+    { type: DecorationType.Grass1, density: 0.02 },
+    { type: DecorationType.Grass2, density: 0.015 },
+    { type: DecorationType.Flowers2, density: 0.01 },
   ],
   [RealmBiome.Jungle]: [
-    { type: DecorationType.TreePalm, density: 0.15 },
+    { type: DecorationType.TreePalm, density: 0.075 },
     { type: DecorationType.Bush, density: 0.08 },
     { type: DecorationType.Flower, density: 0.03 },
+    { type: DecorationType.Grass2, density: 0.03 },
+    { type: DecorationType.Flowers1, density: 0.02 },
+    { type: DecorationType.Flowers2, density: 0.015 },
   ],
   [RealmBiome.Shrubland]: [
     { type: DecorationType.Bush, density: 0.06 },
     { type: DecorationType.RockSmall, density: 0.02 },
+    { type: DecorationType.Grass3, density: 0.02 },
   ],
   [RealmBiome.Taiga]: [
-    { type: DecorationType.TreePine, density: 0.10 },
+    { type: DecorationType.TreePine, density: 0.05 },
     { type: DecorationType.RockSmall, density: 0.03 },
   ],
   [RealmBiome.DesertCliffs]: [

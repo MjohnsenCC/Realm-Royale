@@ -33,9 +33,9 @@ export class DungeonTooltip {
     this.tooltipWidth = Math.round(220 * S);
     this.padding = Math.round(8 * S);
 
-    const nameFontSize = `${Math.round(13 * S)}px`;
-    const statFontSize = `${Math.round(11 * S)}px`;
-    const modFontSize = `${Math.round(10 * S)}px`;
+    const nameFontSize = `${Math.round(9 * S)}px`;
+    const statFontSize = `${Math.round(8 * S)}px`;
+    const modFontSize = `${Math.round(7 * S)}px`;
 
     this.container = scene.add
       .container(0, 0)
@@ -51,8 +51,10 @@ export class DungeonTooltip {
       .text(this.padding, this.padding, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setWordWrapWidth(this.tooltipWidth - this.padding * 2);
     this.container.add(this.nameText);
@@ -63,10 +65,12 @@ export class DungeonTooltip {
       this.padding + Math.round(18 * S),
       "",
       {
-        fontSize: `${Math.round(10 * S)}px`,
+        fontSize: `${Math.round(7 * S)}px`,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       }
     );
     this.container.add(this.difficultyText);
@@ -79,7 +83,9 @@ export class DungeonTooltip {
       {
         fontSize: statFontSize,
         color: "#44ff44",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       }
     );
     this.container.add(this.rarityText);
@@ -87,12 +93,14 @@ export class DungeonTooltip {
     // Loot quantity boost
     this.quantityText = scene.add.text(
       this.padding,
-      this.padding + Math.round(46 * S),
+      this.padding + Math.round(47 * S),
       "",
       {
         fontSize: statFontSize,
         color: "#44ff44",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       }
     );
     this.container.add(this.quantityText);
@@ -107,7 +115,9 @@ export class DungeonTooltip {
         .text(this.padding, 0, "", {
           fontSize: modFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setWordWrapWidth(this.tooltipWidth - this.padding * 2);
       this.container.add(t);
@@ -116,10 +126,12 @@ export class DungeonTooltip {
 
     // "[SHIFT] for more info" hint
     this.shiftHintText = scene.add.text(this.padding, 0, "[SHIFT] for more info", {
-      fontSize: `${Math.round(9 * S)}px`,
+      fontSize: `${Math.round(6 * S)}px`,
       color: "#888888",
-      fontFamily: "monospace",
+      fontFamily: "'Press Start 2P', monospace",
       fontStyle: "italic",
+      stroke: "#000000",
+      strokeThickness: 2,
     });
     this.container.add(this.shiftHintText);
   }
@@ -183,8 +195,8 @@ export class DungeonTooltip {
     );
 
     // Modifier texts
-    let modY = dividerY + Math.round(6 * S);
-    const modSpacing = Math.round(4 * S);
+    let modY = dividerY + Math.round(8 * S);
+    const modSpacing = Math.round(8 * S);
     for (let i = 0; i < 5; i++) {
       if (i < modifierIds.length) {
         const modId = modifierIds[i];
@@ -211,9 +223,9 @@ export class DungeonTooltip {
 
     // "[SHIFT] for more info" hint
     if (!shiftHeld) {
-      this.shiftHintText.setY(modY + Math.round(2 * S));
+      this.shiftHintText.setY(modY + Math.round(8 * S));
       this.shiftHintText.setVisible(true);
-      modY += this.shiftHintText.height + Math.round(6 * S);
+      modY += this.shiftHintText.height + Math.round(8 * S);
     } else {
       this.shiftHintText.setVisible(false);
     }
@@ -229,8 +241,8 @@ export class DungeonTooltip {
     this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 6);
 
     // Position: bottom-right corner of the screen
-    const tx = this.scene.scale.width - this.tooltipWidth - Math.round(16 * S);
-    const ty = this.scene.scale.height - totalHeight - Math.round(16 * S);
+    const tx = this.scene.scale.width - this.tooltipWidth - Math.round(17 * S);
+    const ty = this.scene.scale.height - totalHeight - Math.round(17 * S);
 
     this.container.setPosition(tx, ty);
     this.container.setVisible(true);
@@ -253,20 +265,20 @@ export class DungeonTooltip {
     this.tooltipWidth = Math.round(220 * S);
     this.padding = Math.round(8 * S);
 
-    const nameFontSize = `${Math.round(13 * S)}px`;
-    const statFontSize = `${Math.round(11 * S)}px`;
-    const modFontSize = `${Math.round(10 * S)}px`;
+    const nameFontSize = `${Math.round(9 * S)}px`;
+    const statFontSize = `${Math.round(8 * S)}px`;
+    const modFontSize = `${Math.round(7 * S)}px`;
 
     this.nameText.setFontSize(nameFontSize);
     this.nameText.setWordWrapWidth(this.tooltipWidth - this.padding * 2);
-    this.difficultyText.setFontSize(`${Math.round(10 * S)}px`);
+    this.difficultyText.setFontSize(`${Math.round(7 * S)}px`);
     this.rarityText.setFontSize(statFontSize);
     this.quantityText.setFontSize(statFontSize);
     for (const t of this.modifierTexts) {
       t.setFontSize(modFontSize);
       t.setWordWrapWidth(this.tooltipWidth - this.padding * 2);
     }
-    this.shiftHintText.setFontSize(`${Math.round(9 * S)}px`);
+    this.shiftHintText.setFontSize(`${Math.round(6 * S)}px`);
 
     // Hide on relayout
     this.hide();

@@ -12,7 +12,7 @@ import {
   ItemCategory,
   getSubtypeName,
 } from "@rotmg-lite/shared";
-import { drawItemIcon } from "../ui/ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize } from "../ui/ItemTextures";
 import {
   SERVERS,
   getSelectedServerId,
@@ -39,9 +39,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Title
     this.add
       .text(cx, height * 0.1, "SELECT CHARACTER", {
-        fontSize: "36px",
+        fontSize: "18px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -50,9 +50,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Status text
     this.statusText = this.add
       .text(cx, height * 0.18, "", {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(5);
@@ -66,9 +66,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Log out button (top right)
     const logoutBtn = this.add
       .text(width - 20, 20, "LOG OUT", {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#aa4444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(1, 0)
       .setDepth(5)
@@ -146,9 +146,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Character name
     const nameText = this.add
       .text(x + 16, y + 16, char.name, {
-        fontSize: "20px",
+        fontSize: "12px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setDepth(6);
@@ -157,9 +157,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     const className = CLASS_NAMES[char.characterClass] ?? "Unknown";
     const levelText = this.add
       .text(x + 16, y + 42, `Level ${char.level} ${className}`, {
-        fontSize: "13px",
+        fontSize: "8px",
         color: "#8888aa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setDepth(6);
 
@@ -167,9 +167,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     const lastPlayed = this.formatLastPlayed(char.lastPlayed);
     const lastPlayedText = this.add
       .text(x + w - 80, y + 42, lastPlayed, {
-        fontSize: "11px",
+        fontSize: "7px",
         color: "#666688",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0, 0)
       .setDepth(6);
@@ -199,9 +199,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Delete button
     const delBtn = this.add
       .text(x + w - 16, y + 16, "X", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#664444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(1, 0)
@@ -229,9 +229,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const label = this.add
       .text(cx, y + h / 2, "+ CREATE CHARACTER", {
-        fontSize: "18px",
+        fontSize: "11px",
         color: "#4488ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -285,9 +285,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const title = this.add
       .text(cx, dialogY + 25, "CREATE CHARACTER", {
-        fontSize: "18px",
+        fontSize: "11px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -297,9 +297,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     let selectedClass: number = CharacterClass.Archer;
     const classLabel = this.add
       .text(cx, dialogY + 52, "SELECT CLASS", {
-        fontSize: "11px",
+        fontSize: "7px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22);
@@ -321,6 +321,18 @@ export class CharacterSelectScene extends Phaser.Scene {
     const cardGraphics = this.add.graphics().setDepth(21);
     const cardElements: Phaser.GameObjects.GameObject[] = [cardGraphics];
 
+    // Create weapon sprite Images for each class card
+    const weaponImages: Phaser.GameObjects.Image[] = [];
+    for (let i = 0; i < classOptions.length; i++) {
+      const equip = CLASS_EQUIPMENT_MAP[classOptions[i].id];
+      const spriteKey = getItemSpriteKey(ItemCategory.Weapon, equip.weapon);
+      if (spriteKey) {
+        const img = this.add.image(0, 0, spriteKey).setDepth(22).setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
+        weaponImages.push(img);
+        cardElements.push(img);
+      }
+    }
+
     const drawCards = () => {
       cardGraphics.clear();
       for (let i = 0; i < classOptions.length; i++) {
@@ -333,10 +345,15 @@ export class CharacterSelectScene extends Phaser.Scene {
         cardGraphics.lineStyle(isSelected ? 2 : 1, isSelected ? 0x4488ff : 0x333355, isSelected ? 0.8 : 0.4);
         cardGraphics.strokeRoundedRect(cardX, cardTopY, cardW, cardH, 6);
 
-        // Draw weapon icon
-        const equip = CLASS_EQUIPMENT_MAP[opt.id];
-        const iconColor = isSelected ? 0x4488ff : 0x555577;
-        drawItemIcon(cardGraphics, cardX + cardW / 2, cardTopY + 48, 28, ItemCategory.Weapon, equip.weapon, iconColor);
+        // Position weapon sprite
+        if (weaponImages[i]) {
+          weaponImages[i].setPosition(cardX + cardW / 2, cardTopY + 48);
+          if (isSelected) {
+            weaponImages[i].clearTint().setAlpha(1);
+          } else {
+            weaponImages[i].setTint(0x555577).setAlpha(0.7);
+          }
+        }
       }
     };
 
@@ -351,9 +368,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
       const nameText = this.add
         .text(cardCx, cardTopY + 16, opt.name, {
-          fontSize: "14px",
+          fontSize: "8px",
           color: isSelected ? "#ffffff" : "#666688",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           fontStyle: "bold",
         })
         .setOrigin(0.5)
@@ -363,9 +380,9 @@ export class CharacterSelectScene extends Phaser.Scene {
       const abilityName = getSubtypeName(ItemCategory.Ability, equip.ability);
       const info1Text = this.add
         .text(cardCx, cardTopY + 78, `${weaponName} · ${abilityName}`, {
-          fontSize: "10px",
+          fontSize: "6px",
           color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(22);
@@ -373,9 +390,9 @@ export class CharacterSelectScene extends Phaser.Scene {
       const armorName = getSubtypeName(ItemCategory.Armor, equip.armor);
       const info2Text = this.add
         .text(cardCx, cardTopY + 94, armorName, {
-          fontSize: "10px",
+          fontSize: "6px",
           color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(22);
@@ -442,9 +459,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const errorText = this.add
       .text(cx, dialogY + 258, "", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#ff4444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22);
@@ -452,9 +469,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     // Buttons
     const confirmBtn = this.add
       .text(cx - 50, dialogY + 305, "CREATE", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#44ff88",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -463,9 +480,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const cancelBtn = this.add
       .text(cx + 50, dialogY + 305, "CANCEL", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#aa6666",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22)
@@ -528,9 +545,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const title = this.add
       .text(cx, dialogY + 25, "DELETE CHARACTER", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#ff4444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -538,27 +555,27 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const msg = this.add
       .text(cx, dialogY + 55, `Delete "${char.name}" (Lv.${char.level})?`, {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#cccccc",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22);
 
     const errorText = this.add
       .text(cx, dialogY + 78, "", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#ff4444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22);
 
     const confirmBtn = this.add
       .text(cx - 50, dialogY + 110, "DELETE", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#ff4444",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -567,9 +584,9 @@ export class CharacterSelectScene extends Phaser.Scene {
 
     const cancelBtn = this.add
       .text(cx + 50, dialogY + 110, "CANCEL", {
-        fontSize: "16px",
+        fontSize: "10px",
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(22)
@@ -701,9 +718,9 @@ export class CharacterSelectScene extends Phaser.Scene {
     const serverLabelY = panelY + 12;
     this.add
       .text(cx, serverLabelY, "SERVER", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -719,9 +736,9 @@ export class CharacterSelectScene extends Phaser.Scene {
       const server = SERVERS[i];
       const btn = this.add
         .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "13px",
+          fontSize: "8px",
           color: server.id === currentServerId ? "#4488ff" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(6)

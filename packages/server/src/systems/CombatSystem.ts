@@ -1,6 +1,7 @@
 import { GameState } from "../schemas/GameState";
 import { SpatialGrid } from "../utils/SpatialGrid";
 import { Enemy } from "../schemas/Enemy";
+import { Player } from "../schemas/Player";
 import {
   EntityType,
   PLAYER_RADIUS,
@@ -41,15 +42,21 @@ export interface CombatEvent {
 export class CombatSystem {
   private events: CombatEvent[] = [];
   private enemyGrid = new SpatialGrid<Enemy>(200);
+  private playerGrid = new SpatialGrid<Player>(200);
 
   update(deltaTime: number, state: GameState, dungeonMaps?: Map<string, DungeonMapData>): CombatEvent[] {
     this.events.length = 0;
     const dt = deltaTime / 1000;
 
-    // Rebuild spatial grid for enemies
+    // Rebuild spatial grids
     this.enemyGrid.clear();
     state.enemies.forEach((enemy) => {
       this.enemyGrid.insert(enemy);
+    });
+
+    this.playerGrid.clear();
+    state.players.forEach((player) => {
+      if (player.alive) this.playerGrid.insert(player);
     });
 
     const projectilesToRemove: string[] = [];
@@ -154,9 +161,10 @@ export class CombatSystem {
               const enemyX = enemy.x;
               const enemyY = enemy.y;
 
-              state.players.forEach((player) => {
-                if (!player.alive || player.zone !== enemy.zone) return;
-                if (distanceBetween(player.x, player.y, enemyX, enemyY) > XP_SHARE_RADIUS) return;
+              const xpPlayers = this.playerGrid.query(enemyX, enemyY, XP_SHARE_RADIUS);
+              for (const player of xpPlayers) {
+                if (player.zone !== enemy.zone) continue;
+                if (distanceBetween(player.x, player.y, enemyX, enemyY) > XP_SHARE_RADIUS) continue;
                 player.xp += xpValue;
                 const newLevel = getPlayerLevel(player.xp);
                 if (newLevel !== player.level) {
@@ -181,7 +189,7 @@ export class CombatSystem {
                   player.cachedWeaponProjSize = stats.weaponProjSize;
                   player.hp = Math.min(player.hp + (stats.maxHp - oldMaxHp), player.maxHp);
                 }
-              });
+              }
 
               // Report enemy kill with zone and boss info
               const biome = getDifficultyAt(enemy.spawnX, enemy.spawnY);
@@ -205,12 +213,12 @@ export class CombatSystem {
           }
         }
       } else {
-        // Enemy projectile → check player collisions in same zone
-        state.players.forEach((player) => {
-          if (!player.alive) return;
-          if (player.invulnerable) return;
-          if (player.zone !== proj.zone) return;
-          if (proj.ownerId === player.id) return;
+        // Enemy projectile → check player collisions using spatial grid
+        const nearbyPlayers = this.playerGrid.query(proj.x, proj.y, 50);
+        for (const player of nearbyPlayers) {
+          if (player.invulnerable) continue;
+          if (player.zone !== proj.zone) continue;
+          if (proj.ownerId === player.id) continue;
 
           if (
             circlesOverlap(proj.x, proj.y, proj.collisionRadius, player.x, player.y, PLAYER_RADIUS)
@@ -233,8 +241,9 @@ export class CombatSystem {
                 playerId: player.id,
               });
             }
+            break;
           }
-        });
+        }
       }
     });
 

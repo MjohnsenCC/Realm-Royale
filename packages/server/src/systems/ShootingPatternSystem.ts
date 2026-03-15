@@ -49,6 +49,7 @@ export class ShootingPatternSystem {
       proj.collisionRadius = def.projectileCollisionRadius ?? 5;
       proj.zone = enemy.zone || "hostile:1";
       proj.damageType = def.defaultDamageType ?? DamageType.Physical;
+      proj.projSpriteIndex = enemy.enemyType % 6;
 
       state.projectiles.set(proj.id, proj);
     }

@@ -1,4 +1,5 @@
 export const TILE_SIZE = 40; // used by nexus + dungeons
+export const PIXEL_SCALE = TILE_SIZE / 8; // 5 — screen pixels per source pixel (8×8 tiles = 40px)
 
 // Hostile zone island map
 export const HOSTILE_TILES = 2048; // tile grid dimensions
@@ -49,7 +50,7 @@ export const HP_REGEN_PER_LEVEL = 0.1; // hp/s per level
 // Server
 export const TICK_RATE = 20; // updates per second
 export const TICK_INTERVAL = 1000 / TICK_RATE; // 50ms
-export const MAX_PLAYERS = 4;
+export const MAX_PLAYERS = 30;
 export const SERVER_PORT = 2567;
 
 // Network interpolation
@@ -74,7 +75,7 @@ export const CRAFTING_TABLE_Y = 25.5 * TILE_SIZE; // 1020 — center of east roo
 export const CRAFTING_TABLE_RADIUS = 36;
 export const CRAFTING_TABLE_INTERACT_RADIUS = 60;
 
-// Realm portals (nexus north room, side by side)
+// The Wild portals (nexus north room, side by side)
 export const REALM_PORTAL_1_X = 23 * TILE_SIZE; // left side of north room
 export const REALM_PORTAL_1_Y = 7 * TILE_SIZE;
 export const REALM_PORTAL_2_X = 28 * TILE_SIZE; // right side of north room

@@ -10,6 +10,7 @@ export class Projectile extends Schema {
   @type("number") speed: number = 0;
   @type("uint8") projType: number = ProjectileType.BowArrow;
   @type("uint32") projColor: number = 0;
+  @type("uint8") projSpriteIndex: number = 0;
 
   @type("string") ownerId: string = "";
   @type("uint8") damageType: number = 0; // DamageType: 0=Physical, 1=Magic

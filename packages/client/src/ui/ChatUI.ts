@@ -10,8 +10,8 @@ interface ChatEntry {
 }
 
 const VISIBLE_LINES = 8;
-const FONT_SIZE_REF = 10; // reference font size at scale 1
-const LINE_HEIGHT_REF = 14;
+const FONT_SIZE_REF = 7; // reference font size at scale 1
+const LINE_HEIGHT_REF = 10;
 const PANEL_WIDTH_REF = 260;
 const PANEL_PADDING = 6;
 
@@ -49,10 +49,12 @@ export class ChatUI {
     for (let i = 0; i < VISIBLE_LINES; i++) {
       const t = scene.add
         .text(0, 0, "", {
-          fontFamily: "monospace",
-          fontSize: "10px",
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: "7px",
           color: "#cccccc",
           wordWrap: { width: PANEL_WIDTH_REF },
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setScrollFactor(0)
         .setDepth(91);
@@ -62,10 +64,12 @@ export class ChatUI {
     // Channel indicator (shown when typing)
     this.channelLabel = scene.add
       .text(0, 0, "", {
-        fontFamily: "monospace",
-        fontSize: "10px",
+        fontFamily: "'Press Start 2P', monospace",
+        fontSize: "7px",
         color: "#ffcc44",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setScrollFactor(0)
       .setDepth(92)
@@ -81,7 +85,7 @@ export class ChatUI {
     this.inputEl.style.border = "1px solid #555";
     this.inputEl.style.borderRadius = "3px";
     this.inputEl.style.outline = "none";
-    this.inputEl.style.fontFamily = "monospace";
+    this.inputEl.style.fontFamily = "'Press Start 2P', monospace";
     this.inputEl.style.padding = "2px 4px";
     this.inputEl.style.boxSizing = "border-box";
     this.inputEl.style.display = "none";
@@ -128,7 +132,7 @@ export class ChatUI {
     const pad = Math.round(PANEL_PADDING * S);
     const margin = Math.round(8 * S);
     const inputH = Math.round(18 * S);
-    const gap = Math.round(2 * S);
+    const gap = Math.round(8 * S);
 
     // Build layout bottom-up from screen edge:
     // margin -> input -> gap -> label -> gap -> message lines

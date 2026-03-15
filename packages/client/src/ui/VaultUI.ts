@@ -13,6 +13,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_GAP = 4;
@@ -31,6 +32,7 @@ export class VaultUI {
   private tierTexts: Phaser.GameObjects.Text[] = [];
   private qtyTexts: Phaser.GameObjects.Text[] = [];
   private slotZones: Phaser.GameObjects.Zone[] = [];
+  private itemImages: Phaser.GameObjects.Image[] = [];
   private headerText: Phaser.GameObjects.Text;
   private room: any = null;
   private visible: boolean = false;
@@ -80,9 +82,9 @@ export class VaultUI {
     this.externalSlotSize = hudSlotSize ?? null;
     this.computeLayout();
 
-    const headerFontSize = `${Math.round(16 * S)}px`;
-    const slotFontSize = `${Math.round(8 * S)}px`;
-    const tierFontSize = `${Math.round(7 * S)}px`;
+    const headerFontSize = `${Math.round(10 * S)}px`;
+    const slotFontSize = `${Math.round(4 * S)}px`;
+    const tierFontSize = `${Math.round(5 * S)}px`;
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
@@ -93,8 +95,10 @@ export class VaultUI {
       .text(0, 0, "Vault", {
         fontSize: headerFontSize,
         color: VAULT_HEADER_COLOR,
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       });
     this.container.add(this.headerText);
 
@@ -152,8 +156,10 @@ export class VaultUI {
         .text(0, 0, "", {
           fontSize: slotFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
@@ -165,7 +171,9 @@ export class VaultUI {
         .text(0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
@@ -176,12 +184,18 @@ export class VaultUI {
         .text(0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0, 1)
         .setScrollFactor(0)
         .setDepth(102);
       this.qtyTexts.push(qtyText);
+
+      const img = scene.add.image(0, 0, "item-sword").setVisible(false);
+      this.container.add(img);
+      this.itemImages.push(img);
     }
 
     this.setVisible(false);
@@ -230,9 +244,9 @@ export class VaultUI {
     this.computeLayout();
 
     const S = this.S;
-    const headerFontSize = `${Math.round(16 * S)}px`;
-    const slotFontSize = `${Math.round(8 * S)}px`;
-    const tierFontSize = `${Math.round(7 * S)}px`;
+    const headerFontSize = `${Math.round(10 * S)}px`;
+    const slotFontSize = `${Math.round(4 * S)}px`;
+    const tierFontSize = `${Math.round(5 * S)}px`;
 
     this.headerText.setFontSize(headerFontSize);
 
@@ -381,17 +395,22 @@ export class VaultUI {
       if (hasItem) {
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
-        const color = getItemColor(item);
-        const iconSize = this.slotSize * 0.55;
-        drawItemIcon(
-          this.slotGraphics,
-          sx + this.slotSize / 2,
-          sy + this.slotSize / 2 - this.slotSize * 0.05,
-          iconSize,
-          category,
-          subtype,
-          color
-        );
+        const spriteKey = getItemSpriteKey(category, subtype);
+        if (spriteKey) {
+          const nativeSize = getItemOutlinedSize();
+          this.itemImages[i]
+            .setTexture(spriteKey)
+            .setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2)
+            .setDisplaySize(nativeSize, nativeSize)
+            .setAlpha(i === this.dragSourceSlot ? 0.3 : 1)
+            .clearTint()
+            .setVisible(true);
+        } else {
+          this.itemImages[i].setVisible(false);
+          const color = getItemColor(item);
+          const iconSize = this.slotSize * 0.55;
+          drawItemIcon(this.slotGraphics, sx + this.slotSize / 2, sy + this.slotSize / 2 - this.slotSize * 0.05, iconSize, category, subtype, color);
+        }
         if (isStackableItem(item.baseItemId)) {
           const qty = item.quantity || 1;
           this.tierTexts[i].setText(`x${qty}`);
@@ -402,6 +421,7 @@ export class VaultUI {
           this.qtyTexts[i].setText("");
         }
       } else {
+        this.itemImages[i].setVisible(false);
         this.tierTexts[i].setText("");
         this.qtyTexts[i].setText("");
       }

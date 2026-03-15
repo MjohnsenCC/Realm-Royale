@@ -128,17 +128,18 @@ export class StatsPanel {
     this.contentContainer.add(this.separatorGraphics);
 
     // Font sizes
-    const labelFontSize = `${Math.round(10 * S)}px`;
-    const valueFontSize = `${Math.round(10 * S)}px`;
-    const headerFontSize = `${Math.round(11 * S)}px`;
-    const titleFontSize = `${Math.round(14 * S)}px`;
-    const hintFontSize = `${Math.round(9 * S)}px`;
+    const labelFontSize = `${Math.round(6 * S)}px`;
+    const valueFontSize = `${Math.round(7 * S)}px`;
+    const headerFontSize = `${Math.round(8 * S)}px`;
+    const titleFontSize = `${Math.round(9 * S)}px`;
+    const hintFontSize = `${Math.round(6 * S)}px`;
 
     // Content positions (relative to container)
-    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(2 * S);
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
     const labelX = this.pad;
     const valueX = contentW - this.pad;
-    const bonusOffsetX = Math.round(70 * S);
+    const bonusOffsetX = Math.round(45 * S);
+    const labelMaxWidth = valueX - bonusOffsetX - labelX - Math.round(8 * S);
     const centerX = contentW / 2;
 
     // --- Title ---
@@ -146,8 +147,10 @@ export class StatsPanel {
       .text(centerX, this.pad, "CHARACTER STATS", {
         fontSize: titleFontSize,
         color: "#aaaaff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
     this.contentContainer.add(this.titleText);
@@ -157,7 +160,9 @@ export class StatsPanel {
       .text(centerX, this.pad + this.headerH, "Press P to close", {
         fontSize: hintFontSize,
         color: "#666666",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
     this.contentContainer.add(this.hintText);
@@ -188,8 +193,10 @@ export class StatsPanel {
           .text(labelX, curY, sectionNames[row.section], {
             fontSize: headerFontSize,
             color: "#ffcc44",
-            fontFamily: "monospace",
+            fontFamily: "'Press Start 2P', monospace",
             fontStyle: "bold",
+            stroke: "#000000",
+            strokeThickness: 2,
           })
           .setOrigin(0, 0);
         this.contentContainer.add(header);
@@ -205,7 +212,10 @@ export class StatsPanel {
         .text(labelX, curY, row.label, {
           fontSize: labelFontSize,
           color: "#bbbbbb",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          wordWrap: { width: labelMaxWidth, useAdvancedWrap: true },
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0, 0);
       this.contentContainer.add(label);
@@ -216,7 +226,9 @@ export class StatsPanel {
         .text(valueX - bonusOffsetX, curY, "", {
           fontSize: valueFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 0);
       this.contentContainer.add(value);
@@ -227,7 +239,9 @@ export class StatsPanel {
         .text(valueX, curY, "", {
           fontSize: valueFontSize,
           color: "#88ccff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 0);
       this.contentContainer.add(bonus);
@@ -246,10 +260,10 @@ export class StatsPanel {
     const screenH = getScreenHeight();
 
     this.pad = Math.round(12 * S);
-    this.lineH = Math.round(16 * S);
-    this.sectionGap = Math.round(10 * S);
-    this.headerH = Math.round(18 * S);
-    this.scrollBarWidth = Math.round(4 * S);
+    this.lineH = Math.round(22 * S);
+    this.sectionGap = Math.round(12 * S);
+    this.headerH = Math.round(22 * S);
+    this.scrollBarWidth = Math.round(8 * S);
 
     this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
 
@@ -281,16 +295,17 @@ export class StatsPanel {
     this.computeLayout();
 
     const S = this.S;
-    const labelFontSize = `${Math.round(10 * S)}px`;
-    const valueFontSize = `${Math.round(10 * S)}px`;
-    const headerFontSize = `${Math.round(11 * S)}px`;
-    const titleFontSize = `${Math.round(14 * S)}px`;
-    const hintFontSize = `${Math.round(9 * S)}px`;
+    const labelFontSize = `${Math.round(6 * S)}px`;
+    const valueFontSize = `${Math.round(7 * S)}px`;
+    const headerFontSize = `${Math.round(8 * S)}px`;
+    const titleFontSize = `${Math.round(9 * S)}px`;
+    const hintFontSize = `${Math.round(6 * S)}px`;
 
-    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(2 * S);
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
     const labelX = this.pad;
     const valueX = contentW - this.pad;
-    const bonusOffsetX = Math.round(70 * S);
+    const bonusOffsetX = Math.round(45 * S);
+    const labelMaxWidth = valueX - bonusOffsetX - labelX - Math.round(8 * S);
     const centerX = contentW / 2;
 
     // Update title and hint positions
@@ -333,6 +348,7 @@ export class StatsPanel {
 
       this.statLabelTexts[i].setPosition(labelX, curY);
       this.statLabelTexts[i].setFontSize(labelFontSize);
+      this.statLabelTexts[i].setWordWrapWidth(labelMaxWidth);
       this.statValueTexts[i].setPosition(valueX - bonusOffsetX, curY);
       this.statValueTexts[i].setFontSize(valueFontSize);
       this.statBonusTexts[i].setPosition(valueX, curY);

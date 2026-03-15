@@ -12,7 +12,7 @@ import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
 import { OptionsUI } from "../ui/OptionsUI";
-import { generateEntityTextures } from "../ui/EntityTextures";
+import { generateEntityTextures, addOutlineToImageData } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
@@ -117,6 +117,7 @@ interface MapSchemaInstance {
 }
 
 interface DecodedState {
+  playerCount: number;
   players: MapSchemaInstance;
   enemies: MapSchemaInstance;
   projectiles: MapSchemaInstance;
@@ -206,7 +207,7 @@ export class GameScene extends Phaser.Scene {
   // Dungeon portal sprites
   private dungeonPortalSprites = new Map<
     string,
-    { graphics: Phaser.GameObjects.Graphics; label: Phaser.GameObjects.Text; x: number; y: number; portalType: number }
+    { sprite: Phaser.GameObjects.Image; label: Phaser.GameObjects.Text; x: number; y: number; portalType: number }
   >();
 
   // "Press E" proximity prompt
@@ -257,6 +258,8 @@ export class GameScene extends Phaser.Scene {
       biomeLayer: Phaser.Tilemaps.TilemapLayer;
       decoBaseTilemap: Phaser.Tilemaps.Tilemap;
       decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+      decoTrunkTilemap: Phaser.Tilemaps.Tilemap;
+      decoTrunkLayer: Phaser.Tilemaps.TilemapLayer | null;
       decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
       decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
     }
@@ -555,9 +558,9 @@ export class GameScene extends Phaser.Scene {
     // "Press E" floating prompt (hidden until near a portal)
     this.pressEText = this.add
       .text(0, 0, "Press E", {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 3,
       })
@@ -671,9 +674,9 @@ export class GameScene extends Phaser.Scene {
     const cam = this.cameras.main;
     const text = this.add
       .text(cam.width / 2, cam.height * 0.25, message, {
-        fontSize: "18px",
+        fontSize: "11px",
         color: "#00ccff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 3,
       })
@@ -760,9 +763,11 @@ export class GameScene extends Phaser.Scene {
 
     this.loadingText = this.add
       .text(width / 2, height / 2 - Math.round(20 * S), zoneName, {
-        fontSize: `${Math.round(36 * S)}px`,
+        fontSize: `${Math.round(18 * S)}px`,
         color: zoneColor,
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -772,9 +777,11 @@ export class GameScene extends Phaser.Scene {
     if (difficulty) {
       this.loadingDifficultyText = this.add
         .text(width / 2, height / 2 + Math.round(20 * S), `Difficulty: ${difficulty}`, {
-          fontSize: `${Math.round(14 * S)}px`,
+          fontSize: `${Math.round(8 * S)}px`,
           color: difficultyColor ?? "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 1,
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
@@ -783,9 +790,11 @@ export class GameScene extends Phaser.Scene {
 
     this.loadingSubText = this.add
       .text(width / 2, height / 2 + Math.round(50 * S), "Entering...", {
-        fontSize: `${Math.round(16 * S)}px`,
+        fontSize: `${Math.round(10 * S)}px`,
         color: "#888888",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -833,6 +842,10 @@ export class GameScene extends Phaser.Scene {
       label.destroy();
     }
     this.realmPortalLabels = [];
+    for (const img of this.realmPortalImages) {
+      img.destroy();
+    }
+    this.realmPortalImages = [];
   }
 
   private drawGround(): void {
@@ -900,9 +913,11 @@ export class GameScene extends Phaser.Scene {
     this.clearNexusLabels();
     const label = this.add
       .text(mapData.spawnRoom.centerX, mapData.spawnRoom.centerY + 60, "~ The Nexus ~", {
-        fontSize: "18px",
+        fontSize: "11px",
         color: "#44aa66",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.5);
@@ -911,9 +926,11 @@ export class GameScene extends Phaser.Scene {
     // Crafting table label
     const craftLabel = this.add
       .text(ctx, cty + ctr * 0.6 + 14, "Crafting Table", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#ddaa55",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.6);
@@ -972,9 +989,11 @@ export class GameScene extends Phaser.Scene {
     this.clearNexusLabels();
     const chestLabel = this.add
       .text(chestX, chestY + chestH / 2 + 14, "Vault Chest", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#ddaa55",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.6);
@@ -999,9 +1018,11 @@ export class GameScene extends Phaser.Scene {
     const returnLabel = this.enteredVaultViaPortalGem ? "Return" : "Return to Nexus";
     const portalLabel = this.add
       .text(rpx, rpy + rpr + 14, returnLabel, {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#ddaa55",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.5);
@@ -1028,9 +1049,11 @@ export class GameScene extends Phaser.Scene {
     // Crafting table label
     const vaultCraftLabel = this.add
       .text(vctx, vcty + vctr * 0.6 + 14, "Crafting Table", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#ddaa55",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.6);
@@ -1059,9 +1082,11 @@ export class GameScene extends Phaser.Scene {
 
     const label = this.add
       .text(px, py + r + 14, "Vault Portal", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#aa44ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       })
       .setOrigin(0.5)
       .setAlpha(0.5);
@@ -1145,7 +1170,8 @@ export class GameScene extends Phaser.Scene {
 
     // --- Decoration tileset texture ---
     const TALL_TYPES = new Set([0, 1, 2, 3]); // TreePalm, TreeOak, TreePine, TreeDead
-    const decoTileCount = 24; // 0-11 base, 12-23 canopy
+    const DECO_TYPE_COUNT = 19; // 0-18 decoration types
+    const decoTileCount = DECO_TYPE_COUNT * 2; // base + canopy
     const decoTilesetKey = "realm-decoration-tileset";
     if (!this.textures.exists(decoTilesetKey)) {
       const decoCanvas = document.createElement("canvas");
@@ -1153,11 +1179,11 @@ export class GameScene extends Phaser.Scene {
       decoCanvas.height = ts;
       const dctx = decoCanvas.getContext("2d")!;
       dctx.clearRect(0, 0, decoCanvas.width, decoCanvas.height);
-      for (let i = 0; i < 12; i++) {
+      for (let i = 0; i < DECO_TYPE_COUNT; i++) {
         this.drawDecorationTile(dctx, i, ts, false);
       }
-      for (let i = 0; i < 12; i++) {
-        this.drawDecorationTile(dctx, i + 12, ts, true);
+      for (let i = 0; i < DECO_TYPE_COUNT; i++) {
+        this.drawDecorationTile(dctx, i + DECO_TYPE_COUNT, ts, true);
       }
       this.textures.addCanvas(decoTilesetKey, decoCanvas);
     }
@@ -1193,7 +1219,7 @@ export class GameScene extends Phaser.Scene {
         canopyBucket.canopy.push({
           tileX: deco.tileX,
           tileY: canopyTY,
-          type: deco.type + 12,
+          type: deco.type + DECO_TYPE_COUNT,
         });
       }
     }
@@ -1272,6 +1298,8 @@ export class GameScene extends Phaser.Scene {
     biomeLayer: Phaser.Tilemaps.TilemapLayer;
     decoBaseTilemap: Phaser.Tilemaps.Tilemap;
     decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+    decoTrunkTilemap: Phaser.Tilemaps.Tilemap;
+    decoTrunkLayer: Phaser.Tilemaps.TilemapLayer | null;
     decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
     decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
   } | null {
@@ -1336,17 +1364,24 @@ export class GameScene extends Phaser.Scene {
     const key = `${cx},${cy}`;
     const decoEntries = this.hostileChunkDecoIndex?.get(key);
 
-    // Base decoration layer
+    // Base decoration layer (ground decos: bushes, rocks, grass, flowers)
+    // Tree trunks get their own layer so they render above the player
     const baseData: number[][] = [];
+    const trunkData: number[][] = [];
     for (let y = 0; y < chunkH; y++) {
       baseData.push(new Array(chunkW).fill(-1));
+      trunkData.push(new Array(chunkW).fill(-1));
     }
     if (decoEntries) {
       for (const d of decoEntries.base) {
         const lx = d.tileX - startX;
         const ly = d.tileY - startY;
         if (lx >= 0 && lx < chunkW && ly >= 0 && ly < chunkH) {
-          baseData[ly][lx] = d.type;
+          if (d.type <= 3) {
+            trunkData[ly][lx] = d.type; // tree trunks (types 0-3)
+          } else {
+            baseData[ly][lx] = d.type;  // ground decorations
+          }
         }
       }
     }
@@ -1373,6 +1408,31 @@ export class GameScene extends Phaser.Scene {
         worldY
       );
       if (decoBaseLayer) decoBaseLayer.setDepth(-0.5);
+    }
+
+    // Tree trunk layer — renders above player (depth 5) so player walks behind trunks
+    const decoTrunkMap = this.make.tilemap({
+      data: trunkData,
+      tileWidth: ts,
+      tileHeight: ts,
+    });
+    const decoTrunkTileset = decoTrunkMap.addTilesetImage(
+      "decorations-trunk",
+      "realm-decoration-tileset",
+      ts,
+      ts,
+      0,
+      0
+    );
+    let decoTrunkLayer: Phaser.Tilemaps.TilemapLayer | null = null;
+    if (decoTrunkTileset) {
+      decoTrunkLayer = decoTrunkMap.createLayer(
+        0,
+        decoTrunkTileset,
+        worldX,
+        worldY
+      );
+      if (decoTrunkLayer) decoTrunkLayer.setDepth(5);
     }
 
     // Canopy decoration layer
@@ -1421,6 +1481,8 @@ export class GameScene extends Phaser.Scene {
       biomeLayer,
       decoBaseTilemap: decoBaseMap,
       decoBaseLayer,
+      decoTrunkTilemap: decoTrunkMap,
+      decoTrunkLayer,
       decoCanopyTilemap: decoCanopyMap,
       decoCanopyLayer,
     };
@@ -1432,16 +1494,43 @@ export class GameScene extends Phaser.Scene {
     biomeLayer: Phaser.Tilemaps.TilemapLayer;
     decoBaseTilemap: Phaser.Tilemaps.Tilemap;
     decoBaseLayer: Phaser.Tilemaps.TilemapLayer | null;
+    decoTrunkTilemap: Phaser.Tilemaps.Tilemap;
+    decoTrunkLayer: Phaser.Tilemaps.TilemapLayer | null;
     decoCanopyTilemap: Phaser.Tilemaps.Tilemap;
     decoCanopyLayer: Phaser.Tilemaps.TilemapLayer | null;
   }): void {
     if (chunk.decoCanopyLayer) chunk.decoCanopyLayer.destroy();
     chunk.decoCanopyTilemap.destroy();
+    if (chunk.decoTrunkLayer) chunk.decoTrunkLayer.destroy();
+    chunk.decoTrunkTilemap.destroy();
     if (chunk.decoBaseLayer) chunk.decoBaseLayer.destroy();
     chunk.decoBaseTilemap.destroy();
     chunk.biomeLayer.destroy();
     chunk.biomeTilemap.destroy();
   }
+
+  // Sprite texture keys indexed by base decoration type (0-18)
+  private static readonly DECO_BASE_SPRITE_KEYS: string[] = [
+    "deco-tree-bottom-0", // 0  TreePalm
+    "deco-tree-bottom-1", // 1  TreeOak
+    "deco-tree-bottom-2", // 2  TreePine
+    "deco-tree-bottom-3", // 3  TreeDead
+    "deco-stones-small",  // 4  RockSmall
+    "deco-stone-large",   // 5  RockLarge
+    "deco-shrub-large",   // 6  Bush
+    "deco-shrub-small",   // 7  Cactus
+    "deco-flower-0",      // 8  Flower
+    "deco-grass-0",       // 9  Mushroom
+    "deco-blood-skull",   // 10 Bones
+    "deco-blood-small",   // 11 Ruins
+    "deco-grass-1",       // 12 Grass1
+    "deco-grass-2",       // 13 Grass2
+    "deco-grass-3",       // 14 Grass3
+    "deco-grass-4",       // 15 Grass4
+    "deco-flowers-1",     // 16 Flowers1
+    "deco-flowers-2",     // 17 Flowers2
+    "deco-flowers-3",     // 18 Flowers3
+  ];
 
   private drawDecorationTile(
     ctx: CanvasRenderingContext2D,
@@ -1449,193 +1538,48 @@ export class GameScene extends Phaser.Scene {
     ts: number,
     isCanopy: boolean
   ): void {
+    const DECO_TYPE_COUNT = 19;
     const ox = type * ts;
-    // For canopy tiles (12-23), map back to base type (0-11)
-    const baseType = isCanopy ? type - 12 : type;
-    switch (baseType) {
-      case 0: { // TreePalm
-        if (isCanopy) {
-          // Crown only — rendered in the tile above the trunk
-          ctx.fillStyle = "#228B22";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 24, 10, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          // Trunk only — bottom of the tree
-          ctx.fillStyle = "#8B6914";
-          ctx.fillRect(ox + 17, 4, 6, 36);
-        }
-        break;
-      }
-      case 1: { // TreeOak
-        if (isCanopy) {
-          ctx.fillStyle = "#2E8B2E";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 24, 12, 0, Math.PI * 2);
-          ctx.fill();
-        } else {
-          ctx.fillStyle = "#6B4226";
-          ctx.fillRect(ox + 17, 4, 6, 36);
-        }
-        break;
-      }
-      case 2: { // TreePine
-        if (isCanopy) {
-          ctx.fillStyle = "#1A5C1A";
-          ctx.beginPath();
-          ctx.moveTo(ox + 20, 6);
-          ctx.lineTo(ox + 8, 38);
-          ctx.lineTo(ox + 32, 38);
-          ctx.closePath();
-          ctx.fill();
-        } else {
-          ctx.fillStyle = "#5C4033";
-          ctx.fillRect(ox + 18, 4, 4, 36);
-        }
-        break;
-      }
-      case 3: { // TreeDead
-        if (isCanopy) {
-          // Bare branches in the canopy tile
-          ctx.strokeStyle = "#4A3728";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(ox + 20, 38);
-          ctx.lineTo(ox + 12, 20);
-          ctx.moveTo(ox + 20, 34);
-          ctx.lineTo(ox + 28, 18);
-          ctx.moveTo(ox + 12, 20);
-          ctx.lineTo(ox + 8, 12);
-          ctx.moveTo(ox + 28, 18);
-          ctx.lineTo(ox + 32, 10);
-          ctx.stroke();
-        } else {
-          // Trunk
-          ctx.fillStyle = "#4A3728";
-          ctx.fillRect(ox + 18, 0, 4, 40);
-        }
-        break;
-      }
-      case 4: { // RockSmall — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#7A7A7A";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 24, 6, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-      case 5: { // RockLarge — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#6A6A6A";
-          ctx.beginPath();
-          ctx.moveTo(ox + 14, 28);
-          ctx.lineTo(ox + 10, 18);
-          ctx.lineTo(ox + 16, 10);
-          ctx.lineTo(ox + 26, 10);
-          ctx.lineTo(ox + 30, 20);
-          ctx.lineTo(ox + 26, 28);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = "#8A8A8A";
-          ctx.beginPath();
-          ctx.moveTo(ox + 16, 12);
-          ctx.lineTo(ox + 24, 12);
-          ctx.lineTo(ox + 20, 16);
-          ctx.closePath();
-          ctx.fill();
-        }
-        break;
-      }
-      case 6: { // Bush — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#3A7A2A";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 24, 8, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-      case 7: { // Cactus — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#2D7A2D";
-          ctx.fillRect(ox + 17, 10, 6, 26);
-          ctx.fillRect(ox + 11, 16, 6, 4);
-          ctx.fillRect(ox + 11, 12, 4, 8);
-          ctx.fillRect(ox + 23, 20, 6, 4);
-          ctx.fillRect(ox + 25, 16, 4, 8);
-        }
-        break;
-      }
-      case 8: { // Flower — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#4A8A3A";
-          ctx.fillRect(ox + 19, 22, 2, 10);
-          ctx.fillStyle = "#E06080";
-          for (const [cx, cy] of [[20, 18], [16, 22], [24, 22], [20, 26]]) {
-            ctx.beginPath();
-            ctx.arc(ox + cx, cy, 3, 0, Math.PI * 2);
-            ctx.fill();
-          }
-          ctx.fillStyle = "#FFDD44";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 22, 2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-      case 9: { // Mushroom — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#D4C4A0";
-          ctx.fillRect(ox + 18, 24, 4, 10);
-          ctx.fillStyle = "#CC4444";
-          ctx.beginPath();
-          ctx.arc(ox + 20, 24, 8, Math.PI, 0);
-          ctx.closePath();
-          ctx.fill();
-          ctx.fillStyle = "#FFFFFF";
-          ctx.beginPath();
-          ctx.arc(ox + 17, 21, 2, 0, Math.PI * 2);
-          ctx.fill();
-          ctx.beginPath();
-          ctx.arc(ox + 23, 21, 2, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
-      case 10: { // Bones — ground level, no canopy
-        if (!isCanopy) {
-          ctx.strokeStyle = "#D4D0C0";
-          ctx.lineWidth = 2;
-          ctx.beginPath();
-          ctx.moveTo(ox + 12, 14);
-          ctx.lineTo(ox + 28, 28);
-          ctx.moveTo(ox + 28, 14);
-          ctx.lineTo(ox + 12, 28);
-          ctx.stroke();
-          ctx.fillStyle = "#D4D0C0";
-          for (const [cx, cy] of [[12, 14], [28, 28], [28, 14], [12, 28]]) {
-            ctx.beginPath();
-            ctx.arc(ox + cx, cy, 2, 0, Math.PI * 2);
-            ctx.fill();
-          }
-        }
-        break;
-      }
-      case 11: { // Ruins — ground level, no canopy
-        if (!isCanopy) {
-          ctx.fillStyle = "#6A6A5A";
-          ctx.fillRect(ox + 8, 20, 10, 16);
-          ctx.fillStyle = "#5A5A4A";
-          ctx.fillRect(ox + 22, 14, 10, 22);
-          ctx.fillStyle = "#7A7A6A";
-          ctx.beginPath();
-          ctx.arc(ox + 18, 30, 3, 0, Math.PI * 2);
-          ctx.fill();
-        }
-        break;
-      }
+    const baseType = isCanopy ? type - DECO_TYPE_COUNT : type;
+
+    let spriteKey: string | null = null;
+    if (isCanopy) {
+      // Only trees (0-3) have canopy sprites
+      if (baseType <= 3) spriteKey = `deco-tree-top-${baseType}`;
+    } else {
+      spriteKey = GameScene.DECO_BASE_SPRITE_KEYS[baseType] ?? null;
     }
+
+    if (!spriteKey) return;
+    const tex = this.textures.get(spriteKey);
+    if (!tex || tex.key === "__MISSING") return;
+    const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+
+    // Draw sprite onto a temp canvas at tile size, apply outline, then blit
+    const tmpCanvas = document.createElement("canvas");
+    tmpCanvas.width = ts;
+    tmpCanvas.height = ts;
+    const tmpCtx = tmpCanvas.getContext("2d")!;
+    tmpCtx.imageSmoothingEnabled = false;
+    // Inset by 1px to leave room for outlines, but skip inset on tree seam edges
+    const isTree = baseType <= 3;
+    const insetTop = (isTree && !isCanopy) ? 0 : 1;    // trunk: flush top edge
+    const insetBottom = (isTree && isCanopy) ? 0 : 1;   // canopy: flush bottom edge
+    tmpCtx.drawImage(
+      src, 0, 0, src.width, src.height,
+      1, insetTop, ts - 2, ts - insetTop - insetBottom
+    );
+
+    // Tree tops skip bottom outline, tree bottoms skip top outline (seam)
+    const skipEdges = isTree
+      ? isCanopy
+        ? { bottom: true }   // tree top: skip bottom edge
+        : { top: true }      // tree bottom: skip top edge
+      : undefined;
+
+    addOutlineToImageData(tmpCtx, ts, ts, skipEdges);
+
+    ctx.drawImage(tmpCanvas, ox, 0);
   }
 
   private destroyHostileTilemap(): void {
@@ -1726,51 +1670,39 @@ export class GameScene extends Phaser.Scene {
   }
 
   private realmPortalLabels: Phaser.GameObjects.Text[] = [];
+  private realmPortalImages: Phaser.GameObjects.Image[] = [];
 
   private drawPortal(): void {
     this.portalGraphics.clear();
-    // Clean up old labels
+    // Clean up old labels and images
     for (const lbl of this.realmPortalLabels) lbl.destroy();
     this.realmPortalLabels = [];
+    for (const img of this.realmPortalImages) img.destroy();
+    this.realmPortalImages = [];
 
     if (this.localZone !== "nexus") return;
 
     const portals = [
-      { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, label: "Realm 1" },
-      { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, label: "Realm 2" },
+      { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, label: "The Wild 1" },
+      { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, label: "The Wild 2" },
     ];
 
     for (const p of portals) {
-      // Outer glow
-      this.portalGraphics.lineStyle(4, 0x8844ff, 0.3);
-      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS + 12);
-
-      // Mid glow
-      this.portalGraphics.lineStyle(3, 0x9955ff, 0.5);
-      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS + 4);
-
-      // Main ring
-      this.portalGraphics.lineStyle(3, 0xaa66ff, 0.8);
-      this.portalGraphics.strokeCircle(p.x, p.y, PORTAL_RADIUS);
-
-      // Inner fill
-      this.portalGraphics.fillStyle(0x6622cc, 0.4);
-      this.portalGraphics.fillCircle(p.x, p.y, PORTAL_RADIUS - 4);
-
-      // Bright core
-      this.portalGraphics.fillStyle(0xaa66ff, 0.25);
-      this.portalGraphics.fillCircle(p.x, p.y, PORTAL_RADIUS / 2);
+      const img = this.add.image(p.x, p.y, "portal-the-wild").setDepth(-0.3);
+      this.realmPortalImages.push(img);
 
       // Label
       const lbl = this.add.text(p.x, p.y - PORTAL_RADIUS - 14, p.label, {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#aa66ff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
       }).setOrigin(0.5).setDepth(6);
       this.realmPortalLabels.push(lbl);
     }
 
-    // Vault portal (gold-themed, in west room)
+    // Vault portal (gold-themed, in west room — no sprite, keep graphics)
     const vpx = VAULT_PORTAL_X;
     const vpy = VAULT_PORTAL_Y;
 
@@ -1786,9 +1718,11 @@ export class GameScene extends Phaser.Scene {
     this.portalGraphics.fillCircle(vpx, vpy, PORTAL_RADIUS / 2);
 
     const vaultLbl = this.add.text(vpx, vpy - PORTAL_RADIUS - 14, "Vault", {
-      fontSize: "12px",
+      fontSize: "7px",
       color: "#ddaa55",
-      fontFamily: "monospace",
+      fontFamily: "'Press Start 2P', monospace",
+      stroke: "#000000",
+      strokeThickness: 1,
     }).setOrigin(0.5).setDepth(6);
     this.realmPortalLabels.push(vaultLbl);
   }
@@ -2020,7 +1954,8 @@ export class GameScene extends Phaser.Scene {
           proj.angle as number,
           proj.speed as number,
           pt,
-          (proj.projColor as number) ?? 0
+          (proj.projColor as number) ?? 0,
+          (proj.projSpriteIndex as number) ?? 0
         );
         this.predictedProjectiles.push({
           sprite: projSprite,
@@ -2038,7 +1973,7 @@ export class GameScene extends Phaser.Scene {
           hitEnemies: new Set(),
         });
         // Re-sync local timer to prevent continued drift
-        if (pt === ProjectileType.QuiverShot || pt === ProjectileType.RelicExpand) {
+        if (pt === ProjectileType.QuiverShot || pt === ProjectileType.RelicExpand || pt === ProjectileType.HelmSpin) {
           this.lastLocalAbilityTime = performance.now();
         } else {
           this.lastLocalShootTime = performance.now();
@@ -2055,7 +1990,8 @@ export class GameScene extends Phaser.Scene {
         proj.angle as number,
         proj.speed as number,
         (proj.projType as number) ?? 0,
-        (proj.projColor as number) ?? 0
+        (proj.projColor as number) ?? 0,
+        (proj.projSpriteIndex as number) ?? 0
       );
 
       this.projectileSprites.set(id, sprite);
@@ -2402,35 +2338,9 @@ export class GameScene extends Phaser.Scene {
               this.lastLocalAbilityTime = now;
               const abilitySubtype = getItemSubtype(abilityItem.baseItemId);
               const abilityTemplate = ABILITY_TEMPLATES[abilitySubtype];
-              const isExpandingAoe = abilityItem.isUT ? false : abilityTemplate?.expandingAoe === true;
-              const isAoeRing = !isExpandingAoe && (abilityItem.isUT ? false : abilityTemplate?.aoeRing === true);
+              const isAoeRing = abilityItem.isUT ? false : abilityTemplate?.aoeRing === true;
 
-              if (isExpandingAoe) {
-                // Expanding AoE prediction — spawn at cursor position
-                const projSprite = new ProjectileSprite(
-                  this,
-                  aimX,
-                  aimY,
-                  EntityType.Player,
-                  0,
-                  as.projectileSpeed,
-                  ProjectileType.RelicExpand
-                );
-                this.predictedProjectiles.push({
-                  sprite: projSprite,
-                  angle: 0,
-                  projType: ProjectileType.RelicExpand,
-                  startX: aimX,
-                  startY: aimY,
-                  maxRange: as.range,
-                  createdAt: now,
-                  confirmed: false,
-                  collisionRadius: as.projectileSize,
-                  damage: as.damage,
-                  piercing: true,
-                  hitEnemies: new Set(),
-                });
-              } else if (!isAoeRing) {
+              if (!isAoeRing) {
                 // Single aimed projectile (Quiver, etc.)
                 const projSprite = new ProjectileSprite(
                   this,
@@ -2456,7 +2366,7 @@ export class GameScene extends Phaser.Scene {
                   hitEnemies: new Set(),
                 });
               }
-              // AoE ring (Helm) — no client prediction, server handles it
+              // AoE ring (Helm, Relic) — no client prediction, server handles it
             }
           }
         }
@@ -2626,7 +2536,7 @@ export class GameScene extends Phaser.Scene {
       for (const pp of this.predictedProjectiles) pp.sprite.setVisible(true);
       this.bagSprites.forEach((sprite) => sprite.setVisible(true));
       this.dungeonPortalSprites.forEach((ps) => {
-        ps.graphics.setVisible(true);
+        ps.sprite.setVisible(true);
         ps.label.setVisible(true);
       });
       this.playerSprites.forEach((sprite) => {
@@ -2682,7 +2592,7 @@ export class GameScene extends Phaser.Scene {
         (localPlayer.maxMana as number) ?? 100,
         currentXp,
         currentLevel,
-        state.players.size,
+        state.playerCount,
         localSprite?.displayX ?? 0,
         localSprite?.displayY ?? 0,
         this.playerSprites,
@@ -2819,8 +2729,8 @@ export class GameScene extends Phaser.Scene {
       const py = portal.y as number;
       const pType = portal.portalType as number;
 
-      const graphics = this.add.graphics().setDepth(5);
-      this.drawDungeonPortalGraphics(graphics, px, py, pType);
+      const textureKey = this.getDungeonPortalTextureKey(pType);
+      const sprite = this.add.image(px, py, textureKey).setDepth(-0.3);
 
       let labelText = "Dungeon Portal";
       let labelColor = "#ffffff";
@@ -2837,69 +2747,37 @@ export class GameScene extends Phaser.Scene {
 
       const label = this.add
         .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
-          fontSize: "11px",
+          fontSize: "7px",
           color: labelColor,
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 1,
         })
         .setOrigin(0.5)
         .setDepth(6);
 
-      this.dungeonPortalSprites.set(id, { graphics, label, x: px, y: py, portalType: pType });
+      this.dungeonPortalSprites.set(id, { sprite, label, x: px, y: py, portalType: pType });
     });
 
     state.dungeonPortals.onRemove((_portal, id) => {
       const ps = this.dungeonPortalSprites.get(id);
       if (ps) {
-        ps.graphics.destroy();
+        ps.sprite.destroy();
         ps.label.destroy();
         this.dungeonPortalSprites.delete(id);
       }
     });
   }
 
-  private drawDungeonPortalGraphics(
-    graphics: Phaser.GameObjects.Graphics,
-    x: number,
-    y: number,
-    portalType: number
-  ): void {
-    let color = 0xffffff;
-    let glowColor = 0xaaaaaa;
-    if (portalType === PortalType.InfernalPitEntrance) {
-      color = 0xff4400;
-      glowColor = 0xff6622;
-    } else if (portalType === PortalType.VoidSanctumEntrance) {
-      color = 0x6600cc;
-      glowColor = 0x8833ee;
-    } else if (portalType === PortalType.DungeonExit) {
-      color = 0x44ff44;
-      glowColor = 0x66ff66;
-    }
-
-    // Outer glow
-    graphics.lineStyle(4, glowColor, 0.3);
-    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS + 10);
-
-    // Mid ring
-    graphics.lineStyle(3, color, 0.5);
-    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS + 3);
-
-    // Main ring
-    graphics.lineStyle(3, color, 0.8);
-    graphics.strokeCircle(x, y, DUNGEON_PORTAL_RADIUS);
-
-    // Inner fill
-    graphics.fillStyle(color, 0.25);
-    graphics.fillCircle(x, y, DUNGEON_PORTAL_RADIUS - 4);
-
-    // Bright core
-    graphics.fillStyle(color, 0.15);
-    graphics.fillCircle(x, y, DUNGEON_PORTAL_RADIUS / 2);
+  private getDungeonPortalTextureKey(portalType: number): string {
+    if (portalType === PortalType.InfernalPitEntrance) return "portal-infernal-pit";
+    if (portalType === PortalType.VoidSanctumEntrance) return "portal-void-sanctum";
+    return "portal-the-wild";
   }
 
   private clearDungeonPortalSprites(): void {
     this.dungeonPortalSprites.forEach((ps) => {
-      ps.graphics.destroy();
+      ps.sprite.destroy();
       ps.label.destroy();
     });
     this.dungeonPortalSprites.clear();
@@ -2915,8 +2793,8 @@ export class GameScene extends Phaser.Scene {
       const py = portal.y as number;
       const pType = portal.portalType as number;
 
-      const graphics = this.add.graphics().setDepth(5);
-      this.drawDungeonPortalGraphics(graphics, px, py, pType);
+      const textureKey = this.getDungeonPortalTextureKey(pType);
+      const sprite = this.add.image(px, py, textureKey).setDepth(-0.3);
 
       let labelText = "Dungeon Portal";
       let labelColor = "#ffffff";
@@ -2933,14 +2811,16 @@ export class GameScene extends Phaser.Scene {
 
       const label = this.add
         .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
-          fontSize: "11px",
+          fontSize: "7px",
           color: labelColor,
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 1,
         })
         .setOrigin(0.5)
         .setDepth(6);
 
-      this.dungeonPortalSprites.set(id, { graphics, label, x: px, y: py, portalType: pType });
+      this.dungeonPortalSprites.set(id, { sprite, label, x: px, y: py, portalType: pType });
     });
   }
 
@@ -3005,9 +2885,11 @@ export class GameScene extends Phaser.Scene {
         mapData.spawnRoom.centerY + (mapData.spawnRoom.h * TILE_SIZE) / 2 + 20,
         `~ ${visual.name} ~`,
         {
-          fontSize: "14px",
+          fontSize: "8px",
           color: "#" + visual.tileLineColor.toString(16).padStart(6, "0"),
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 1,
         }
       )
       .setOrigin(0.5)

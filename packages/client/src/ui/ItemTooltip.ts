@@ -59,11 +59,11 @@ export class ItemTooltip {
     this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
     this.bannerHeight = Math.round(BASE_BANNER_HEIGHT * S);
 
-    const nameFontSize = `${Math.round(12 * S)}px`;
-    const tierFontSize = `${Math.round(10 * S)}px`;
-    const statsFontSize = `${Math.round(10 * S)}px`;
-    const tieredStatFontSize = `${Math.round(9 * S)}px`;
-    const descFontSize = `${Math.round(9 * S)}px`;
+    const nameFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+    const statsFontSize = `${Math.round(7 * S)}px`;
+    const tieredStatFontSize = `${Math.round(6 * S)}px`;
+    const descFontSize = `${Math.round(6 * S)}px`;
     const cx = this.tooltipWidth / 2;
     const wrapWidth = this.tooltipWidth - this.tooltipPadding * 2;
 
@@ -80,33 +80,39 @@ export class ItemTooltip {
       .text(cx, this.bannerHeight / 2, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0.5)
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.nameText);
 
-    const tierY = this.bannerHeight + Math.round(4 * S);
+    const tierY = this.bannerHeight + Math.round(8 * S);
     this.tierText = scene.add
       .text(cx, tierY, "", {
         fontSize: tierFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
     this.container.add(this.tierText);
 
-    const statsY = tierY + Math.round(16 * S);
+    const statsY = tierY + Math.round(17 * S);
     this.statsText = scene.add
       .text(cx, statsY, "", {
         fontSize: statsFontSize,
         color: "#aaffaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         lineSpacing: 2,
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
@@ -116,8 +122,10 @@ export class ItemTooltip {
       .text(cx, 0, "────────────────", {
         fontSize: descFontSize,
         color: "#555566",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
     this.container.add(this.dividerAboveLockedText);
@@ -126,9 +134,11 @@ export class ItemTooltip {
       .text(cx, statsY, "", {
         fontSize: tieredStatFontSize,
         color: "#ffffff",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
@@ -138,8 +148,10 @@ export class ItemTooltip {
       .text(cx, 0, "────────────────", {
         fontSize: descFontSize,
         color: "#555566",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0);
     this.container.add(this.dividerBelowLockedText);
@@ -148,9 +160,11 @@ export class ItemTooltip {
       .text(cx, statsY, "", {
         fontSize: tieredStatFontSize,
         color: "#4488ff",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
@@ -160,9 +174,11 @@ export class ItemTooltip {
       .text(cx, 0, "", {
         fontSize: tieredStatFontSize,
         color: "#aaffaa",
-        fontFamily: "monospace",
-        lineSpacing: Math.round(4 * S),
+        fontFamily: "'Press Start 2P', monospace",
+        lineSpacing: Math.round(8 * S),
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
@@ -170,25 +186,29 @@ export class ItemTooltip {
 
     this.shiftHintText = scene.add
       .text(cx, 0, "[SHIFT] for more info", {
-        fontSize: `${Math.round(9 * S)}px`,
+        fontSize: `${Math.round(6 * S)}px`,
         color: "#888888",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "italic",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
     this.container.add(this.shiftHintText);
 
     // Pool of tier label + stat line pairs for detailed mode
-    const tierLabelFontSize = `${Math.round(8 * S)}px`;
+    const tierLabelFontSize = `${Math.round(6 * S)}px`;
     for (let i = 0; i < 8; i++) {
       const tierLabel = scene.add
         .text(cx, 0, "", {
           fontSize: tierLabelFontSize,
           color: "#888888",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5, 0)
         .setVisible(false);
@@ -198,8 +218,10 @@ export class ItemTooltip {
         .text(cx, 0, "", {
           fontSize: tieredStatFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5, 0)
         .setWordWrapWidth(wrapWidth)
@@ -213,9 +235,11 @@ export class ItemTooltip {
       .text(cx, statsY, "", {
         fontSize: descFontSize,
         color: "#888899",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "italic",
         align: "center",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setWordWrapWidth(wrapWidth);
@@ -232,7 +256,7 @@ export class ItemTooltip {
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
     const S = this.S;
-    const tierY = this.bannerHeight + Math.round(4 * S);
+    const tierY = this.bannerHeight + Math.round(8 * S);
 
     // For UT items and consumables, fall back to static ITEM_DEFS display
     if (item.isUT || category === ItemCategory.Consumable) {
@@ -263,7 +287,7 @@ export class ItemTooltip {
     this.tierText.setY(tierY);
 
     // Reduced gap below tier text to compensate for font metrics padding
-    const statsStartY = tierY + this.tierText.height + Math.round(2 * S);
+    const statsStartY = tierY + this.tierText.height + Math.round(8 * S);
 
     // Clear base stats text (no longer used for tiered items)
     this.statsText.setText("");
@@ -518,7 +542,7 @@ export class ItemTooltip {
     }
 
     const S = this.S;
-    const tierY = this.bannerHeight + Math.round(4 * S);
+    const tierY = this.bannerHeight + Math.round(8 * S);
 
     // Reset reusable text state
     this.descText.setColor("#888899");
@@ -539,7 +563,7 @@ export class ItemTooltip {
     this.tierText.setY(tierY);
 
     // Reduced gap below tier text to compensate for font metrics padding
-    const statsStartY = tierY + this.tierText.height + Math.round(2 * S);
+    const statsStartY = tierY + this.tierText.height + Math.round(8 * S);
 
     // Stats
     const statsLines: string[] = [];
@@ -601,7 +625,7 @@ export class ItemTooltip {
 
   private showConsumable(def: (typeof ITEM_DEFS)[number], screenX: number, screenY: number): void {
     const S = this.S;
-    const tierY = this.bannerHeight + Math.round(4 * S);
+    const tierY = this.bannerHeight + Math.round(8 * S);
 
     // Name (white — banner provides color)
     this.nameText.setText(def.name);
@@ -627,7 +651,7 @@ export class ItemTooltip {
     for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
 
     // Description (blue)
-    const statsBottom = tierY + this.statsText.height + Math.round(4 * S);
+    const statsBottom = tierY + this.statsText.height + Math.round(8 * S);
     this.descText.setColor("#4488ff");
     this.descText.setY(statsBottom);
     this.descText.setText(def.description);
@@ -635,7 +659,7 @@ export class ItemTooltip {
     // Usage hint (repurpose shiftHintText)
     let totalHeight: number;
     if (def.usageHint) {
-      const descBottom = statsBottom + this.descText.height + Math.round(4 * S);
+      const descBottom = statsBottom + this.descText.height + Math.round(8 * S);
       this.shiftHintText.setText(def.usageHint);
       this.shiftHintText.setColor("#777777");
       this.shiftHintText.setFontStyle("italic");
@@ -659,7 +683,7 @@ export class ItemTooltip {
     }
 
     const S = this.S;
-    const tierY = this.bannerHeight + Math.round(4 * S);
+    const tierY = this.bannerHeight + Math.round(8 * S);
 
     // Name (white — banner provides the color)
     this.nameText.setText(orbDef.name);
@@ -685,13 +709,13 @@ export class ItemTooltip {
     for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
 
     // Description (blue)
-    const statsBottom = tierY + this.statsText.height + Math.round(4 * S);
+    const statsBottom = tierY + this.statsText.height + Math.round(8 * S);
     this.descText.setColor("#4488ff");
     this.descText.setY(statsBottom);
     this.descText.setText(orbDef.description);
 
     // Usage hint (repurpose shiftHintText)
-    const descBottom = statsBottom + this.descText.height + Math.round(4 * S);
+    const descBottom = statsBottom + this.descText.height + Math.round(8 * S);
     this.shiftHintText.setText(orbDef.usageHint);
     this.shiftHintText.setColor("#777777");
     this.shiftHintText.setFontStyle("italic");
@@ -749,11 +773,11 @@ export class ItemTooltip {
     this.tooltipPadding = Math.round(BASE_TOOLTIP_PADDING * S);
     this.bannerHeight = Math.round(BASE_BANNER_HEIGHT * S);
 
-    const nameFontSize = `${Math.round(12 * S)}px`;
-    const tierFontSize = `${Math.round(10 * S)}px`;
-    const statsFontSize = `${Math.round(10 * S)}px`;
-    const tieredStatFontSize = `${Math.round(9 * S)}px`;
-    const descFontSize = `${Math.round(9 * S)}px`;
+    const nameFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+    const statsFontSize = `${Math.round(7 * S)}px`;
+    const tieredStatFontSize = `${Math.round(6 * S)}px`;
+    const descFontSize = `${Math.round(6 * S)}px`;
     const cx = this.tooltipWidth / 2;
     const wrapWidth = this.tooltipWidth - this.tooltipPadding * 2;
 
@@ -782,14 +806,14 @@ export class ItemTooltip {
     this.hiddenStatsText.setFontSize(tieredStatFontSize);
     this.hiddenStatsText.setWordWrapWidth(wrapWidth);
     this.shiftHintText.setX(cx);
-    this.shiftHintText.setFontSize(`${Math.round(9 * S)}px`);
+    this.shiftHintText.setFontSize(`${Math.round(6 * S)}px`);
     this.shiftHintText.setWordWrapWidth(wrapWidth);
 
     this.descText.setX(cx);
     this.descText.setFontSize(descFontSize);
     this.descText.setWordWrapWidth(wrapWidth);
 
-    const tierLabelFontSize = `${Math.round(8 * S)}px`;
+    const tierLabelFontSize = `${Math.round(6 * S)}px`;
     for (const entry of this.statPool) {
       entry.tier.setX(cx);
       entry.tier.setFontSize(tierLabelFontSize);

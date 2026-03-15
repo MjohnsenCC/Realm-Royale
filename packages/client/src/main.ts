@@ -6,6 +6,7 @@ import { CharacterSelectScene } from "./scenes/CharacterSelectScene";
 import { GameScene } from "./scenes/GameScene";
 import { AuthManager } from "./auth/AuthManager";
 
+
 // Initialize auth (check for OAuth callback token in URL hash or restore from localStorage)
 AuthManager.getInstance().initialize();
 
@@ -21,6 +22,7 @@ const config: Phaser.Types.Core.GameConfig = {
     roundPixels: true,
     pixelArt: true,
     powerPreference: "high-performance",
+
   },
   scale: {
     mode: Phaser.Scale.RESIZE,

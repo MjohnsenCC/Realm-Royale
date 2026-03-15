@@ -11,7 +11,8 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
-import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { drawItemIcon } from "./ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import type { InventoryUI } from "./InventoryUI";
 import type { LootBagUI } from "./LootBagUI";
 import type { CraftingUI } from "./CraftingUI";
@@ -57,6 +58,7 @@ export class DragManager {
 
   // Ghost visuals
   private ghostGraphics: Phaser.GameObjects.Graphics | null = null;
+  private ghostImage: Phaser.GameObjects.Image | null = null;
   private ghostTierText: Phaser.GameObjects.Text | null = null;
 
   // Current highlight
@@ -432,29 +434,42 @@ export class DragManager {
   // --- Ghost visual ---
 
   private createGhost(item: ItemInstanceData): void {
-    const S = getUIScale();
-    const slotSize = Math.round(36 * S);
-    const iconSize = slotSize * 0.55;
-
-    this.ghostGraphics = this.scene.add
-      .graphics()
-      .setScrollFactor(0)
-      .setDepth(500)
-      .setAlpha(0.8);
+    const slotSize = this.inventoryUI.getSlotSize();
 
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
-    const color = getItemColor(item);
-    drawItemIcon(this.ghostGraphics, 0, -slotSize * 0.05, iconSize, category, subtype, color);
+    const spriteKey = getItemSpriteKey(category, subtype);
+
+    if (spriteKey) {
+      const nativeSize = getItemOutlinedSize();
+      this.ghostImage = this.scene.add
+        .image(0, 0, spriteKey)
+        .setDisplaySize(nativeSize, nativeSize)
+        .setScrollFactor(0)
+        .setDepth(500)
+        .setAlpha(0.8);
+    } else {
+      this.ghostGraphics = this.scene.add
+        .graphics()
+        .setScrollFactor(0)
+        .setDepth(500)
+        .setAlpha(0.8);
+
+      const iconSize = slotSize * 0.55;
+      const color = getItemColor(item);
+      drawItemIcon(this.ghostGraphics, 0, -slotSize * 0.05, iconSize, category, subtype, color);
+    }
 
     // Stack quantity label for stackable items only
     if (isStackableItem(item.baseItemId)) {
       const qty = item.quantity || 1;
       this.ghostTierText = this.scene.add
         .text(0, 0, `x${qty}`, {
-          fontSize: `${Math.round(7 * S)}px`,
+          fontSize: `${Math.round(4 * getUIScale())}px`,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
@@ -466,17 +481,21 @@ export class DragManager {
     if (this.ghostGraphics) {
       this.ghostGraphics.setPosition(x, y);
     }
+    if (this.ghostImage) {
+      this.ghostImage.setPosition(x, y);
+    }
     if (this.ghostTierText) {
-      const S = getUIScale();
-      const ghostSize = Math.round(36 * S);
+      const ghostSize = this.inventoryUI.getSlotSize();
       this.ghostTierText.setPosition(x + ghostSize / 2 - 2, y + ghostSize / 2 - 2);
     }
   }
 
   private destroyGhost(): void {
     this.ghostGraphics?.destroy();
+    this.ghostImage?.destroy();
     this.ghostTierText?.destroy();
     this.ghostGraphics = null;
+    this.ghostImage = null;
     this.ghostTierText = null;
   }
 

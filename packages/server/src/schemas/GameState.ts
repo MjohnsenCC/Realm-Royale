@@ -10,7 +10,15 @@ const ENEMY_SYNC_RADIUS = 1600;
 const ENEMY_SYNC_RADIUS_SQ = ENEMY_SYNC_RADIUS * ENEMY_SYNC_RADIUS;
 
 export class GameState extends Schema {
-  @type({ map: Player }) players = new MapSchema<Player>();
+  @type("uint8") playerCount: number = 0;
+
+  // No @filterChildren on players — Colyseus filterChildren only controls whether
+  // property CHANGES are forwarded, it does NOT generate onAdd/onRemove on filter
+  // transitions. Since players persist in the map across zone changes (unlike enemies
+  // which are added/removed), filtered zone changes would be permanently lost,
+  // leaving clients with stale data. 30 players is manageable without AOI filtering.
+  @type({ map: Player })
+  players = new MapSchema<Player>();
 
   @filterChildren(function (
     this: GameState,

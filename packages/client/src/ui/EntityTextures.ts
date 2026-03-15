@@ -1,7 +1,11 @@
 import Phaser from "phaser";
-import { PROJECTILE_RADIUS, ProjectileType, CharacterClass } from "@rotmg-lite/shared";
+import { CharacterClass, PIXEL_SCALE } from "@rotmg-lite/shared";
 
 const ENEMY_SPRITE_COUNT = 6;
+const SPRITE_SOURCE_SIZE = 12;
+
+/** Display size of outlined sprites (upscaled + 1px outline on each side). */
+export const OUTLINED_DISPLAY_SIZE = SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
 
 /** Maps a CharacterClass id to its loaded sprite texture key. */
 const CLASS_SPRITE_KEYS: Record<number, string> = {
@@ -22,11 +26,6 @@ export function getEnemySpriteKey(enemyType: number): string {
 
 /**
  * Pre-render shared utility textures and projectile shapes.
- * Player and enemy bodies now use loaded 8×8 pixel-art sprites
- * (scaled at runtime via setDisplaySize), so all entities sharing
- * the same sprite sheet batch into a single draw call — dramatically
- * fewer draw calls than per-type procedural textures.
- *
  * Call once per scene that uses entities (GameScene.create).
  */
 export function generateEntityTextures(scene: Phaser.Scene): void {
@@ -39,71 +38,140 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
     g.destroy();
   }
 
-  // Projectile textures (still procedural — small, few types, already batched well)
-  generateProjectileTextures(scene);
+  // Upscale sprites to display resolution and add 1px outline
+  for (const key of Object.values(CLASS_SPRITE_KEYS)) {
+    upscaleAndOutline(scene, key);
+  }
+  for (let i = 1; i <= ENEMY_SPRITE_COUNT; i++) {
+    upscaleAndOutline(scene, `sprite-enemy-${i}`);
+  }
+
+  // Portal sprites
+  for (const key of ["portal-the-wild", "portal-infernal-pit", "portal-void-sanctum"]) {
+    upscaleAndOutline(scene, key);
+  }
+
+  // Loot bag sprites
+  for (const key of ["bag-green", "bag-red", "bag-black", "bag-orange"]) {
+    upscaleAndOutline(scene, key);
+  }
 }
 
-function generateProjectileTextures(scene: Phaser.Scene): void {
-  // Enemy bullet
-  if (!scene.textures.exists("proj-enemy")) {
-    const r = PROJECTILE_RADIUS;
-    const size = (r + 2) * 2;
-    const c = r + 2;
-    const g = scene.add.graphics();
-    g.fillStyle(0xff4444, 1);
-    g.fillCircle(c, c, r);
-    g.generateTexture("proj-enemy", size, size);
-    g.destroy();
+/**
+ * Upscales a sprite to display resolution with nearest-neighbor, then adds
+ * a 1-screen-pixel black outline. Replaces the texture in-place so all
+ * existing key references keep working. Zero per-frame cost — the outline
+ * is baked into the texture at boot.
+ */
+const processedKeys = new Set<string>();
+
+function upscaleAndOutline(scene: Phaser.Scene, key: string): void {
+  if (processedKeys.has(key)) return;
+  const tex = scene.textures.get(key);
+  if (!tex || tex.key === "__MISSING") return;
+
+  const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+
+  const upW = src.width * PIXEL_SCALE;
+  const upH = src.height * PIXEL_SCALE;
+  // +2 for 1px outline border on each side
+  const outW = upW + 2;
+  const outH = upH + 2;
+
+  const canvas = document.createElement("canvas");
+  canvas.width = outW;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d")!;
+
+  // Nearest-neighbor upscale: draw source at offset (1,1) scaled to display size
+  ctx.imageSmoothingEnabled = false;
+  ctx.drawImage(src, 1, 1, upW, upH);
+
+  addOutlineToImageData(ctx, outW, outH);
+
+  // Replace texture with outlined version using the same key
+  scene.textures.remove(key);
+  scene.textures.addCanvas(key, canvas);
+  scene.textures.get(key).setFilter(Phaser.Textures.FilterMode.NEAREST);
+  processedKeys.add(key);
+}
+
+export interface OutlineEdges {
+  top?: boolean;
+  bottom?: boolean;
+  left?: boolean;
+  right?: boolean;
+}
+
+/**
+ * Adds a 1px black outline to opaque pixel edges in the given canvas context.
+ * skipEdges allows suppressing the outline on specific sides (for tree seams).
+ */
+export function addOutlineToImageData(
+  ctx: CanvasRenderingContext2D,
+  w: number,
+  h: number,
+  skipEdges?: OutlineEdges
+): void {
+  const imageData = ctx.getImageData(0, 0, w, h);
+  const data = imageData.data;
+
+  const skipTop = skipEdges?.top ?? false;
+  const skipBottom = skipEdges?.bottom ?? false;
+  const skipLeft = skipEdges?.left ?? false;
+  const skipRight = skipEdges?.right ?? false;
+
+  // Collect outline pixel indices first, then write — avoids reading our own writes
+  const outlinePixels: number[] = [];
+
+  // Find the bounding box of opaque pixels to know where the edges are
+  let minOpaqueY = h, maxOpaqueY = 0, minOpaqueX = w, maxOpaqueX = 0;
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      if (data[(y * w + x) * 4 + 3] !== 0) {
+        if (y < minOpaqueY) minOpaqueY = y;
+        if (y > maxOpaqueY) maxOpaqueY = y;
+        if (x < minOpaqueX) minOpaqueX = x;
+        if (x > maxOpaqueX) maxOpaqueX = x;
+      }
+    }
   }
 
-  // Bow arrow (default player projectile) — white, tinted per tier at runtime
-  if (!scene.textures.exists("proj-arrow")) {
-    const g = scene.add.graphics();
-    g.fillStyle(0xffffff, 1);
-    g.fillEllipse(12, 6, 10, 4);
-    g.generateTexture("proj-arrow", 24, 12);
-    g.destroy();
+  for (let y = 0; y < h; y++) {
+    for (let x = 0; x < w; x++) {
+      const idx = (y * w + x) * 4;
+      if (data[idx + 3] !== 0) continue; // skip opaque pixels
+
+      // Skip outline pixels on suppressed edges (by position)
+      if (skipTop && y < minOpaqueY) continue;
+      if (skipBottom && y > maxOpaqueY) continue;
+      if (skipLeft && x < minOpaqueX) continue;
+      if (skipRight && x > maxOpaqueX) continue;
+
+      // Check 8 neighbours for any opaque pixel
+      let found = false;
+      for (let dy = -1; dy <= 1 && !found; dy++) {
+        for (let dx = -1; dx <= 1 && !found; dx++) {
+          if (dx === 0 && dy === 0) continue;
+          const nx = x + dx;
+          const ny = y + dy;
+          if (nx < 0 || nx >= w || ny < 0 || ny >= h) continue;
+          if (data[(ny * w + nx) * 4 + 3] !== 0) {
+            found = true;
+          }
+        }
+      }
+      if (found) outlinePixels.push(idx);
+    }
   }
 
-  // Sword slash
-  if (!scene.textures.exists("proj-sword")) {
-    const g = scene.add.graphics();
-    g.fillStyle(0xffffff, 0.8);
-    g.fillEllipse(14, 6, 24, 8);
-    g.generateTexture("proj-sword", 28, 12);
-    g.destroy();
+  // Write outline pixels (black, fully opaque)
+  for (const idx of outlinePixels) {
+    data[idx] = 0;
+    data[idx + 1] = 0;
+    data[idx + 2] = 0;
+    data[idx + 3] = 255;
   }
 
-  // Wand bolt
-  if (!scene.textures.exists("proj-wand")) {
-    const g = scene.add.graphics();
-    g.fillStyle(0xaa44ff, 0.7);
-    g.fillEllipse(9, 5, 14, 5);
-    g.fillStyle(0xcc88ff, 1);
-    g.fillEllipse(9, 5, 8, 3);
-    g.generateTexture("proj-wand", 18, 10);
-    g.destroy();
-  }
-
-  // Quiver shot
-  if (!scene.textures.exists("proj-quiver")) {
-    const g = scene.add.graphics();
-    g.fillStyle(0x44aaff, 0.5);
-    g.fillCircle(16, 16, 14);
-    g.fillStyle(0x88ccff, 1);
-    g.fillCircle(16, 16, 8);
-    g.generateTexture("proj-quiver", 32, 32);
-    g.destroy();
-  }
-
-  // Helm spin
-  if (!scene.textures.exists("proj-helm")) {
-    const g = scene.add.graphics();
-    g.fillStyle(0xff6622, 0.6);
-    g.fillCircle(14, 14, 12);
-    g.fillStyle(0xffaa44, 1);
-    g.fillEllipse(14, 14, 20, 8);
-    g.generateTexture("proj-helm", 28, 28);
-    g.destroy();
-  }
+  ctx.putImageData(imageData, 0, 0);
 }

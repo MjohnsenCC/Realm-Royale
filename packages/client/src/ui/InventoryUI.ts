@@ -14,6 +14,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize, generateItemTextures } from "./ItemTextures";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
@@ -45,6 +46,7 @@ export class InventoryUI {
 
   private tierTexts: Phaser.GameObjects.Text[] = [];
   private qtyTexts: Phaser.GameObjects.Text[] = [];
+  private itemImages: Phaser.GameObjects.Image[] = [];
 
   // Equipment
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
@@ -52,6 +54,7 @@ export class InventoryUI {
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
+  private eqItemImages: Phaser.GameObjects.Image[] = [];
   public equipmentVersion: number = 0;
   private currentEquipment: ItemInstanceData[] = Array.from(
     { length: EQUIPMENT_SLOTS },
@@ -102,8 +105,8 @@ export class InventoryUI {
     this.invX = config.invX;
     this.invY = config.invY;
 
-    const slotFontSize = `${Math.round(8 * S)}px`;
-    const tierFontSize = `${Math.round(7 * S)}px`;
+    const slotFontSize = `${Math.round(4 * S)}px`;
+    const tierFontSize = `${Math.round(5 * S)}px`;
 
     // --- Equipment slot graphics ---
     this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
@@ -162,8 +165,10 @@ export class InventoryUI {
         .text(sx + this.slotSize / 2, sy + this.slotSize / 2, EQ_SLOT_LABELS[i], {
           fontSize: slotFontSize,
           color: "#666666",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
@@ -175,12 +180,20 @@ export class InventoryUI {
         .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
         .setDepth(102);
       this.eqTierTexts.push(tierText);
+
+      const eqImg = scene.add.image(0, 0, "item-sword")
+        .setScrollFactor(0)
+        .setDepth(101.5)
+        .setVisible(false);
+      this.eqItemImages.push(eqImg);
     }
 
     // --- Inventory slot graphics ---
@@ -242,8 +255,10 @@ export class InventoryUI {
         .text(sx + this.slotSize / 2, sy + this.slotSize / 2, "", {
           fontSize: slotFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           align: "center",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0.5)
         .setScrollFactor(0)
@@ -255,7 +270,9 @@ export class InventoryUI {
         .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
@@ -266,12 +283,20 @@ export class InventoryUI {
         .text(sx + 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
         })
         .setOrigin(0, 1)
         .setScrollFactor(0)
         .setDepth(102);
       this.qtyTexts.push(qtyText);
+
+      const img = scene.add.image(0, 0, "item-sword")
+        .setScrollFactor(0)
+        .setDepth(101.5)
+        .setVisible(false);
+      this.itemImages.push(img);
     }
 
     this.drawSlots();
@@ -374,17 +399,22 @@ export class InventoryUI {
       if (hasItem) {
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
-        const color = getItemColor(item);
-        const iconSize = this.slotSize * 0.55;
-        drawItemIcon(
-          this.slotGraphics,
-          sx + this.slotSize / 2,
-          sy + this.slotSize / 2 - this.slotSize * 0.05,
-          iconSize,
-          category,
-          subtype,
-          color
-        );
+        const spriteKey = getItemSpriteKey(category, subtype);
+        if (spriteKey) {
+          const nativeSize = getItemOutlinedSize();
+          this.itemImages[i]
+            .setTexture(spriteKey)
+            .setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2)
+            .setDisplaySize(nativeSize, nativeSize)
+            .setAlpha(i === this.dragSourceSlot ? 0.3 : 1)
+            .clearTint()
+            .setVisible(true);
+        } else {
+          this.itemImages[i].setVisible(false);
+          const color = getItemColor(item);
+          const iconSize = this.slotSize * 0.55;
+          drawItemIcon(this.slotGraphics, sx + this.slotSize / 2, sy + this.slotSize / 2 - this.slotSize * 0.05, iconSize, category, subtype, color);
+        }
         if (isStackableItem(item.baseItemId)) {
           const qty = item.quantity || 1;
           this.tierTexts[i].setText(`x${qty}`);
@@ -395,6 +425,7 @@ export class InventoryUI {
           this.qtyTexts[i].setText("");
         }
       } else {
+        this.itemImages[i].setVisible(false);
         this.tierTexts[i].setText("");
         this.qtyTexts[i].setText("");
       }
@@ -440,20 +471,25 @@ export class InventoryUI {
       this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
 
       this.eqItemTexts[i].setText("");
+      const nativeSize = getItemOutlinedSize();
       if (hasItem) {
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
-        const color = getItemColor(item);
-        const iconSize = this.slotSize * 0.55;
-        drawItemIcon(
-          this.eqSlotGraphics,
-          sx + this.slotSize / 2,
-          sy + this.slotSize / 2 - this.slotSize * 0.05,
-          iconSize,
-          category,
-          subtype,
-          color
-        );
+        const spriteKey = getItemSpriteKey(category, subtype);
+        if (spriteKey) {
+          this.eqItemImages[i]
+            .setTexture(spriteKey)
+            .setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2)
+            .setDisplaySize(nativeSize, nativeSize)
+            .setAlpha(i === this.dragSourceEqSlot ? 0.3 : 1)
+            .clearTint()
+            .setVisible(true);
+        } else {
+          this.eqItemImages[i].setVisible(false);
+          const color = getItemColor(item);
+          const iconSize = this.slotSize * 0.55;
+          drawItemIcon(this.eqSlotGraphics, sx + this.slotSize / 2, sy + this.slotSize / 2 - this.slotSize * 0.05, iconSize, category, subtype, color);
+        }
         if (isStackableItem(item.baseItemId)) {
           const qty = item.quantity || 1;
           this.eqTierTexts[i].setText(`x${qty}`);
@@ -462,17 +498,19 @@ export class InventoryUI {
           this.eqTierTexts[i].setText(tierLabel);
         }
       } else {
-        // Draw faded category icon as placeholder
-        const iconSize = this.slotSize * 0.55;
-        drawItemIcon(
-          this.eqSlotGraphics,
-          sx + this.slotSize / 2,
-          sy + this.slotSize / 2 - this.slotSize * 0.05,
-          iconSize,
-          i, // category index matches equipment slot index (0=weapon,1=ability,2=armor,3=ring)
-          0, // default subtype (sword, quiver, shield, ring)
-          0x444466
-        );
+        // Show faded sprite placeholder for empty equipment slot
+        const placeholderKey = getItemSpriteKey(i, 0);
+        if (placeholderKey) {
+          this.eqItemImages[i]
+            .setTexture(placeholderKey)
+            .setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2)
+            .setDisplaySize(nativeSize, nativeSize)
+            .setAlpha(0.25)
+            .setTint(0x8888aa)
+            .setVisible(true);
+        } else {
+          this.eqItemImages[i].setVisible(false);
+        }
         this.eqTierTexts[i].setText("");
       }
 
@@ -605,6 +643,7 @@ export class InventoryUI {
   relayout(config: InventoryUIConfig): void {
     this.S = getUIScale();
     const S = this.S;
+    generateItemTextures(this.scene, config.slotSize);
     this.slotSize = config.slotSize;
     this.slotGap = config.slotGap;
 
@@ -613,8 +652,8 @@ export class InventoryUI {
     this.invX = config.invX;
     this.invY = config.invY;
 
-    const slotFontSize = `${Math.round(8 * S)}px`;
-    const tierFontSize = `${Math.round(7 * S)}px`;
+    const slotFontSize = `${Math.round(4 * S)}px`;
+    const tierFontSize = `${Math.round(5 * S)}px`;
 
     // Reposition equipment slots
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {

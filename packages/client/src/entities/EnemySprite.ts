@@ -1,7 +1,7 @@
 import Phaser from "phaser";
-import { ENEMY_DEFS, TILE_SIZE } from "@rotmg-lite/shared";
+import { ENEMY_DEFS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
-import { getEnemySpriteKey } from "../ui/EntityTextures";
+import { getEnemySpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -15,6 +15,7 @@ const DAMAGE_TEXT_FLOAT = 30;
 export class EnemySprite {
   private scene: Phaser.Scene;
   private bodyImage: Phaser.GameObjects.Image;
+  private hpBarBorder: Phaser.GameObjects.Image;
   private hpBarBg: Phaser.GameObjects.Image;
   private hpBarFill: Phaser.GameObjects.Image;
 
@@ -52,13 +53,18 @@ export class EnemySprite {
     this.snapshots = existingBuffer ?? new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    // Body — use loaded 8×8 sprite (scaled to tile size for uniform pixel scale)
+    // Body — use loaded 12×12 sprite (scaled with PIXEL_SCALE for uniform pixel size)
     const textureKey = getEnemySpriteKey(enemyType);
     this.bodyImage = scene.add.image(x, y, textureKey);
-    this.bodyImage.setDisplaySize(TILE_SIZE, TILE_SIZE);
+    this.bodyImage.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
 
     // HP bar — use shared pixel texture (tinted + scaled)
-    const yOffset = this.radius + 6;
+    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    this.hpBarBorder = scene.add.image(x - this.barWidth / 2 - 1, y + yOffset - 1, "pixel")
+      .setOrigin(0, 0)
+      .setDisplaySize(this.barWidth + 2, this.barHeight + 2)
+      .setTint(0x000000);
+
     this.hpBarBg = scene.add.image(x - this.barWidth / 2, y + yOffset, "pixel")
       .setOrigin(0, 0)
       .setDisplaySize(this.barWidth, this.barHeight)
@@ -92,10 +98,12 @@ export class EnemySprite {
   showPredictedDamage(damage: number): void {
     const startY = -this.radius - 10;
     const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(damage)}`, {
-      fontFamily: "monospace",
-      fontSize: "14px",
+      fontFamily: "'Press Start 2P', monospace",
+      fontSize: "12px",
       fontStyle: "bold",
       color: "#ff0000",
+      stroke: "#000000",
+      strokeThickness: 1,
     });
     text.setOrigin(0.5, 1);
     text.setDepth(1000);
@@ -118,10 +126,12 @@ export class EnemySprite {
         if (remainder > 1) {
           const startY = -this.radius - 10;
           const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(remainder)}`, {
-            fontFamily: "monospace",
-            fontSize: "14px",
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: "12px",
             fontStyle: "bold",
             color: "#ff0000",
+            stroke: "#000000",
+            strokeThickness: 1,
           });
           text.setOrigin(0.5, 1);
           text.setDepth(1000);
@@ -131,10 +141,12 @@ export class EnemySprite {
         // No prediction pending — show normally
         const startY = -this.radius - 10;
         const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(serverDamage)}`, {
-          fontFamily: "monospace",
-          fontSize: "14px",
+          fontFamily: "'Press Start 2P', monospace",
+          fontSize: "12px",
           fontStyle: "bold",
           color: "#ff0000",
+          stroke: "#000000",
+          strokeThickness: 1,
         });
         text.setOrigin(0.5, 1);
         text.setDepth(1000);
@@ -154,7 +166,8 @@ export class EnemySprite {
     }
 
     this.bodyImage.setPosition(this.x, this.y);
-    const yOffset = this.radius + 6;
+    const yOffset = OUTLINED_DISPLAY_SIZE / 2 + 1;
+    this.hpBarBorder.setPosition(this.x - this.barWidth / 2 - 1, this.y + yOffset - 1);
     this.hpBarBg.setPosition(this.x - this.barWidth / 2, this.y + yOffset);
     this.hpBarFill.setPosition(this.x - this.barWidth / 2, this.y + yOffset);
 
@@ -186,6 +199,7 @@ export class EnemySprite {
 
   setVisible(visible: boolean): void {
     this.bodyImage.setVisible(visible);
+    this.hpBarBorder.setVisible(visible);
     this.hpBarBg.setVisible(visible);
     this.hpBarFill.setVisible(visible);
   }
@@ -196,6 +210,7 @@ export class EnemySprite {
 
   destroy(): void {
     this.bodyImage.destroy();
+    this.hpBarBorder.destroy();
     this.hpBarBg.destroy();
     this.hpBarFill.destroy();
     for (const dt of this.damageTexts) dt.text.destroy();

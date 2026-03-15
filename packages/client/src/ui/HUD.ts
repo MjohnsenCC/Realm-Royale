@@ -6,6 +6,7 @@ import { LootBagUI } from "./LootBagUI";
 import { VaultUI } from "./VaultUI";
 import { DragManager } from "./DragManager";
 import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UIScale";
+import { generateItemTextures } from "./ItemTextures";
 import { isFpsVisible, isPingVisible } from "./OptionsUI";
 import { NetworkManager } from "../network/NetworkManager";
 import {
@@ -23,7 +24,6 @@ import {
   xpForLevel,
   getRealmMap,
   getDifficultyAt,
-  computePlayerStats,
   generateNexusMap,
   generateVaultMap,
   DungeonTile,
@@ -71,16 +71,19 @@ export class HUD {
   // Health bar
   private hpBarBg: Phaser.GameObjects.Graphics;
   private hpBarFill: Phaser.GameObjects.Graphics;
+  private hpLabel: Phaser.GameObjects.Text;
   private hpText: Phaser.GameObjects.Text;
 
   // Mana bar
   private manaBarBg: Phaser.GameObjects.Graphics;
   private manaBarFill: Phaser.GameObjects.Graphics;
+  private manaLabel: Phaser.GameObjects.Text;
   private manaText: Phaser.GameObjects.Text;
 
   // Level/XP bar
   private lvlBarBg: Phaser.GameObjects.Graphics;
   private lvlBarFill: Phaser.GameObjects.Graphics;
+  private lvlLabel: Phaser.GameObjects.Text;
   private lvlText: Phaser.GameObjects.Text;
 
   // Zone/Biome display
@@ -96,19 +99,17 @@ export class HUD {
   // Dirty tracking — avoid redrawing unchanged values
   private lastHp: number = -1;
   private lastMaxHp: number = -1;
-  private lastHpRegen: number = -1;
   private lastMana: number = -1;
   private lastMaxMana: number = -1;
   private lastXp: number = -1;
   private lastLevel: number = -1;
   private lastZone: string = "";
+  private lastDiffZone: number = -1;
   private lastPlayerCount: number = -1;
   private lastFps: number = -1;
   private lastPing: number = -1;
   private lastMmX: number = -1;
   private lastMmY: number = -1;
-  private cachedHpRegen: number = 0;
-  private equipmentVersion: number = -1;
 
 
   // Drag state
@@ -171,6 +172,7 @@ export class HUD {
   private invX: number = 0;
   private invY: number = 0;
   private barsH: number = 0;
+  private eqW: number = 0;
   private statsBtnSize: number = 0;
   private statsBtnGap: number = 0;
 
@@ -185,9 +187,9 @@ export class HUD {
     const screenH = scene.scale.height;
     this.computeLayout(screenW, screenH, S);
 
-    const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
-    const zoneFontSize = `${Math.round(18 * S)}px`;
-    const countFontSize = `${Math.round(14 * S)}px`;
+    const barFontSize = `${Math.max(6, Math.min(Math.round(this.barHeight * 0.30), Math.floor(this.barWidth / 15)))}px`;
+    const zoneFontSize = `${Math.round(11 * S)}px`;
+    const countFontSize = `${Math.round(8 * S)}px`;
 
     // --- Unified panel background ---
     this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
@@ -196,39 +198,50 @@ export class HUD {
     this.panelBg.lineStyle(1, 0x555555, 0.8);
     this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
 
+    const barTextStyle = {
+      fontSize: barFontSize,
+      color: "#ffffff",
+      fontFamily: "'Press Start 2P', monospace",
+      stroke: "#000000",
+      strokeThickness: 2,
+    };
+
     // --- Health bar ---
     this.hpBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.hpBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.hpLabel = scene.add
+      .text(0, 0, "HP", { ...barTextStyle })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
     this.hpText = scene.add
-      .text(0, 0, "", {
-        fontSize: barFontSize,
-        color: "#ffffff",
-        fontFamily: "monospace",
-      })
+      .text(0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
     // --- Mana bar ---
     this.manaBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.manaBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.manaLabel = scene.add
+      .text(0, 0, "MP", { ...barTextStyle })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
     this.manaText = scene.add
-      .text(0, 0, "", {
-        fontSize: barFontSize,
-        color: "#ffffff",
-        fontFamily: "monospace",
-      })
+      .text(0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
     // --- Level/XP bar ---
     this.lvlBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.lvlBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.lvlLabel = scene.add
+      .text(0, 0, "LV", { ...barTextStyle })
+      .setOrigin(0, 0.5)
+      .setScrollFactor(0)
+      .setDepth(102);
     this.lvlText = scene.add
-      .text(0, 0, "", {
-        fontSize: barFontSize,
-        color: "#ffffff",
-        fontFamily: "monospace",
-      })
+      .text(0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
@@ -237,42 +250,50 @@ export class HUD {
       .text(screenW / 2, 15, "Nexus (Safe Zone)", {
         fontSize: zoneFontSize,
         color: "#44aa66",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
       .setDepth(100);
 
     // --- FPS / Ping display (top-left) ---
-    const perfFontSize = `${Math.round(10 * S)}px`;
+    const perfFontSize = `${Math.round(6 * S)}px`;
     this.fpsText = scene.add
       .text(Math.round(8 * S), Math.round(8 * S), "", {
         fontSize: perfFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setScrollFactor(0)
       .setDepth(100)
       .setVisible(false);
 
     this.pingText = scene.add
-      .text(Math.round(8 * S), Math.round(8 * S) + Math.round(14 * S), "", {
+      .text(Math.round(8 * S), Math.round(8 * S) + Math.round(13 * S), "", {
         fontSize: perfFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setScrollFactor(0)
       .setDepth(100)
       .setVisible(false);
 
     // --- Player count (inside minimap, bottom-left) ---
-    const mmPad = Math.round(16 * S);
-    const btnPadInit = Math.round(3 * S);
+    const mmPad = Math.round(17 * S);
+    const btnPadInit = Math.round(8 * S);
     this.playerCountText = scene.add
       .text(screenW - mmPad - this.mmWidth + btnPadInit, mmPad + this.mmHeight - btnPadInit, `Players: 0/${MAX_PLAYERS}`, {
         fontSize: countFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0, 1)
       .setScrollFactor(0)
@@ -287,18 +308,20 @@ export class HUD {
     const savedZoom = parseFloat(localStorage.getItem("minimapZoom") ?? "1");
     this.minimapZoom = isFinite(savedZoom) && savedZoom >= 0.5 ? savedZoom : 1;
 
-    const mmPadInit = Math.round(16 * S);
+    const mmPadInit = Math.round(17 * S);
     const mmRight = screenW - mmPadInit;
     const mmTop = mmPadInit;
-    const btnFontSize = `${Math.round(14 * S)}px`;
+    const btnFontSize = `${Math.round(8 * S)}px`;
 
-    const btnPad = Math.round(3 * S);
+    const btnPad = Math.round(8 * S);
 
     this.minimapZoomInBtn = scene.add
       .text(0, 0, "[+]", {
         fontSize: btnFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(1, 1)
       .setScrollFactor(0)
@@ -309,7 +332,9 @@ export class HUD {
       .text(0, 0, "[-]", {
         fontSize: btnFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(1, 1)
       .setScrollFactor(0)
@@ -324,7 +349,7 @@ export class HUD {
       initMmY + this.mmHeight - btnPad
     );
     this.minimapZoomInBtn.setPosition(
-      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * S),
+      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(8 * S),
       initMmY + this.mmHeight - btnPad
     );
 
@@ -357,7 +382,9 @@ export class HUD {
       .text(0, 0, "[ ]", {
         fontSize: btnFontSize,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(1, 0)
       .setScrollFactor(0)
@@ -366,7 +393,7 @@ export class HUD {
 
     this.fullscreenBtn.setPosition(
       initMmX + this.mmWidth,
-      initMmY + this.mmHeight + Math.round(4 * S)
+      initMmY + this.mmHeight + Math.round(8 * S)
     );
 
     this.fullscreenBtn.on("pointerover", () =>
@@ -389,6 +416,10 @@ export class HUD {
     this.scene.scale.on("leavefullscreen", () => {
       this.fullscreenBtn.setText("[ ]");
     });
+
+    // Regenerate item textures at the actual HUD slot size so they display
+    // at 1:1 resolution with a crisp outline on every display.
+    generateItemTextures(scene, this.slotSize);
 
     // --- Inventory UI ---
     this.inventoryUI = new InventoryUI(scene, {
@@ -423,15 +454,15 @@ export class HUD {
     this.vaultUI.setDragManager(this.dragManager);
 
     // Draw initial bars
-    this.drawHealthBar(100, 100, 0);
+    this.drawHealthBar(100, 100);
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
 
-    // --- Stats button (below bars, small square) ---
-    const statsBtnY = this.barsY + this.barsH + this.statsBtnGap;
+    // --- Stats button (centered below equipment slots, bottom-aligned with innerPad below) ---
+    const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnH = this.statsBtnSize;
     const statsBtnW = this.statsBtnSize;
-    const statsBtnX = this.barsX;
+    const statsBtnX = this.eqX + Math.round((this.eqW - this.statsBtnSize) / 2);
 
     this.statsButton = scene.add.graphics().setScrollFactor(0).setDepth(101);
     this.statsButton.fillStyle(0x333344, 0.7);
@@ -441,9 +472,11 @@ export class HUD {
 
     this.statsButtonText = scene.add
       .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "P", {
-        fontSize: `${Math.max(8, Math.round(this.statsBtnSize * 0.6))}px`,
+        fontSize: `${Math.max(8, Math.round(this.statsBtnSize * 0.4))}px`,
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5, 0.5)
       .setScrollFactor(0)
@@ -476,7 +509,7 @@ export class HUD {
 
     // Bars take ~28% of panel width
     this.barWidth = Math.round(this.panelW * 0.28);
-    this.barHeight = Math.max(10, Math.round(this.panelW * 0.032));
+    this.barHeight = Math.max(10, Math.round(this.panelW * 0.046));
     this.barGap = Math.max(2, Math.round(this.panelW * 0.006));
 
     // Remaining space split between equipment (4 slots) and inventory (4 cols)
@@ -484,15 +517,14 @@ export class HUD {
     const halfW = Math.floor(availableW / 2);
     this.slotSize = Math.max(16, Math.floor((halfW - 3 * this.slotGap) / 4));
 
-    const eqW = 4 * this.slotSize + 3 * this.slotGap;
-    const eqSectionH = this.slotSize;
+    this.eqW = 4 * this.slotSize + 3 * this.slotGap;
     const invH = 2 * this.slotSize + this.slotGap;
     this.barsH = 3 * this.barHeight + 2 * this.barGap;
-    // Stats button sits below bars inside the panel
-    this.statsBtnSize = Math.max(12, this.barHeight);
+    // Stats button sits below equipment slots, centered
+    this.statsBtnSize = Math.max(14, Math.round(this.barHeight * 1.3));
     this.statsBtnGap = this.barGap;
-    const barsSectionH = this.barsH + this.statsBtnGap + this.statsBtnSize;
-    const maxH = Math.max(barsSectionH, eqSectionH, invH);
+    const eqSectionH = this.slotSize + this.statsBtnGap + this.statsBtnSize;
+    const maxH = Math.max(this.barsH, eqSectionH, invH);
 
     this.panelH = this.innerPad + maxH + this.innerPad;
     this.panelX = Math.round(screenW / 2 - this.panelW / 2);
@@ -504,7 +536,7 @@ export class HUD {
     this.eqX = this.barsX + this.barWidth + this.sectionGap;
     this.eqY = this.panelY + this.innerPad;
 
-    this.invX = this.eqX + eqW + this.sectionGap;
+    this.invX = this.eqX + this.eqW + this.sectionGap;
     this.invY = this.panelY + this.innerPad;
 
     // Minimap scales with S
@@ -519,9 +551,9 @@ export class HUD {
     const S = this.S;
     this.computeLayout(screenW, screenH, S);
 
-    const barFontSize = `${Math.max(8, Math.round(this.barHeight * 0.75))}px`;
-    const zoneFontSize = `${Math.round(18 * S)}px`;
-    const countFontSize = `${Math.round(14 * S)}px`;
+    const barFontSize = `${Math.max(6, Math.min(Math.round(this.barHeight * 0.30), Math.floor(this.barWidth / 15)))}px`;
+    const zoneFontSize = `${Math.round(11 * S)}px`;
+    const countFontSize = `${Math.round(8 * S)}px`;
 
     // Update panel background
     this.panelBg.clear();
@@ -531,39 +563,43 @@ export class HUD {
     this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
 
     // Update text font sizes
+    this.hpLabel.setFontSize(barFontSize);
     this.hpText.setFontSize(barFontSize);
+    this.manaLabel.setFontSize(barFontSize);
     this.manaText.setFontSize(barFontSize);
+    this.lvlLabel.setFontSize(barFontSize);
     this.lvlText.setFontSize(barFontSize);
     this.zoneText.setFontSize(zoneFontSize);
     this.playerCountText.setFontSize(countFontSize);
 
-    // Update stats button
-    const statsBtnY = this.barsY + this.barsH + this.statsBtnGap;
+    // Update stats button (centered below equipment slots, bottom-aligned with innerPad below)
+    const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnSize = this.statsBtnSize;
+    const statsBtnX = this.eqX + Math.round((this.eqW - statsBtnSize) / 2);
     this.statsButton.clear();
     this.statsButton.fillStyle(0x333344, 0.7);
-    this.statsButton.fillRoundedRect(this.barsX, statsBtnY, statsBtnSize, statsBtnSize, 3);
+    this.statsButton.fillRoundedRect(statsBtnX, statsBtnY, statsBtnSize, statsBtnSize, 3);
     this.statsButton.lineStyle(1, 0x555566, 0.8);
-    this.statsButton.strokeRoundedRect(this.barsX, statsBtnY, statsBtnSize, statsBtnSize, 3);
-    this.statsButtonText.setPosition(this.barsX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
-    this.statsButtonText.setFontSize(`${Math.max(8, Math.round(statsBtnSize * 0.6))}px`);
-    this.statsButtonZone.setPosition(this.barsX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.statsButton.strokeRoundedRect(statsBtnX, statsBtnY, statsBtnSize, statsBtnSize, 3);
+    this.statsButtonText.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.statsButtonText.setFontSize(`${Math.max(8, Math.round(statsBtnSize * 0.4))}px`);
+    this.statsButtonZone.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
     this.statsButtonZone.setSize(statsBtnSize, statsBtnSize);
 
     // Update minimap zoom button font sizes
-    const btnFontSize = `${Math.round(14 * S)}px`;
+    const btnFontSize = `${Math.round(8 * S)}px`;
     this.minimapZoomInBtn.setFontSize(btnFontSize);
     this.minimapZoomOutBtn.setFontSize(btnFontSize);
     this.fullscreenBtn.setFontSize(btnFontSize);
 
     // FPS / Ping repositioning
-    const perfFontSize = `${Math.round(10 * S)}px`;
+    const perfFontSize = `${Math.round(6 * S)}px`;
     if (this.fpsText) {
       this.fpsText.setPosition(Math.round(8 * S), Math.round(8 * S));
       this.fpsText.setFontSize(perfFontSize);
     }
     if (this.pingText) {
-      this.pingText.setPosition(Math.round(8 * S), Math.round(8 * S) + Math.round(14 * S));
+      this.pingText.setPosition(Math.round(8 * S), Math.round(8 * S) + Math.round(13 * S));
       this.pingText.setFontSize(perfFontSize);
     }
 
@@ -590,14 +626,15 @@ export class HUD {
     this.lootBagUI.relayout(this.invX, this.panelY, this.slotSize);
     this.vaultUI.relayout(this.slotSize);
 
-    this.drawHealthBar(100, 100, 0);
+    this.drawHealthBar(100, 100);
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
   }
 
-  private drawHealthBar(hp: number, maxHp: number, hpRegen: number): void {
+  private drawHealthBar(hp: number, maxHp: number): void {
     const x = this.barsX;
     const y = this.barsY;
+    const labelPad = Math.round(4 * this.S);
 
     this.hpBarBg.clear();
     this.hpBarBg.fillStyle(0x333333, 0.8);
@@ -617,8 +654,8 @@ export class HUD {
       this.barHeight - 2
     );
 
-    const regenStr = hpRegen > 0 ? ` (+${hpRegen})` : "";
-    this.hpText.setText(`HP: ${Math.ceil(hp)} / ${maxHp}${regenStr}`);
+    this.hpLabel.setPosition(x + labelPad, y + this.barHeight / 2);
+    this.hpText.setText(`${Math.ceil(hp)} / ${maxHp}`);
     this.hpText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
     this.hpText.setOrigin(0.5, 0.5);
   }
@@ -626,6 +663,7 @@ export class HUD {
   private drawManaBar(mana: number, maxMana: number): void {
     const x = this.barsX;
     const y = this.barsY + this.barHeight + this.barGap;
+    const labelPad = Math.round(4 * this.S);
 
     this.manaBarBg.clear();
     this.manaBarBg.fillStyle(0x333333, 0.8);
@@ -643,7 +681,8 @@ export class HUD {
       this.barHeight - 2
     );
 
-    this.manaText.setText(`MP: ${Math.ceil(mana)} / ${maxMana}`);
+    this.manaLabel.setPosition(x + labelPad, y + this.barHeight / 2);
+    this.manaText.setText(`${Math.ceil(mana)} / ${maxMana}`);
     this.manaText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
     this.manaText.setOrigin(0.5, 0.5);
   }
@@ -651,6 +690,7 @@ export class HUD {
   private drawLvlBar(xp: number, level: number): void {
     const x = this.barsX;
     const y = this.barsY + 2 * (this.barHeight + this.barGap);
+    const labelPad = Math.round(4 * this.S);
 
     this.lvlBarBg.clear();
     this.lvlBarBg.fillStyle(0x333333, 0.8);
@@ -673,7 +713,8 @@ export class HUD {
       this.barHeight - 2
     );
 
-    this.lvlText.setText(`LVL ${level} (${xpProgress}/${xpNeeded})`);
+    this.lvlLabel.setPosition(x + labelPad, y + this.barHeight / 2);
+    this.lvlText.setText(`${level}`);
     this.lvlText.setPosition(x + this.barWidth / 2, y + this.barHeight / 2);
     this.lvlText.setOrigin(0.5, 0.5);
   }
@@ -695,21 +736,11 @@ export class HUD {
     dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
     dungeonMap: DungeonMapData | null = null
   ): void {
-    // Compute hpRegen from equipment (only when equipment changes)
-    if (this.equipmentVersion !== this.inventoryUI.equipmentVersion) {
-      this.equipmentVersion = this.inventoryUI.equipmentVersion;
-      const equipment = this.inventoryUI.getEquipment();
-      const stats = computePlayerStats(level, equipment);
-      this.cachedHpRegen = Math.round(stats.hpRegen);
-    }
-    const hpRegen = this.cachedHpRegen;
-
     // Only redraw bars when values change
-    if (hp !== this.lastHp || maxHp !== this.lastMaxHp || hpRegen !== this.lastHpRegen) {
-      this.drawHealthBar(hp, maxHp, hpRegen);
+    if (hp !== this.lastHp || maxHp !== this.lastMaxHp) {
+      this.drawHealthBar(hp, maxHp);
       this.lastHp = hp;
       this.lastMaxHp = maxHp;
-      this.lastHpRegen = hpRegen;
     }
     if (mana !== this.lastMana || maxMana !== this.lastMaxMana) {
       this.drawManaBar(mana, maxMana);
@@ -725,6 +756,7 @@ export class HUD {
     // Only update zone text when zone changes
     if (zone !== this.lastZone) {
       this.lastZone = zone;
+      this.lastDiffZone = -1;
       if (zone === "nexus") {
         this.zoneText.setText("Nexus (Safe Zone)");
         this.zoneText.setColor("#44aa66");
@@ -738,18 +770,29 @@ export class HUD {
         this.zoneText.setText(dungeonName);
         const color = dungeonType === 0 ? "#ff4400" : "#6600cc";
         this.zoneText.setColor(color);
-      } else {
-        const mapData = getRealmMap();
-        if (mapData) {
-          const diffZone = getDifficultyAt(localX, localY);
-          const zoneName = DIFFICULTY_ZONE_NAMES[diffZone] ?? "Unknown";
-          this.zoneText.setText(zoneName);
-        } else {
-          this.zoneText.setText("Hostile");
-        }
+      } else if (!isHostileZone(zone)) {
+        this.zoneText.setText("Unknown");
         this.zoneText.setColor("#e94560");
       }
       this.zoneText.setX(this.scene.scale.width / 2);
+    }
+    // Update difficulty zone text continuously while in hostile realm
+    if (isHostileZone(zone)) {
+      const mapData = getRealmMap();
+      if (mapData) {
+        const diffZone = getDifficultyAt(localX, localY);
+        if (diffZone !== this.lastDiffZone) {
+          this.lastDiffZone = diffZone;
+          const zoneName = DIFFICULTY_ZONE_NAMES[diffZone] ?? "Unknown";
+          this.zoneText.setText(zoneName);
+          this.zoneText.setColor("#e94560");
+          this.zoneText.setX(this.scene.scale.width / 2);
+        }
+      } else if (this.lastDiffZone === -1) {
+        this.zoneText.setText("The Wild");
+        this.zoneText.setColor("#e94560");
+        this.zoneText.setX(this.scene.scale.width / 2);
+      }
     }
     if (playerCount !== this.lastPlayerCount) {
       this.playerCountText.setText(`Players: ${playerCount}/${MAX_PLAYERS}`);
@@ -855,11 +898,13 @@ export class HUD {
         this.mmScreenY + this.mmHeight + Math.round(8 * S),
         "TELEPORT  -1\u25C6",
         {
-          fontSize: `${Math.round(11 * S)}px`,
+          fontSize: `${Math.round(7 * S)}px`,
           color: "#aa44ff",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
           backgroundColor: "#222233",
-          padding: { x: Math.round(8 * S), y: Math.round(4 * S) },
+          padding: { x: Math.round(8 * S), y: Math.round(8 * S) },
         }
       )
       .setOrigin(0.5, 0)
@@ -1218,7 +1263,7 @@ export class HUD {
     };
 
     if (zone === "nexus") {
-      // Realm portals (purple)
+      // The Wild portals (purple)
       for (const [px, py] of [[REALM_PORTAL_1_X, REALM_PORTAL_1_Y], [REALM_PORTAL_2_X, REALM_PORTAL_2_Y]]) {
         const p = toScreen(px, py);
         if (p) this.drawMinimapPortalIcon(g, p.sx, p.sy, 0xaa66ff, r);
@@ -1346,9 +1391,11 @@ export class HUD {
 
     this.deathText = this.scene.add
       .text(width / 2, height / 2 - Math.round(40 * S), "YOU DIED!", {
-        fontSize: `${Math.round(48 * S)}px`,
+        fontSize: `${Math.round(24 * S)}px`,
         color: "#e94560",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1356,11 +1403,13 @@ export class HUD {
 
     this.deathButton = this.scene.add
       .text(width / 2, height / 2 + Math.round(30 * S), "[ Respawn ]", {
-        fontSize: `${Math.round(22 * S)}px`,
+        fontSize: `${Math.round(12 * S)}px`,
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
         backgroundColor: "#333333",
-        padding: { x: Math.round(16 * S), y: Math.round(8 * S) },
+        padding: { x: Math.round(17 * S), y: Math.round(8 * S) },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)
@@ -1391,9 +1440,9 @@ export class HUD {
   showXpGain(x: number, y: number, amount: number): void {
     const text = this.scene.add
       .text(x, y - 20, `+${amount} XP`, {
-        fontSize: "14px",
+        fontSize: "12px",
         color: "#44ffaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 2,
       })
@@ -1413,9 +1462,9 @@ export class HUD {
   showLevelUp(x: number, y: number, level: number): void {
     const text = this.scene.add
       .text(x, y - 30, `LEVEL ${level}!`, {
-        fontSize: "18px",
+        fontSize: "11px",
         color: "#ffdd44",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 3,
       })

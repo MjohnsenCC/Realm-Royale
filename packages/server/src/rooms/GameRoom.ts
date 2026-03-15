@@ -1183,6 +1183,7 @@ export class GameRoom extends Room<GameState> {
     player.mana = player.maxMana;
 
     this.state.players.set(client.sessionId, player);
+    this.state.playerCount = this.state.players.size;
     console.log(`${client.sessionId} joined as "${player.name}" (${player.characterId ? "auth" : "guest"})`);
   }
 
@@ -1199,6 +1200,7 @@ export class GameRoom extends Room<GameState> {
     }
 
     this.state.players.delete(client.sessionId);
+    this.state.playerCount = this.state.players.size;
     this.removePlayerProjectiles(client.sessionId);
 
     console.log(`${client.sessionId} left`);
@@ -1670,22 +1672,27 @@ export class GameRoom extends Room<GameState> {
                 this.state.projectiles.set(proj.id, proj);
               } else if (isAoeRing) {
                 // AoE ring: fire projectiles evenly spaced in a full circle
+                // Relic spawns at cursor position, Helm spawns around the player
+                const ringCenterX = abilitySubtype === AbilitySubtype.Relic ? player.inputAimX : player.x;
+                const ringCenterY = abilitySubtype === AbilitySubtype.Relic ? player.inputAimY : player.y;
                 for (let pi = 0; pi < projCount; pi++) {
                   const angle = (2 * Math.PI / projCount) * pi;
                   const proj = new Projectile();
                   proj.id = generateId("aproj");
-                  proj.x = player.x;
-                  proj.y = player.y;
+                  proj.x = ringCenterX;
+                  proj.y = ringCenterY;
                   proj.angle = angle;
                   proj.ownerType = EntityType.Player;
                   proj.ownerId = player.id;
                   proj.speed = abilityProjSpeed;
                   proj.damage = abilityDamage;
-                  proj.startX = player.x;
-                  proj.startY = player.y;
+                  proj.startX = ringCenterX;
+                  proj.startY = ringCenterY;
                   proj.maxRange = abilityRange;
                   proj.collisionRadius = abilityProjSize;
-                  proj.projType = ProjectileType.HelmSpin;
+                  proj.projType = abilitySubtype === AbilitySubtype.Relic
+                    ? ProjectileType.RelicExpand
+                    : ProjectileType.HelmSpin;
                   proj.piercing = abilityPiercing;
                   proj.zone = player.zone;
                   this.state.projectiles.set(proj.id, proj);

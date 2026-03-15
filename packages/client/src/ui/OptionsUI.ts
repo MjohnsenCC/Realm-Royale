@@ -42,18 +42,22 @@ export class OptionsUI {
     scene.add.existing(this.panelBg);
 
     this.titleText = new Phaser.GameObjects.Text(scene, 0, 0, "OPTIONS", {
-      fontSize: "16px",
+      fontSize: "10px",
       color: "#ffffff",
-      fontFamily: "monospace",
+      fontFamily: "'Press Start 2P', monospace",
       fontStyle: "bold",
+      stroke: "#000000",
+      strokeThickness: 2,
     });
     this.titleText.setOrigin(0.5, 0.5).setDepth(312).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.titleText);
 
     this.backText = new Phaser.GameObjects.Text(scene, 0, 0, "BACK", {
-      fontSize: "12px",
+      fontSize: "7px",
       color: "#aaaacc",
-      fontFamily: "monospace",
+      fontFamily: "'Press Start 2P', monospace",
+      stroke: "#000000",
+      strokeThickness: 2,
     });
     this.backText.setOrigin(0.5, 0.5).setDepth(312).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.backText);
@@ -78,19 +82,23 @@ export class OptionsUI {
       scene.add.existing(bg);
 
       const label = new Phaser.GameObjects.Text(scene, 0, 0, def.label, {
-        fontSize: "12px",
+        fontSize: "7px",
         color: "#aaaacc",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
       });
       label.setOrigin(0, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
       scene.add.existing(label);
 
       const isOn = localStorage.getItem(def.key) === "true";
       const value = new Phaser.GameObjects.Text(scene, 0, 0, isOn ? "ON" : "OFF", {
-        fontSize: "12px",
+        fontSize: "7px",
         color: isOn ? "#44ff88" : "#666688",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
+        stroke: "#000000",
+        strokeThickness: 2,
       });
       value.setOrigin(1, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
       scene.add.existing(value);
@@ -154,7 +162,7 @@ export class OptionsUI {
     const screenH = getScreenHeight();
 
     const panelW = Math.round(240 * S);
-    const rowH = Math.round(34 * S);
+    const rowH = Math.round(33 * S);
     const rowGap = Math.round(8 * S);
     const titleH = Math.round(30 * S);
     const pad = Math.round(20 * S);
@@ -182,7 +190,7 @@ export class OptionsUI {
 
     // Title
     this.titleText.setPosition(px + panelW / 2, py + pad + titleH / 2);
-    this.titleText.setFontSize(Math.round(16 * S));
+    this.titleText.setFontSize(Math.round(10 * S));
 
     // Toggle rows
     const rowW = panelW - pad * 2;
@@ -198,10 +206,10 @@ export class OptionsUI {
       row.bg.strokeRoundedRect(rx, ry, rowW, rowH, 4);
 
       row.label.setPosition(rx + Math.round(10 * S), ry + rowH / 2);
-      row.label.setFontSize(Math.round(11 * S));
+      row.label.setFontSize(Math.round(7 * S));
 
       row.value.setPosition(rx + rowW - Math.round(10 * S), ry + rowH / 2);
-      row.value.setFontSize(Math.round(11 * S));
+      row.value.setFontSize(Math.round(7 * S));
 
       row.zone.setPosition(rx + rowW / 2, ry + rowH / 2);
       row.zone.setSize(rowW, rowH);
@@ -214,7 +222,7 @@ export class OptionsUI {
     const backBtnX = px + panelW / 2;
 
     this.backText.setPosition(backBtnX, backY + backH / 2);
-    this.backText.setFontSize(Math.round(11 * S));
+    this.backText.setFontSize(Math.round(7 * S));
 
     this.backZone.setPosition(backBtnX, backY + backH / 2);
     this.backZone.setSize(backBtnW, backH);

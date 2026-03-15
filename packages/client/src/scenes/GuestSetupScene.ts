@@ -7,7 +7,7 @@ import {
   ItemCategory,
   getSubtypeName,
 } from "@rotmg-lite/shared";
-import { drawItemIcon } from "../ui/ItemIcons";
+import { getItemSpriteKey, getItemOutlinedSize } from "../ui/ItemTextures";
 import {
   SERVERS,
   getSelectedServerId,
@@ -39,9 +39,9 @@ export class GuestSetupScene extends Phaser.Scene {
     // ─── BACK BUTTON ───
     const backBtn = this.add
       .text(20, 20, "< BACK", {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setDepth(5)
       .setInteractive({ useHandCursor: true });
@@ -55,9 +55,9 @@ export class GuestSetupScene extends Phaser.Scene {
     // ─── TITLE ───
     this.add
       .text(cx, height * 0.08, "PLAY AS GUEST", {
-        fontSize: "32px",
+        fontSize: "16px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -66,9 +66,9 @@ export class GuestSetupScene extends Phaser.Scene {
     // ─── CLASS SELECTION ───
     this.add
       .text(cx, height * 0.16, "SELECT CLASS", {
-        fontSize: "11px",
+        fontSize: "7px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(5);
@@ -90,6 +90,17 @@ export class GuestSetupScene extends Phaser.Scene {
 
     const cardGraphics = this.add.graphics().setDepth(5);
 
+    // Create weapon sprite Images for each class card
+    const weaponImages: Phaser.GameObjects.Image[] = [];
+    for (let i = 0; i < classOptions.length; i++) {
+      const equip = CLASS_EQUIPMENT_MAP[classOptions[i].id];
+      const spriteKey = getItemSpriteKey(ItemCategory.Weapon, equip.weapon);
+      if (spriteKey) {
+        const img = this.add.image(0, 0, spriteKey).setDepth(6).setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
+        weaponImages.push(img);
+      }
+    }
+
     const drawCards = () => {
       cardGraphics.clear();
       for (let i = 0; i < classOptions.length; i++) {
@@ -102,9 +113,15 @@ export class GuestSetupScene extends Phaser.Scene {
         cardGraphics.lineStyle(isSelected ? 2 : 1, isSelected ? 0x4488ff : 0x333355, isSelected ? 0.8 : 0.4);
         cardGraphics.strokeRoundedRect(cardX, cardTopY, cardW, cardH, 6);
 
-        const equip = CLASS_EQUIPMENT_MAP[opt.id];
-        const iconColor = isSelected ? 0x4488ff : 0x555577;
-        drawItemIcon(cardGraphics, cardX + cardW / 2, cardTopY + 48, 28, ItemCategory.Weapon, equip.weapon, iconColor);
+        // Position weapon sprite
+        if (weaponImages[i]) {
+          weaponImages[i].setPosition(cardX + cardW / 2, cardTopY + 48);
+          if (isSelected) {
+            weaponImages[i].clearTint().setAlpha(1);
+          } else {
+            weaponImages[i].setTint(0x555577).setAlpha(0.7);
+          }
+        }
       }
     };
 
@@ -119,9 +136,9 @@ export class GuestSetupScene extends Phaser.Scene {
 
       const nameText = this.add
         .text(cardCx, cardTopY + 16, opt.name, {
-          fontSize: "14px",
+          fontSize: "8px",
           color: isSelected ? "#ffffff" : "#666688",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
           fontStyle: "bold",
         })
         .setOrigin(0.5)
@@ -131,9 +148,9 @@ export class GuestSetupScene extends Phaser.Scene {
       const abilityName = getSubtypeName(ItemCategory.Ability, equip.ability);
       const info1Text = this.add
         .text(cardCx, cardTopY + 78, `${weaponName} · ${abilityName}`, {
-          fontSize: "10px",
+          fontSize: "6px",
           color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(6);
@@ -141,9 +158,9 @@ export class GuestSetupScene extends Phaser.Scene {
       const armorName = getSubtypeName(ItemCategory.Armor, equip.armor);
       const info2Text = this.add
         .text(cardCx, cardTopY + 94, armorName, {
-          fontSize: "10px",
+          fontSize: "6px",
           color: isSelected ? "#8888aa" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(6);
@@ -179,9 +196,9 @@ export class GuestSetupScene extends Phaser.Scene {
 
     this.add
       .text(cx, nameY, "PLAYER NAME", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -226,9 +243,9 @@ export class GuestSetupScene extends Phaser.Scene {
 
     this.add
       .text(cx, serverY, "SERVER", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#667788",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -244,9 +261,9 @@ export class GuestSetupScene extends Phaser.Scene {
       const server = SERVERS[i];
       const btn = this.add
         .text(serverStartX + i * serverBtnSpacing, serverBtnY, server.name, {
-          fontSize: "13px",
+          fontSize: "8px",
           color: server.id === currentServerId ? "#4488ff" : "#555566",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         })
         .setOrigin(0.5)
         .setDepth(6)
@@ -281,9 +298,9 @@ export class GuestSetupScene extends Phaser.Scene {
 
     this.playBtnText = this.add
       .text(cx, this.playBtnY + playBtnH / 2, "PLAY", {
-        fontSize: "28px",
+        fontSize: "14px",
         color: "#ffffff",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
         fontStyle: "bold",
       })
       .setOrigin(0.5)
@@ -304,9 +321,9 @@ export class GuestSetupScene extends Phaser.Scene {
     // Status text
     const statusText = this.add
       .text(cx, this.playBtnY + playBtnH + 20, "", {
-        fontSize: "14px",
+        fontSize: "8px",
         color: "#aaaaaa",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(0.5)
       .setDepth(6);
@@ -358,9 +375,9 @@ export class GuestSetupScene extends Phaser.Scene {
         height - 25,
         "WASD move  |  Mouse aim  |  Click shoot  |  Q return to nexus",
         {
-          fontSize: "11px",
+          fontSize: "7px",
           color: "#334455",
-          fontFamily: "monospace",
+          fontFamily: "'Press Start 2P', monospace",
         }
       )
       .setOrigin(0.5)
@@ -368,9 +385,9 @@ export class GuestSetupScene extends Phaser.Scene {
 
     this.add
       .text(width - 10, height - 10, "v0.0.28", {
-        fontSize: "10px",
+        fontSize: "6px",
         color: "#333344",
-        fontFamily: "monospace",
+        fontFamily: "'Press Start 2P', monospace",
       })
       .setOrigin(1, 1)
       .setDepth(5);
