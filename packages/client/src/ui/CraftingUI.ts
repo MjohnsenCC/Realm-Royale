@@ -13,10 +13,13 @@ import {
   getItemColor,
   ItemCategory,
   getCategoryName,
+  getSubtypeName,
   getScaledWeaponStats,
   getScaledAbilityStats,
   getScaledWeaponStatsRange,
   getScaledAbilityStatsRange,
+  ARMOR_LOCKED_STAT_MULTIPLIER,
+  getEquippableClassNames,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
@@ -39,6 +42,22 @@ const ORB_KEYS = [
 // Orb slot grid: 1 column (vertical strip on right side)
 const ORB_COLS = 1;
 
+function fmtVal(val: number): string {
+  return String(Math.round(val));
+}
+
+function isPercentStat(sType: number): boolean {
+  return (
+    sType === StatType.AttackSpeed ||
+    sType === StatType.PhysicalDamageReduction ||
+    sType === StatType.MagicDamageReduction ||
+    sType === StatType.ReducedAbilityCooldown ||
+    sType === StatType.IncreasedProjectileSpeed ||
+    sType === StatType.CriticalStrikeChance ||
+    sType === StatType.CriticalStrikeMultiplier
+  );
+}
+
 export class CraftingUI {
   private scene: Phaser.Scene;
 
@@ -52,17 +71,17 @@ export class CraftingUI {
   private itemSlotGraphics: Phaser.GameObjects.Graphics;
   private itemImage: Phaser.GameObjects.Image | null = null;
   private placeholderText: Phaser.GameObjects.Text;
+
+  // --- New RotMG-style item info (left-aligned, below slot) ---
   private itemNameText: Phaser.GameObjects.Text;
   private tierText: Phaser.GameObjects.Text;
-  private dividerAboveLockedText: Phaser.GameObjects.Text;
-  private lockedStatsText: Phaser.GameObjects.Text;
-  private dividerBelowLockedText: Phaser.GameObjects.Text;
-  private openStatsText: Phaser.GameObjects.Text;
-  private hiddenStatsText: Phaser.GameObjects.Text;
-  private shiftHintText: Phaser.GameObjects.Text;
-
-  // Pool for individual stat lines with tier labels
-  private statPool: { tier: Phaser.GameObjects.Text; stat: Phaser.GameObjects.Text }[] = [];
+  private classText: Phaser.GameObjects.Text;
+  private descText: Phaser.GameObjects.Text;
+  private lockedStatPool: Phaser.GameObjects.Text[] = [];
+  private openStatPool: { icon: Phaser.GameObjects.Image; text: Phaser.GameObjects.Text }[] = [];
+  private noOpenStatsText: Phaser.GameObjects.Text;
+  // Graphics for divider lines within item info
+  private itemInfoDividerGfx: Phaser.GameObjects.Graphics;
 
   // Orb slots (standalone for proper input handling)
   private orbSlotGraphics: Phaser.GameObjects.Graphics;
@@ -121,10 +140,16 @@ export class CraftingUI {
     const titleFontSize = `${Math.round(9 * S)}px`;
     const nameFontSize = `${Math.round(8 * S)}px`;
     const tierFontSize = `${Math.round(7 * S)}px`;
-    const statsFontSize = `${Math.round(7 * S)}px`;
-    const tieredStatFontSize = `${Math.round(6 * S)}px`;
-    const dividerFontSize = `${Math.round(6 * S)}px`;
     const smallFontSize = `${Math.round(6 * S)}px`;
+    const statFontSize = `${Math.round(6 * S)}px`;
+    const statIconSize = Math.round(16 * S);
+
+    const fontFamily = "'Press Start 2P', monospace";
+    const stroke = "#000000";
+    const strokeThickness = 2;
+
+    const leftPad = this.px + pad;
+    const wrapWidth = this.statsColumnWidth - pad * 2;
 
     // --- Panel container (non-interactive visuals only) ---
     this.panelContainer = scene.add.container(0, 0).setScrollFactor(0).setDepth(250).setVisible(false);
@@ -144,15 +169,18 @@ export class CraftingUI {
     this.orbSlotGraphics = scene.add.graphics();
     this.panelContainer.add(this.orbSlotGraphics);
 
+    // Divider graphics for item info section
+    this.itemInfoDividerGfx = scene.add.graphics().setScrollFactor(0).setDepth(251);
+
     // --- Title ---
     this.titleText = scene.add
       .text(this.px + this.statsColumnWidth / 2, this.py + pad, "Crafting", {
         fontSize: titleFontSize,
         color: "#aaaaff",
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily,
         fontStyle: "bold",
-        stroke: "#000000",
-        strokeThickness: 2,
+        stroke,
+        strokeThickness,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -162,12 +190,12 @@ export class CraftingUI {
     const placeholderY = this.py + pad + Math.round(22 * S);
     this.placeholderText = scene.add
       .text(this.px + this.statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
-        fontSize: `${Math.round(6 * S)}px`,
+        fontSize: smallFontSize,
         color: "#666688",
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily,
         fontStyle: "italic",
-        stroke: "#000000",
-        strokeThickness: 2,
+        stroke,
+        strokeThickness,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -178,166 +206,132 @@ export class CraftingUI {
     this.itemSlotCx = this.px + Math.round(this.statsColumnWidth / 2);
     this.itemSlotCy = placeholderY + Math.round(13 * S) + Math.round(this.itemSlotSize / 2);
 
-    const cx = this.px + this.statsColumnWidth / 2;
-    const wrapWidth = this.statsColumnWidth - pad * 2;
+    // --- Item info: left-aligned RotMG-style below slot ---
+    const infoStartY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
 
-    // Item name (below slot)
-    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
+    // Item name
     this.itemNameText = scene.add
-      .text(cx, nameY, "", {
+      .text(leftPad, infoStartY, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily,
         fontStyle: "bold",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
+        align: "left",
+        stroke,
+        strokeThickness,
       })
-      .setOrigin(0.5, 0)
+      .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(251)
       .setWordWrapWidth(wrapWidth);
 
-    // Tier label (below name)
-    const tierY = nameY + Math.round(17 * S);
+    // Tier label
     this.tierText = scene.add
-      .text(cx, tierY, "", {
+      .text(leftPad, 0, "", {
         fontSize: tierFontSize,
+        color: "#cccccc",
+        fontFamily,
+        align: "left",
+        stroke,
+        strokeThickness,
+      })
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(251);
+
+    // Class names
+    this.classText = scene.add
+      .text(leftPad, 0, "", {
+        fontSize: smallFontSize,
         color: "#aaaaaa",
-        fontFamily: "'Press Start 2P', monospace",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
+        fontFamily,
+        align: "left",
+        stroke,
+        strokeThickness,
       })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251);
-
-    // Divider above locked stats
-    this.dividerAboveLockedText = scene.add
-      .text(cx, 0, "", {
-        fontSize: dividerFontSize,
-        color: "#555566",
-        fontFamily: "'Press Start 2P', monospace",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251);
-
-    // Locked stats
-    this.lockedStatsText = scene.add
-      .text(cx, 0, "", {
-        fontSize: tieredStatFontSize,
-        color: "#ffffff",
-        fontFamily: "'Press Start 2P', monospace",
-        lineSpacing: Math.round(8 * S),
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0)
+      .setOrigin(0, 0)
       .setScrollFactor(0)
       .setDepth(251)
       .setWordWrapWidth(wrapWidth);
 
-    // Divider below locked stats
-    this.dividerBelowLockedText = scene.add
-      .text(cx, 0, "", {
-        fontSize: dividerFontSize,
-        color: "#555566",
-        fontFamily: "'Press Start 2P', monospace",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251);
-
-    // Open stats
-    this.openStatsText = scene.add
-      .text(cx, 0, "", {
-        fontSize: tieredStatFontSize,
-        color: "#4488ff",
-        fontFamily: "'Press Start 2P', monospace",
-        lineSpacing: Math.round(8 * S),
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251)
-      .setWordWrapWidth(wrapWidth);
-
-    // Hidden stats (shift-only, for weapons/abilities)
-    this.hiddenStatsText = scene.add
-      .text(cx, 0, "", {
-        fontSize: tieredStatFontSize,
-        color: "#aaffaa",
-        fontFamily: "'Press Start 2P', monospace",
-        lineSpacing: Math.round(8 * S),
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0)
-      .setScrollFactor(0)
-      .setDepth(251)
-      .setWordWrapWidth(wrapWidth);
-
-    // Shift hint
-    this.shiftHintText = scene.add
-      .text(cx, 0, "[SHIFT] for more info", {
-        fontSize: `${Math.round(6 * S)}px`,
-        color: "#888888",
-        fontFamily: "'Press Start 2P', monospace",
+    // Description
+    this.descText = scene.add
+      .text(leftPad, 0, "", {
+        fontSize: smallFontSize,
+        color: "#888899",
+        fontFamily,
         fontStyle: "italic",
-        align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
+        align: "left",
+        stroke,
+        strokeThickness,
       })
-      .setOrigin(0.5, 0)
+      .setOrigin(0, 0)
       .setScrollFactor(0)
-      .setDepth(251);
+      .setDepth(251)
+      .setWordWrapWidth(wrapWidth);
 
-    // Pool of tier label + stat line pairs for detailed stat display
-    const tierLabelFontSize = `${Math.round(6 * S)}px`;
-    for (let i = 0; i < 8; i++) {
-      const tierLabel = scene.add
-        .text(cx, 0, "", {
-          fontSize: tierLabelFontSize,
-          color: "#888888",
-          fontFamily: "'Press Start 2P', monospace",
-          align: "center",
-          stroke: "#000000",
-          strokeThickness: 2,
-        })
-        .setOrigin(0.5, 0)
-        .setScrollFactor(0)
-        .setDepth(251)
-        .setVisible(false);
-
-      const statLabel = scene.add
-        .text(cx, 0, "", {
-          fontSize: tieredStatFontSize,
+    // Locked stat pool (2 entries, left-aligned)
+    for (let i = 0; i < 2; i++) {
+      const txt = scene.add
+        .text(leftPad, 0, "", {
+          fontSize: statFontSize,
           color: "#ffffff",
-          fontFamily: "'Press Start 2P', monospace",
-          align: "center",
-          stroke: "#000000",
-          strokeThickness: 2,
+          fontFamily,
+          align: "left",
+          stroke,
+          strokeThickness,
         })
-        .setOrigin(0.5, 0)
+        .setOrigin(0, 0)
         .setScrollFactor(0)
         .setDepth(251)
         .setWordWrapWidth(wrapWidth)
         .setVisible(false);
-
-      this.statPool.push({ tier: tierLabel, stat: statLabel });
+      this.lockedStatPool.push(txt);
     }
+
+    // Open stat pool (5 entries, each with tier icon + text)
+    const iconX = leftPad + Math.round(16 * S) / 2;
+    const statTextX = leftPad + Math.round(16 * S) + Math.round(3 * S);
+    for (let i = 0; i < 5; i++) {
+      const icon = scene.add
+        .image(iconX, 0, "open-stat-icon-t1")
+        .setDisplaySize(statIconSize, statIconSize)
+        .setScrollFactor(0)
+        .setDepth(251)
+        .setVisible(false);
+
+      const txt = scene.add
+        .text(statTextX, 0, "", {
+          fontSize: statFontSize,
+          color: "#4488ff",
+          fontFamily,
+          align: "left",
+          stroke,
+          strokeThickness,
+        })
+        .setOrigin(0, 0)
+        .setScrollFactor(0)
+        .setDepth(251)
+        .setWordWrapWidth(wrapWidth - Math.round(16 * S) - Math.round(3 * S))
+        .setVisible(false);
+
+      this.openStatPool.push({ icon, text: txt });
+    }
+
+    // "No open stats" text
+    this.noOpenStatsText = scene.add
+      .text(leftPad, 0, "No open stats", {
+        fontSize: statFontSize,
+        color: "#4488ff",
+        fontFamily,
+        align: "left",
+        stroke,
+        strokeThickness,
+      })
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(251)
+      .setVisible(false);
 
     // --- Static orb info panel (positioned to the right of the crafting panel) ---
     const orbInfoWidth = Math.round(160 * S);
@@ -349,11 +343,11 @@ export class CraftingUI {
       .text(0, 0, "", {
         fontSize: `${Math.round(8 * S)}px`,
         color: "#ffffff",
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily,
         fontStyle: "bold",
         align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
+        stroke,
+        strokeThickness,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -363,13 +357,13 @@ export class CraftingUI {
 
     this.orbInfoDescText = scene.add
       .text(0, 0, "", {
-        fontSize: `${Math.round(6 * S)}px`,
+        fontSize: smallFontSize,
         color: "#888899",
-        fontFamily: "'Press Start 2P', monospace",
+        fontFamily,
         fontStyle: "italic",
         align: "center",
-        stroke: "#000000",
-        strokeThickness: 2,
+        stroke,
+        strokeThickness,
       })
       .setOrigin(0.5, 0)
       .setScrollFactor(0)
@@ -428,9 +422,9 @@ export class CraftingUI {
         .text(sx + this.orbSlotW - Math.round(8 * S), sy + this.orbSlotH - Math.round(8 * S), "x0", {
           fontSize: smallFontSize,
           color: "#888888",
-          fontFamily: "'Press Start 2P', monospace",
-          stroke: "#000000",
-          strokeThickness: 2,
+          fontFamily,
+          stroke,
+          strokeThickness,
         })
         .setOrigin(1, 1)
         .setScrollFactor(0)
@@ -487,6 +481,9 @@ export class CraftingUI {
 
     const S = this.S;
     const pad = Math.round(12 * S);
+    const leftPad = this.px + pad;
+    const wrapWidth = this.statsColumnWidth - pad * 2;
+    const statIconSize = Math.round(16 * S);
 
     // Reposition title
     this.titleText.setPosition(this.px + this.statsColumnWidth / 2, this.py + pad);
@@ -497,46 +494,30 @@ export class CraftingUI {
     this.placeholderText.setPosition(this.px + this.statsColumnWidth / 2, placeholderY);
     this.placeholderText.setFontSize(`${Math.round(6 * S)}px`);
 
-    // Update text positions
-    const cx = this.px + this.statsColumnWidth / 2;
-    const wrapWidth = this.statsColumnWidth - pad * 2;
-    const nameY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
-    this.itemNameText.setPosition(cx, nameY);
-    this.itemNameText.setFontSize(`${Math.round(8 * S)}px`);
-    this.itemNameText.setWordWrapWidth(wrapWidth);
+    // Update item info text positions and sizes
+    const nameFontSize = `${Math.round(8 * S)}px`;
+    const tierFontSize = `${Math.round(7 * S)}px`;
+    const smallFontSize = `${Math.round(6 * S)}px`;
+    const statFontSize = `${Math.round(6 * S)}px`;
 
-    const tierY = nameY + Math.round(17 * S);
-    this.tierText.setPosition(cx, tierY);
-    this.tierText.setFontSize(`${Math.round(7 * S)}px`);
+    this.itemNameText.setX(leftPad).setFontSize(nameFontSize).setWordWrapWidth(wrapWidth);
+    this.tierText.setX(leftPad).setFontSize(tierFontSize);
+    this.classText.setX(leftPad).setFontSize(smallFontSize).setWordWrapWidth(wrapWidth);
+    this.descText.setX(leftPad).setFontSize(smallFontSize).setWordWrapWidth(wrapWidth);
+    this.noOpenStatsText.setX(leftPad).setFontSize(statFontSize);
 
-    this.dividerAboveLockedText.setX(cx);
-    this.lockedStatsText.setX(cx);
-    this.lockedStatsText.setWordWrapWidth(wrapWidth);
-    this.dividerBelowLockedText.setX(cx);
-    this.openStatsText.setX(cx);
-    this.openStatsText.setWordWrapWidth(wrapWidth);
-    this.hiddenStatsText.setX(cx);
-    this.hiddenStatsText.setWordWrapWidth(wrapWidth);
-    this.shiftHintText.setX(cx);
+    for (const txt of this.lockedStatPool) {
+      txt.setX(leftPad).setFontSize(statFontSize).setWordWrapWidth(wrapWidth);
+    }
 
-    const tieredStatFontSize = `${Math.round(6 * S)}px`;
-    const dividerFontSize = `${Math.round(6 * S)}px`;
-    this.dividerAboveLockedText.setFontSize(dividerFontSize);
-    this.lockedStatsText.setFontSize(tieredStatFontSize);
-    this.dividerBelowLockedText.setFontSize(dividerFontSize);
-    this.openStatsText.setFontSize(tieredStatFontSize);
-    this.hiddenStatsText.setFontSize(tieredStatFontSize);
-
-    for (const entry of this.statPool) {
-      entry.tier.setX(cx);
-      entry.tier.setFontSize(`${Math.round(6 * S)}px`);
-      entry.stat.setX(cx);
-      entry.stat.setFontSize(tieredStatFontSize);
-      entry.stat.setWordWrapWidth(wrapWidth);
+    const iconX = leftPad + statIconSize / 2;
+    const statTextX = leftPad + statIconSize + Math.round(3 * S);
+    for (const entry of this.openStatPool) {
+      entry.icon.setX(iconX).setDisplaySize(statIconSize, statIconSize);
+      entry.text.setX(statTextX).setFontSize(statFontSize).setWordWrapWidth(wrapWidth - statIconSize - Math.round(3 * S));
     }
 
     // Reposition orb zones and count texts
-    const smallFontSize = `${Math.round(6 * S)}px`;
     for (let i = 0; i < ORB_KEYS.length; i++) {
       const col = i % ORB_COLS;
       const row = Math.floor(i / ORB_COLS);
@@ -557,7 +538,7 @@ export class CraftingUI {
     this.orbInfoNameText.setWordWrapWidth(orbInfoWidth - Math.round(17 * S));
     this.orbInfoNameText.setFontSize(`${Math.round(8 * S)}px`);
     this.orbInfoDescText.setWordWrapWidth(orbInfoWidth - Math.round(17 * S));
-    this.orbInfoDescText.setFontSize(`${Math.round(6 * S)}px`);
+    this.orbInfoDescText.setFontSize(smallFontSize);
 
     if (this.visible) this.redraw();
   }
@@ -664,13 +645,12 @@ export class CraftingUI {
     this.placeholderText.setVisible(v);
     this.itemNameText.setVisible(v);
     this.tierText.setVisible(v);
-    this.dividerAboveLockedText.setVisible(v);
-    this.lockedStatsText.setVisible(v);
-    this.dividerBelowLockedText.setVisible(v);
-    this.openStatsText.setVisible(v);
-    this.hiddenStatsText.setVisible(v);
-    this.shiftHintText.setVisible(v);
-    for (const entry of this.statPool) { entry.tier.setVisible(v); entry.stat.setVisible(v); }
+    this.classText.setVisible(v);
+    this.descText.setVisible(v);
+    this.noOpenStatsText.setVisible(false);
+    this.itemInfoDividerGfx.setVisible(v);
+    for (const txt of this.lockedStatPool) txt.setVisible(false);
+    for (const entry of this.openStatPool) { entry.icon.setVisible(false); entry.text.setVisible(false); }
 
     for (const zone of this.orbZones) {
       zone.setVisible(v);
@@ -714,8 +694,18 @@ export class CraftingUI {
 
   private drawItemSlot(): void {
     this.itemSlotGraphics.clear();
+    this.itemInfoDividerGfx.clear();
     const slotX = this.itemSlotCx - this.itemSlotSize / 2;
     const slotY = this.itemSlotCy - this.itemSlotSize / 2;
+
+    // Hide all item info elements first
+    this.itemNameText.setText("");
+    this.tierText.setText("");
+    this.classText.setText("").setVisible(false);
+    this.descText.setText("").setVisible(false);
+    this.noOpenStatsText.setVisible(false);
+    for (const txt of this.lockedStatPool) txt.setText("").setVisible(false);
+    for (const entry of this.openStatPool) { entry.icon.setVisible(false); entry.text.setText("").setVisible(false); }
 
     if (!this.currentItem) {
       this.placeholderText.setVisible(true);
@@ -724,22 +714,16 @@ export class CraftingUI {
       this.itemSlotGraphics.fillRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
       this.itemSlotGraphics.lineStyle(1, 0x333344, 1);
       this.itemSlotGraphics.strokeRect(slotX, slotY, this.itemSlotSize, this.itemSlotSize);
-      this.itemNameText.setText("");
-      this.tierText.setText("");
-      this.dividerAboveLockedText.setText("");
-      this.lockedStatsText.setText("");
-      this.dividerBelowLockedText.setText("");
-      this.openStatsText.setText("");
-      this.hiddenStatsText.setText("");
-      this.hiddenStatsText.setVisible(false);
-      this.shiftHintText.setVisible(false);
-      for (const entry of this.statPool) { entry.tier.setVisible(false); entry.stat.setVisible(false); }
       return;
     }
 
     this.placeholderText.setVisible(false);
     const item = this.currentItem;
     const S = this.S;
+    const pad = Math.round(12 * S);
+    const leftPad = this.px + pad;
+    const statIconSize = Math.round(16 * S);
+
     // Slot background with tier border
     const tier = item.isUT ? 13 : item.instanceTier;
     const borderColor = getSlotBorderColor(tier);
@@ -767,40 +751,89 @@ export class CraftingUI {
       drawItemIcon(this.itemSlotGraphics, this.itemSlotCx, this.itemSlotCy, this.itemSlotSize * 0.6, category, subtype, color);
     }
 
-    // Item name
+    // Consistent spacing constants
+    const sectionGap = Math.round(8 * S);
+    const lineGap = Math.round(3 * S);
+
+    let currentY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
+
+    // Item name (left-aligned)
     this.itemNameText.setText(getItemInstanceName(item));
+    this.itemNameText.setY(currentY);
+    currentY += this.itemNameText.height + lineGap;
 
     // Tier label
     this.tierText.setText(`T${item.instanceTier} ${getCategoryName(category)}`);
+    this.tierText.setY(currentY);
+    currentY += this.tierText.height + lineGap;
 
-    // === Build locked stats per category ===
-    const lockedEntries: { text: string; tier: number | null }[] = [];
+    // Class names
+    const classNames = getEquippableClassNames(category, subtype);
+    if (classNames.length > 0) {
+      this.classText.setText(classNames.join(", "));
+      this.classText.setY(currentY);
+      this.classText.setVisible(true);
+      currentY += this.classText.height + lineGap;
+    }
+
+    // Description placeholder
+    const subtypeName = getSubtypeName(category, subtype);
+    let desc = "";
+    if (category === ItemCategory.Weapon) desc = `A powerful ${subtypeName.toLowerCase()}.`;
+    else if (category === ItemCategory.Ability) desc = `A mystic ${subtypeName.toLowerCase()}.`;
+    else if (category === ItemCategory.Armor) desc = `A sturdy ${subtypeName.toLowerCase()}.`;
+    else if (category === ItemCategory.Ring) desc = "A ring imbued with magical energy.";
+    if (desc) {
+      this.descText.setText(desc);
+      this.descText.setY(currentY);
+      this.descText.setVisible(true);
+      currentY += this.descText.height;
+    }
+
+    // === Build locked stats ===
+    const lockedLines: string[] = [];
+    const lockedTiers: (number | null)[] = [];
 
     if (category === ItemCategory.Weapon) {
       const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
       const wRange = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedEntries.push({ text: `Damage: ${ws.damage}(${wRange.damageMin}-${wRange.damageMax})`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
+      lockedLines.push(`Damage: ${ws.damage}(${wRange.damageMin}-${wRange.damageMax})`);
+      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
       const frMin = (1000 / wRange.shootCooldownMax).toFixed(1);
       const frMax = (1000 / wRange.shootCooldownMin).toFixed(1);
-      lockedEntries.push({ text: `Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
+      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`);
+      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
     } else if (category === ItemCategory.Ability) {
       const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
       const aRange = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
-      lockedEntries.push({ text: `Damage: ${as.damage}(${aRange.damageMin}-${aRange.damageMax})`, tier: item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null });
-      lockedEntries.push({ text: `Mana Cost: ${as.manaCost}(${aRange.manaCostMin}-${aRange.manaCostMax})`, tier: item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null });
+      lockedLines.push(`Damage: ${as.damage}(${aRange.damageMin}-${aRange.damageMax})`);
+      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
+      lockedLines.push(`Mana Cost: ${as.manaCost}(${aRange.manaCostMin}-${aRange.manaCostMax})`);
+      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
     } else {
-      // Armor and Ring: use rolled locked stat bonuses
+      // Armor and Ring: use rolled locked stat bonuses with armor multiplier
+      const armorMult = category === ItemCategory.Armor
+        ? (ARMOR_LOCKED_STAT_MULTIPLIER[subtype] ?? 1.0)
+        : 1.0;
       if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-        const val = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
+        const rawVal = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
+        const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
-        const [min, max] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
-        lockedEntries.push({ text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`, tier: item.lockedStat1Tier });
+        const [rawMin, rawMax] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
+        const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
+        const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
+        lockedLines.push(`+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`);
+        lockedTiers.push(item.lockedStat1Tier);
       }
       if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-        const val = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+        const rawVal = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+        const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
-        const [min, max] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
-        lockedEntries.push({ text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`, tier: item.lockedStat2Tier });
+        const [rawMin, rawMax] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
+        const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
+        const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
+        lockedLines.push(`+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`);
+        lockedTiers.push(item.lockedStat2Tier);
       }
     }
 
@@ -813,88 +846,78 @@ export class CraftingUI {
       const val = getStatValue(sType, sTier, sRoll);
       const slotIdx = Math.floor(i / 3);
       const forgeProtected = item.forgeProtectedSlot === slotIdx || item.forgeProtectedSlot2 === slotIdx;
-      const suffix = (sType === StatType.AttackSpeed || sType === StatType.PhysicalDamageReduction || sType === StatType.MagicDamageReduction) ? "%" : "";
+      const suffix = isPercentStat(sType) ? "%" : "";
       const [min, max] = getStatRange(sType, sTier);
-      openEntries.push({ text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)})${suffix} ${STAT_NAMES[sType] ?? "???"}`, tier: sTier, forgeProtected });
+      const tierSuffix = `  T${sTier}`;
+      openEntries.push({
+        text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)})${suffix} ${STAT_NAMES[sType] ?? "???"}${tierSuffix}`,
+        tier: sTier,
+        forgeProtected,
+      });
     }
 
-    // === Layout using pool with tier labels ===
-    let currentY = this.tierText.y + this.tierText.height + Math.round(8 * S);
-    let poolIdx = 0;
+    // === Layout locked stats ===
+    const dividerYs: number[] = [];
 
-    // Hide multi-line text objects (using pool instead)
-    this.lockedStatsText.setText("");
-    this.openStatsText.setText("");
+    if (lockedLines.length > 0) {
+      currentY += sectionGap;
+      dividerYs.push(currentY);
+      currentY += sectionGap;
 
-    // Divider above locked stats
-    if (lockedEntries.length > 0) {
-      this.dividerAboveLockedText.setText("────────────");
-      this.dividerAboveLockedText.setY(currentY);
-      currentY += this.dividerAboveLockedText.height + 2;
-    } else {
-      this.dividerAboveLockedText.setText("");
-    }
-
-    // Locked stats with tier labels
-    for (let i = 0; i < lockedEntries.length && poolIdx < this.statPool.length; i++) {
-      const entry = this.statPool[poolIdx];
-      const tierNum = lockedEntries[i].tier;
-      if (tierNum != null) {
-        entry.tier.setText(`(Tier: ${tierNum})`);
-        entry.tier.setY(currentY);
-        entry.tier.setVisible(true);
-        currentY += entry.tier.height + 1;
-      } else {
-        entry.tier.setVisible(false);
+      for (let i = 0; i < lockedLines.length; i++) {
+        const txt = this.lockedStatPool[i];
+        let line = lockedLines[i];
+        if (lockedTiers[i] != null) {
+          line += `  T${lockedTiers[i]}`;
+        }
+        txt.setText(line);
+        txt.setColor("#ffffff");
+        txt.setY(currentY);
+        txt.setVisible(true);
+        currentY += txt.height + lineGap;
       }
-      entry.stat.setText(lockedEntries[i].text);
-      entry.stat.setColor("#ffffff");
-      entry.stat.setY(currentY);
-      entry.stat.setVisible(true);
-      currentY += entry.stat.height + 2;
-      poolIdx++;
     }
 
-    // Divider below locked stats
-    if (lockedEntries.length > 0) {
-      this.dividerBelowLockedText.setText("────────────");
-      this.dividerBelowLockedText.setY(currentY);
-      currentY += this.dividerBelowLockedText.height + 2;
+    // === Layout open stats ===
+    if (openEntries.length > 0) {
+      currentY += sectionGap;
+      dividerYs.push(currentY);
+      currentY += sectionGap;
+
+      for (let i = 0; i < openEntries.length && i < this.openStatPool.length; i++) {
+        const entry = this.openStatPool[i];
+        const tierKey = `open-stat-icon-t${Math.min(Math.max(openEntries[i].tier, 1), 6)}`;
+        entry.icon.setTexture(tierKey);
+        entry.icon.setDisplaySize(statIconSize, statIconSize);
+        entry.text.setText(openEntries[i].text);
+        entry.text.setColor(openEntries[i].forgeProtected ? "#ffaa00" : "#4488ff");
+        entry.text.setVisible(true);
+
+        const rowH = Math.max(entry.text.height, statIconSize);
+        entry.text.setY(currentY + (rowH - entry.text.height) / 2);
+        entry.icon.setY(currentY + rowH / 2);
+        entry.icon.setVisible(true);
+
+        currentY += rowH + lineGap;
+      }
     } else {
-      this.dividerBelowLockedText.setText("");
+      currentY += sectionGap;
+      dividerYs.push(currentY);
+      currentY += sectionGap;
+
+      this.noOpenStatsText.setY(currentY);
+      this.noOpenStatsText.setVisible(true);
     }
 
-    // Open stats with tier labels
-    for (let i = 0; i < openEntries.length && poolIdx < this.statPool.length; i++) {
-      const entry = this.statPool[poolIdx];
-      entry.tier.setText(`(Tier: ${openEntries[i].tier})`);
-      entry.tier.setY(currentY);
-      entry.tier.setVisible(true);
-      currentY += entry.tier.height + 1;
-      entry.stat.setText(openEntries[i].text);
-      entry.stat.setColor(openEntries[i].forgeProtected ? "#ffaa00" : "#4488ff");
-      entry.stat.setY(currentY);
-      entry.stat.setVisible(true);
-      currentY += entry.stat.height + 2;
-      poolIdx++;
+    // Draw divider lines
+    this.itemInfoDividerGfx.clear();
+    this.itemInfoDividerGfx.lineStyle(1, 0x555566, 0.6);
+    for (const y of dividerYs) {
+      this.itemInfoDividerGfx.beginPath();
+      this.itemInfoDividerGfx.moveTo(leftPad, y);
+      this.itemInfoDividerGfx.lineTo(leftPad + this.statsColumnWidth - pad * 2, y);
+      this.itemInfoDividerGfx.strokePath();
     }
-
-    if (openEntries.length === 0) {
-      this.openStatsText.setText("No open stats");
-      this.openStatsText.setY(currentY);
-      currentY += this.openStatsText.height + 2;
-    }
-
-    // Hide unused pool entries
-    for (let i = poolIdx; i < this.statPool.length; i++) {
-      this.statPool[i].tier.setVisible(false);
-      this.statPool[i].stat.setVisible(false);
-    }
-
-    this.hiddenStatsText.setText("");
-    this.hiddenStatsText.setVisible(false);
-
-    this.shiftHintText.setVisible(false);
   }
 
   private drawOrbSlots(): void {
@@ -906,7 +929,6 @@ export class CraftingUI {
       const sx = this.orbStartX + col * (this.orbSlotW + this.orbGapX);
       const sy = this.orbStartY + row * (this.orbSlotH + this.orbGapY);
       const orbType = ORB_KEYS[i];
-      const orbDef = ORB_DEFINITIONS[orbType];
       const count = this.orbCounts[orbType] ?? 0;
       const available = count > 0;
 
@@ -1010,8 +1032,4 @@ export class CraftingUI {
       slotIndex: this.currentSlotIndex,
     });
   }
-}
-
-function fmtVal(val: number): string {
-  return String(Math.round(val));
 }

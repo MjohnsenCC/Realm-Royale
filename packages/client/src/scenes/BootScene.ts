@@ -120,6 +120,11 @@ export class BootScene extends Phaser.Scene {
     this.load.image("item-calibrate-orb", "assets/sprites/items/consumables/calibrate_orb.png");
     this.load.image("item-divine-orb", "assets/sprites/items/consumables/divine_forge_orb.png");
 
+    // UI icons — per-tier stat icons for open stats
+    for (let t = 1; t <= 6; t++) {
+      this.load.image(`open-stat-icon-t${t}`, `assets/sprites/UI/stat_icons/open_stat_icon_t${t}.png`);
+    }
+
     // Portal sprites
     this.load.image("portal-the-wild", "assets/sprites/decorations/portals/the_wild_portal.png");
     this.load.image("portal-infernal-pit", "assets/sprites/decorations/portals/infernal_pit_portal.png");

@@ -457,3 +457,27 @@ export function canClassEquip(
     return itemSubtype === mapping.armor;
   return false;
 }
+
+/** Returns display names of classes that can equip an item with the given category/subtype. */
+export function getEquippableClassNames(
+  category: number,
+  subtype: number
+): string[] {
+  if (category === ItemCategory.Ring) return ["All Classes"];
+  if (
+    category === ItemCategory.Consumable ||
+    category === ItemCategory.CraftingOrb
+  )
+    return [];
+  const names: string[] = [];
+  for (const [classId, mapping] of Object.entries(CLASS_EQUIPMENT_MAP)) {
+    if (
+      (category === ItemCategory.Weapon && subtype === mapping.weapon) ||
+      (category === ItemCategory.Ability && subtype === mapping.ability) ||
+      (category === ItemCategory.Armor && subtype === mapping.armor)
+    ) {
+      names.push(CLASS_NAMES[Number(classId)] ?? "???");
+    }
+  }
+  return names;
+}
