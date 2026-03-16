@@ -494,6 +494,7 @@ export class ItemTooltip {
 
           entry.text.setX(statTextX);
           entry.text.setWordWrapWidth(statWrapW);
+          entry.text.setLineSpacing(Math.round(4 * this.S));
           setStatTextWithTitle(entry.text, titleStr, titleStr + stat.desc, statDescColor);
           entry.text.setVisible(true);
 
@@ -504,7 +505,7 @@ export class ItemTooltip {
           entry.icon.setY(currentY + rowH / 2);
           entry.icon.setVisible(true);
 
-          currentY += rowH + lineGap;
+          currentY += rowH + Math.round(5 * this.S);
         }
       }
     } else if (openDescs.length > 0) {
@@ -516,14 +517,12 @@ export class ItemTooltip {
       for (let i = 0; i < openDescs.length; i++) {
         const entry = this.openStatPool[i];
         const titleStr = openTitles[i] + " ";
-        let desc = openDescs[i];
-        if (shiftHeld) {
-          desc += `  T${openTiers[i]}`;
-        }
+        const desc = openDescs[i];
 
         const descColor = openForgeProtected[i] ? "#ffaa00" : statDescColor;
         entry.text.setX(statTextX);
         entry.text.setWordWrapWidth(statWrapW);
+        entry.text.setLineSpacing(Math.round(4 * this.S));
         setStatTextWithTitle(entry.text, titleStr, titleStr + desc, descColor);
         entry.text.setVisible(true);
 
@@ -535,7 +534,7 @@ export class ItemTooltip {
         entry.icon.setY(currentY + rowH / 2);
         entry.icon.setVisible(true);
 
-        currentY += rowH + lineGap;
+        currentY += rowH + Math.round(5 * this.S);
       }
     }
 

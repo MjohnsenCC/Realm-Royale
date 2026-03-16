@@ -5,6 +5,8 @@ import {
   ORB_DEFINITIONS,
   StatType,
   STAT_NAMES,
+  STAT_TITLES,
+  STAT_DESCRIPTIONS,
   getStatValue,
   getStatRange,
   getLockedStatValue,
@@ -58,6 +60,62 @@ function isPercentStat(sType: number): boolean {
     sType === StatType.CriticalStrikeChance ||
     sType === StatType.CriticalStrikeMultiplier
   );
+}
+
+/**
+ * Sets text with a title prefix in white and the rest in descColor.
+ * Renders full text for natural wrapping, then repaints title in white on the canvas.
+ */
+function setStatTextWithTitle(
+  textObj: Phaser.GameObjects.Text,
+  titleStr: string,
+  fullText: string,
+  descColor: string,
+): void {
+  textObj.setColor(descColor);
+  textObj.setText(fullText);
+
+  const canvas = textObj.canvas;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const style = textObj.style as any;
+  const resolution = style.resolution ?? 1;
+  const strokeThickness = style.strokeThickness ?? 0;
+  const strokeColor = style.stroke ?? "#000000";
+  const metrics = style.metrics;
+
+  ctx.save();
+  ctx.scale(resolution, resolution);
+  style.syncFont(canvas, ctx);
+  style.syncStyle(canvas, ctx);
+
+  const padding = (textObj as any).padding ?? { left: 0, top: 0 };
+  ctx.translate(padding.left, padding.top);
+
+  const lineX = strokeThickness / 2;
+  const lineY = (strokeThickness / 2) + metrics.ascent;
+
+  if (strokeThickness > 0) {
+    style.syncShadow(ctx, style.shadowStroke);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeThickness;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeText(titleStr, lineX, lineY);
+  }
+
+  style.syncShadow(ctx, style.shadowFill);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(titleStr, lineX, lineY);
+
+  ctx.restore();
+
+  const renderer = (textObj as any).renderer;
+  if (renderer && renderer.gl) {
+    const source = textObj.frame.source;
+    source.glTexture = renderer.canvasToTexture(canvas, source.glTexture, true);
+  }
 }
 
 export class CraftingUI {
@@ -860,7 +918,7 @@ export class CraftingUI {
     }
 
     // === Build open stats ===
-    const openEntries: { text: string; tier: number; forgeProtected: boolean }[] = [];
+    const openEntries: { title: string; desc: string; tier: number; forgeProtected: boolean }[] = [];
     for (let i = 0; i < item.openStats.length; i += 3) {
       const sType = item.openStats[i];
       const sTier = item.openStats[i + 1];
@@ -870,9 +928,12 @@ export class CraftingUI {
       const forgeProtected = item.forgeProtectedSlot === slotIdx || item.forgeProtectedSlot2 === slotIdx;
       const suffix = isPercentStat(sType) ? "%" : "";
       const [min, max] = getStatRange(sType, sTier);
-      const tierSuffix = `  T${sTier}`;
+      const title = STAT_TITLES[sType] ?? "???";
+      const descTemplate = STAT_DESCRIPTIONS[sType] ?? `+{value} ${STAT_NAMES[sType] ?? "???"}`;
+      const desc = descTemplate.replace("{value}", `${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)})${suffix}`);
       openEntries.push({
-        text: `+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)})${suffix} ${STAT_NAMES[sType] ?? "???"}${tierSuffix}`,
+        title: title + ": ",
+        desc,
         tier: sTier,
         forgeProtected,
       });
@@ -897,6 +958,7 @@ export class CraftingUI {
     }
 
     // === Layout open stats ===
+    const statDescColor = "#66bbff";
     if (openEntries.length > 0) {
       currentY += sectionGap;
       dividerYs.push(currentY);
@@ -904,11 +966,13 @@ export class CraftingUI {
 
       for (let i = 0; i < openEntries.length && i < this.openStatPool.length; i++) {
         const entry = this.openStatPool[i];
-        const tierKey = `open-stat-icon-t${Math.min(Math.max(openEntries[i].tier, 1), 6)}`;
+        const oe = openEntries[i];
+        const tierKey = `open-stat-icon-t${Math.min(Math.max(oe.tier, 1), 6)}`;
         entry.icon.setTexture(tierKey);
         entry.icon.setDisplaySize(statIconSize, statIconSize);
-        entry.text.setText(openEntries[i].text);
-        entry.text.setColor(openEntries[i].forgeProtected ? "#ffaa00" : "#4488ff");
+        const descColor = oe.forgeProtected ? "#ffaa00" : statDescColor;
+        entry.text.setLineSpacing(Math.round(4 * S));
+        setStatTextWithTitle(entry.text, oe.title, oe.title + oe.desc, descColor);
         entry.text.setVisible(true);
 
         const rowH = Math.max(entry.text.height, statIconSize);
@@ -916,7 +980,7 @@ export class CraftingUI {
         entry.icon.setY(currentY + rowH / 2);
         entry.icon.setVisible(true);
 
-        currentY += rowH + lineGap;
+        currentY += rowH + Math.round(5 * S);
       }
     } else {
       currentY += sectionGap;
