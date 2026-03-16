@@ -17,6 +17,7 @@ import {
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
+import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 
 // Stat row definitions
 const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility" }[] = [
@@ -59,7 +60,7 @@ export class StatsPanel {
   private contentHeight!: number;
 
   // Panel background (drawn at panel position, not scrolled)
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
 
   // Scrollable content container — holds all text + separator graphics
   private contentContainer: Phaser.GameObjects.Container;
@@ -74,8 +75,8 @@ export class StatsPanel {
   private statBonusTexts: Phaser.GameObjects.Text[] = [];
 
   // Scroll bar
-  private scrollBarBg: Phaser.GameObjects.Graphics;
-  private scrollBarThumb: Phaser.GameObjects.Graphics;
+  private scrollBarBg: Phaser.GameObjects.NineSlice;
+  private scrollBarThumb: Phaser.GameObjects.NineSlice;
 
   // Layout constants (pre-scaled)
   private pad!: number;
@@ -105,11 +106,16 @@ export class StatsPanel {
     this.computeLayout();
 
     // --- Panel background (fixed, not scrolled) ---
-    this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(250);
+    const C = UI_PANEL_CORNER;
+    this.panelBg = scene.add.nineslice(0, 0, "ui-panel-dark", undefined, 100, 100, C, C, C, C)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(250);
 
     // --- Scroll bar ---
-    this.scrollBarBg = scene.add.graphics().setScrollFactor(0).setDepth(252);
-    this.scrollBarThumb = scene.add.graphics().setScrollFactor(0).setDepth(253);
+    const SC = UI_SCROLLBAR_CORNER;
+    this.scrollBarBg = scene.add.nineslice(0, 0, "ui-scrollbar-track", undefined, 10, 100, SC, SC, SC, SC)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(252);
+    this.scrollBarThumb = scene.add.nineslice(0, 0, "ui-scrollbar-thumb", undefined, 10, 30, SC, SC, SC, SC)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(253);
 
     // --- Mask for clipping content ---
     this.maskGraphics = scene.add.graphics().setScrollFactor(0);
@@ -442,11 +448,8 @@ export class StatsPanel {
   }
 
   private drawBackground(): void {
-    this.panelBg.clear();
-    this.panelBg.fillStyle(0x0a0a14, 0.95);
-    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.viewHeight, 8);
-    this.panelBg.lineStyle(2, 0x4a4a6a, 0.8);
-    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.viewHeight, 8);
+    this.panelBg.setPosition(this.px, this.py);
+    this.panelBg.setSize(this.panelWidth, this.viewHeight);
   }
 
   private drawSeparators(): void {
@@ -462,23 +465,24 @@ export class StatsPanel {
     this.contentContainer.setPosition(this.px, this.py - this.scrollY);
 
     // Draw scroll bar
-    this.scrollBarBg.clear();
-    this.scrollBarThumb.clear();
     if (this.maxScrollY > 0) {
       const sbX = this.px + this.panelWidth - this.scrollBarWidth - 2;
       const sbY = this.py + 4;
       const sbH = this.viewHeight - 8;
 
-      // Track
-      this.scrollBarBg.fillStyle(0x222233, 0.5);
-      this.scrollBarBg.fillRoundedRect(sbX, sbY, this.scrollBarWidth, sbH, 2);
+      this.scrollBarBg.setPosition(sbX, sbY);
+      this.scrollBarBg.setSize(this.scrollBarWidth, sbH);
+      this.scrollBarBg.setVisible(true);
 
-      // Thumb
       const thumbRatio = this.viewHeight / this.contentHeight;
       const thumbH = Math.max(Math.round(20 * this.S), sbH * thumbRatio);
       const thumbY = sbY + (sbH - thumbH) * (this.scrollY / this.maxScrollY);
-      this.scrollBarThumb.fillStyle(0x6666aa, 0.7);
-      this.scrollBarThumb.fillRoundedRect(sbX, thumbY, this.scrollBarWidth, thumbH, 2);
+      this.scrollBarThumb.setPosition(sbX, thumbY);
+      this.scrollBarThumb.setSize(this.scrollBarWidth, thumbH);
+      this.scrollBarThumb.setVisible(true);
+    } else {
+      this.scrollBarBg.setVisible(false);
+      this.scrollBarThumb.setVisible(false);
     }
   }
 
@@ -683,10 +687,5 @@ export class StatsPanel {
     this.contentContainer.setVisible(v);
     this.scrollBarBg.setVisible(v);
     this.scrollBarThumb.setVisible(v);
-    if (!v) {
-      this.panelBg.clear();
-      this.scrollBarBg.clear();
-      this.scrollBarThumb.clear();
-    }
   }
 }

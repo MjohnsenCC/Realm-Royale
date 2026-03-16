@@ -12,8 +12,9 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
-import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { UI_PANEL_CORNER } from "./UITextures";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_GAP = 4;
@@ -46,13 +47,14 @@ const BAG_BORDER_COLORS: Record<number, number> = {
 export class LootBagUI {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
   private slotGraphics: Phaser.GameObjects.Graphics;
   private itemTexts: Phaser.GameObjects.Text[] = [];
   private tierTexts: Phaser.GameObjects.Text[] = [];
   private qtyTexts: Phaser.GameObjects.Text[] = [];
   private slotZones: Phaser.GameObjects.Zone[] = [];
   private itemImages: Phaser.GameObjects.Image[] = [];
+  private slotBgImages: Phaser.GameObjects.Image[] = [];
   private headerText: Phaser.GameObjects.Text;
   private room: any = null;
   private visible: boolean = false;
@@ -112,7 +114,9 @@ export class LootBagUI {
 
     this.container = scene.add.container(0, 0).setScrollFactor(0).setDepth(100);
 
-    this.panelBg = scene.add.graphics();
+    const C = UI_PANEL_CORNER;
+    this.panelBg = scene.add.nineslice(0, 0, "ui-panel-header", undefined, 100, 100, C, C, C, C)
+      .setOrigin(0, 0);
     this.container.add(this.panelBg);
 
     this.headerText = scene.add
@@ -131,6 +135,13 @@ export class LootBagUI {
     this.container.add(this.slotGraphics);
 
     for (let i = 0; i < BAG_SIZE; i++) {
+      const bgImg = scene.add.image(0, 0, "ui-slot-empty")
+        .setDisplaySize(this.slotSize, this.slotSize)
+        .setScrollFactor(0)
+        .setDepth(101);
+      this.container.add(bgImg);
+      this.slotBgImages.push(bgImg);
+
       const zone = scene.add
         .zone(0, 0, this.slotSize, this.slotSize)
         .setScrollFactor(0)
@@ -297,30 +308,16 @@ export class LootBagUI {
     const panelX = this.anchorX;
     const panelY = this.anchorY;
 
-    this.panelBg.clear();
-    const borderColor = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
-    this.panelBg.fillStyle(0x111122, 0.9);
-    this.panelBg.fillRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
-    this.panelBg.lineStyle(2, borderColor, 1);
-    this.panelBg.strokeRoundedRect(panelX, panelY, this.panelWidth, this.panelHeight, 6);
-
-    // Header decorative background
-    const headerAreaH = this.header;
-    this.panelBg.fillStyle(0x1a1a33, 0.8);
-    this.panelBg.fillRect(panelX + 2, panelY + 2, this.panelWidth - 4, headerAreaH);
-    // Separator line in bag color
-    const borderColor2 = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
-    this.panelBg.lineStyle(1, borderColor2, 0.6);
-    this.panelBg.lineBetween(
-      panelX + this.padding, panelY + headerAreaH,
-      panelX + this.panelWidth - this.padding, panelY + headerAreaH
-    );
+    const bagBorderColor = BAG_BORDER_COLORS[this.currentBagRarity] ?? 0x44aa44;
+    this.panelBg.setPosition(panelX, panelY);
+    this.panelBg.setSize(this.panelWidth, this.panelHeight);
+    this.panelBg.setTint(bagBorderColor);
 
     const headerColor = BAG_HEADER_COLORS[this.currentBagRarity] ?? "#44aa44";
     const headerName = BAG_HEADER_NAMES[this.currentBagRarity] ?? "Loot Bag";
     this.headerText.setText(headerName);
     this.headerText.setColor(headerColor);
-    this.headerText.setPosition(panelX + this.panelWidth / 2, panelY + headerAreaH / 2);
+    this.headerText.setPosition(panelX + this.panelWidth / 2, panelY + this.header / 2);
 
     this.slotGraphics.clear();
     for (let i = 0; i < BAG_SIZE; i++) {
@@ -332,17 +329,10 @@ export class LootBagUI {
       const item = this.currentItems[i];
       const hasItem = item && item.baseItemId >= 0;
 
-      if (hasItem) {
-        this.slotGraphics.fillStyle(0x444444, 0.4);
-      } else {
-        this.slotGraphics.fillStyle(0x222233, 0.6);
-      }
-      this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
-
-      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
-      const slotBorder = hasItem ? getSlotBorderColor(tier) : 0x333344;
-      this.slotGraphics.lineStyle(1, slotBorder, 1);
-      this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+      const bgKey = hasItem ? "ui-slot-filled" : "ui-slot-empty";
+      this.slotBgImages[i].setTexture(bgKey);
+      this.slotBgImages[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.slotBgImages[i].setDisplaySize(this.slotSize, this.slotSize);
 
       this.itemTexts[i].setText("");
       if (hasItem) {

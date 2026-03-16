@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
 import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
+import { UI_PANEL_CORNER } from "./UITextures";
 
 interface ChatEntry {
   playerName: string;
@@ -18,7 +19,7 @@ const PANEL_PADDING = 6;
 export class ChatUI {
   private scene: Phaser.Scene;
   private network: NetworkManager;
-  private bg: Phaser.GameObjects.Graphics;
+  private bg: Phaser.GameObjects.NineSlice;
   private lineTexts: Phaser.GameObjects.Text[] = [];
   private channelLabel: Phaser.GameObjects.Text;
   private messages: ChatEntry[] = [];
@@ -41,9 +42,9 @@ export class ChatUI {
     this.network = NetworkManager.getInstance();
 
     // Background
-    this.bg = scene.add.graphics();
-    this.bg.setScrollFactor(0);
-    this.bg.setDepth(90);
+    const C = UI_PANEL_CORNER;
+    this.bg = scene.add.nineslice(0, 0, "ui-panel-chat", undefined, 100, 100, C, C, C, C)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(90).setAlpha(0.1);
 
     // Pre-create text objects for visible lines
     for (let i = 0; i < VISIBLE_LINES; i++) {
@@ -179,7 +180,8 @@ export class ChatUI {
   }
 
   private drawLog(): void {
-    this.bg.clear();
+    this.bg.setPosition(this.panelX, this.panelY);
+    this.bg.setSize(this.panelW, this.panelH);
 
     // Show last VISIBLE_LINES messages
     const start = Math.max(0, this.messages.length - VISIBLE_LINES);

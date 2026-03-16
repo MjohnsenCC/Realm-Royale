@@ -13,7 +13,7 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
-import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
+import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize, generateItemTextures } from "./ItemTextures";
 import type { DragManager } from "./DragManager";
 
@@ -55,6 +55,8 @@ export class InventoryUI {
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
   private eqItemImages: Phaser.GameObjects.Image[] = [];
+  private slotBgImages: Phaser.GameObjects.Image[] = [];
+  private eqSlotBgImages: Phaser.GameObjects.Image[] = [];
   public equipmentVersion: number = 0;
   private currentEquipment: ItemInstanceData[] = Array.from(
     { length: EQUIPMENT_SLOTS },
@@ -110,11 +112,17 @@ export class InventoryUI {
 
     // --- Equipment slot graphics ---
     this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.abilityCooldownGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.abilityCooldownGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101.6);
 
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
       const sx = this.eqX + i * (this.slotSize + this.slotGap);
       const sy = this.eqY;
+
+      const eqBgImg = scene.add.image(sx + this.slotSize / 2, sy + this.slotSize / 2, "ui-slot-empty")
+        .setDisplaySize(this.slotSize, this.slotSize)
+        .setScrollFactor(0)
+        .setDepth(101);
+      this.eqSlotBgImages.push(eqBgImg);
 
       const zone = scene.add
         .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
@@ -204,6 +212,12 @@ export class InventoryUI {
       const row = Math.floor(i / COLS);
       const sx = this.invX + col * (this.slotSize + this.slotGap);
       const sy = this.invY + row * (this.slotSize + this.slotGap);
+
+      const bgImg = scene.add.image(sx + this.slotSize / 2, sy + this.slotSize / 2, "ui-slot-empty")
+        .setDisplaySize(this.slotSize, this.slotSize)
+        .setScrollFactor(0)
+        .setDepth(101);
+      this.slotBgImages.push(bgImg);
 
       const zone = scene.add
         .zone(sx + this.slotSize / 2, sy + this.slotSize / 2, this.slotSize, this.slotSize)
@@ -383,17 +397,10 @@ export class InventoryUI {
       const item = this.currentInventory[i];
       const hasItem = item && item.baseItemId >= 0;
 
-      if (hasItem) {
-        this.slotGraphics.fillStyle(0x444444, 0.4);
-      } else {
-        this.slotGraphics.fillStyle(0x222233, 0.6);
-      }
-      this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
-
-      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
-      const borderColor = hasItem ? getSlotBorderColor(tier) : 0x333344;
-      this.slotGraphics.lineStyle(1, borderColor, 1);
-      this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+      const bgKey = hasItem ? "ui-slot-filled" : "ui-slot-empty";
+      this.slotBgImages[i].setTexture(bgKey);
+      this.slotBgImages[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.slotBgImages[i].setDisplaySize(this.slotSize, this.slotSize);
 
       this.itemTexts[i].setText("");
       if (hasItem) {
@@ -432,13 +439,13 @@ export class InventoryUI {
 
       // Drag highlight overlays
       if (i === this.dragSourceSlot) {
-        this.slotGraphics.fillStyle(0x000000, 0.5);
-        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+        this.slotBgImages[i].setAlpha(0.3);
       } else if (i === this.highlightedInvSlot) {
-        this.slotGraphics.fillStyle(0x44ff44, 0.25);
-        this.slotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
-        this.slotGraphics.lineStyle(2, 0x44ff44, 0.8);
-        this.slotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+        this.slotBgImages[i].setTexture("ui-slot-highlight");
+        this.slotBgImages[i].setTint(0x44ff44);
+      } else {
+        this.slotBgImages[i].setAlpha(1);
+        this.slotBgImages[i].clearTint();
       }
 
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
@@ -458,17 +465,10 @@ export class InventoryUI {
       const item = this.currentEquipment[i];
       const hasItem = item && item.baseItemId >= 0;
 
-      if (hasItem) {
-        this.eqSlotGraphics.fillStyle(0x444444, 0.4);
-      } else {
-        this.eqSlotGraphics.fillStyle(0x222233, 0.6);
-      }
-      this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
-
-      const tier = hasItem ? (item.isUT ? 13 : item.instanceTier) : 0;
-      const borderColor = hasItem ? getSlotBorderColor(tier) : 0x444455;
-      this.eqSlotGraphics.lineStyle(2, borderColor, 1);
-      this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+      const bgKey = hasItem ? "ui-slot-filled" : "ui-slot-empty";
+      this.eqSlotBgImages[i].setTexture(bgKey);
+      this.eqSlotBgImages[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.eqSlotBgImages[i].setDisplaySize(this.slotSize, this.slotSize);
 
       this.eqItemTexts[i].setText("");
       const nativeSize = getItemOutlinedSize();
@@ -516,13 +516,13 @@ export class InventoryUI {
 
       // Drag overlays
       if (i === this.dragSourceEqSlot) {
-        this.eqSlotGraphics.fillStyle(0x000000, 0.5);
-        this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
+        this.eqSlotBgImages[i].setAlpha(0.3);
       } else if (i === this.highlightedEqSlot) {
-        this.eqSlotGraphics.fillStyle(0x44aaff, 0.25);
-        this.eqSlotGraphics.fillRect(sx, sy, this.slotSize, this.slotSize);
-        this.eqSlotGraphics.lineStyle(2, 0x44aaff, 0.8);
-        this.eqSlotGraphics.strokeRect(sx, sy, this.slotSize, this.slotSize);
+        this.eqSlotBgImages[i].setTexture("ui-slot-highlight");
+        this.eqSlotBgImages[i].setTint(0x44aaff);
+      } else {
+        this.eqSlotBgImages[i].setAlpha(1);
+        this.eqSlotBgImages[i].clearTint();
       }
 
       this.eqTierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
@@ -574,13 +574,15 @@ export class InventoryUI {
     if (progress < 0 || progress >= 1) return;
 
     const ABILITY_SLOT = 1;
-    const sx = this.eqX + ABILITY_SLOT * (this.slotSize + this.slotGap);
-    const sy = this.eqY;
-    const darkHeight = Math.ceil(this.slotSize * (1 - progress));
+    const img = this.eqSlotBgImages[ABILITY_SLOT];
+    const topLeft = img.getTopLeft();
+    const w = img.displayWidth;
+    const h = img.displayHeight;
+    const darkHeight = Math.min(Math.floor(h * (1 - progress)), h);
     if (darkHeight <= 0) return;
 
     this.abilityCooldownGraphics.fillStyle(0x000000, 0.55);
-    this.abilityCooldownGraphics.fillRect(sx, sy, this.slotSize, darkHeight);
+    this.abilityCooldownGraphics.fillRect(topLeft.x, topLeft.y, w, darkHeight);
   }
 
   // --- Drag-and-drop support ---
@@ -664,6 +666,8 @@ export class InventoryUI {
       this.eqItemTexts[i].setFontSize(slotFontSize);
       this.eqItemTexts[i].setWordWrapWidth(this.slotSize - 4);
       this.eqTierTexts[i].setFontSize(tierFontSize);
+      this.eqSlotBgImages[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.eqSlotBgImages[i].setDisplaySize(this.slotSize, this.slotSize);
     }
 
     // Reposition inventory slots
@@ -678,6 +682,8 @@ export class InventoryUI {
       this.itemTexts[i].setWordWrapWidth(this.slotSize - 4);
       this.tierTexts[i].setFontSize(tierFontSize);
       this.qtyTexts[i].setFontSize(tierFontSize);
+      this.slotBgImages[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
+      this.slotBgImages[i].setDisplaySize(this.slotSize, this.slotSize);
     }
 
     this.drawSlots();

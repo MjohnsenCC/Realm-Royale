@@ -1,6 +1,7 @@
 import Phaser from "phaser";
 import { generateItemTextures } from "../ui/ItemTextures";
 import { generateEntityTextures } from "../ui/EntityTextures";
+import { generateUITextures } from "../ui/UITextures";
 
 export class BootScene extends Phaser.Scene {
   constructor() {
@@ -149,11 +150,51 @@ export class BootScene extends Phaser.Scene {
     this.load.image("bag-red", "assets/sprites/items/bags/red_bag.png");
     this.load.image("bag-black", "assets/sprites/items/bags/black_bag.png");
     this.load.image("bag-orange", "assets/sprites/items/bags/orange_bag.png");
+
+    // UI sprites — panels (11×11 9-slice)
+    this.load.image("ui-panel-dark", "assets/sprites/UI/panels/ui-panel-dark.png");
+    this.load.image("ui-panel-header", "assets/sprites/UI/panels/ui-panel-header.png");
+    this.load.image("ui-panel-tooltip", "assets/sprites/UI/panels/ui-panel-tooltip.png");
+    this.load.image("ui-panel-overlay", "assets/sprites/UI/panels/ui-panel-overlay.png");
+    this.load.image("ui-panel-chat", "assets/sprites/UI/panels/ui-panel-chat.png");
+
+    // UI sprites — item slots (8×8)
+    this.load.image("ui-slot-empty", "assets/sprites/UI/slots/ui-slot-empty.png");
+    this.load.image("ui-slot-filled", "assets/sprites/UI/slots/ui-slot-filled.png");
+    this.load.image("ui-slot-highlight", "assets/sprites/UI/slots/ui-slot-highlight.png");
+
+    // UI sprites — bars
+    this.load.image("ui-bar-frame", "assets/sprites/UI/bars/ui-bar-frame.png");
+    this.load.image("ui-bar-hp", "assets/sprites/UI/bars/ui-bar-hp.png");
+    this.load.image("ui-bar-mp", "assets/sprites/UI/bars/ui-bar-mp.png");
+    this.load.image("ui-bar-xp", "assets/sprites/UI/bars/ui-bar-xp.png");
+    this.load.image("ui-bar-bg", "assets/sprites/UI/bars/ui-bar-bg.png");
+
+    // UI sprites — buttons
+    this.load.image("ui-btn-default", "assets/sprites/UI/buttons/ui-btn-default.png");
+    this.load.image("ui-btn-hover", "assets/sprites/UI/buttons/ui-btn-hover.png");
+    this.load.image("ui-btn-pressed", "assets/sprites/UI/buttons/ui-btn-pressed.png");
+    this.load.image("ui-btn-close", "assets/sprites/UI/buttons/ui-btn-close.png");
+
+    // UI sprites — minimap icons (3×3)
+    this.load.image("ui-icon-player", "assets/sprites/UI/icons/ui-icon-player.png");
+    this.load.image("ui-icon-enemy", "assets/sprites/UI/icons/ui-icon-enemy.png");
+    this.load.image("ui-icon-portal", "assets/sprites/UI/icons/ui-icon-portal.png");
+    this.load.image("ui-icon-chest", "assets/sprites/UI/icons/ui-icon-chest.png");
+    this.load.image("ui-icon-bag", "assets/sprites/UI/icons/ui-icon-bag.png");
+
+    // UI sprites — misc
+    this.load.image("ui-minimap-frame", "assets/sprites/UI/misc/ui-minimap-frame.png");
+    this.load.image("ui-scrollbar-track", "assets/sprites/UI/misc/ui-scrollbar-track.png");
+    this.load.image("ui-scrollbar-thumb", "assets/sprites/UI/misc/ui-scrollbar-thumb.png");
+    this.load.image("ui-tab-active", "assets/sprites/UI/misc/ui-tab-active.png");
+    this.load.image("ui-tab-inactive", "assets/sprites/UI/misc/ui-tab-inactive.png");
   }
 
   create() {
     generateItemTextures(this);
     generateEntityTextures(this);
+    generateUITextures(this);
 
     // Explicitly load the Google Font before showing the menu
     document.fonts.load('16px "Press Start 2P"').then(() => {

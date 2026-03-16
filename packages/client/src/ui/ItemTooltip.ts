@@ -28,6 +28,7 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
 import { getSlotBorderColor } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { UI_PANEL_CORNER } from "./UITextures";
 
 const BASE_TOOLTIP_WIDTH = 240;
 const BASE_TOOLTIP_PADDING = 8;
@@ -67,7 +68,8 @@ function setSpriteTexture1to1(sprite: Phaser.GameObjects.Image, key: string): vo
 export class ItemTooltip {
   private scene: Phaser.Scene;
   private container: Phaser.GameObjects.Container;
-  private bg: Phaser.GameObjects.Graphics;
+  private bgPanel: Phaser.GameObjects.NineSlice;
+  private bgOverlay: Phaser.GameObjects.Graphics;
 
   // Header
   private itemSprite: Phaser.GameObjects.Image;
@@ -129,8 +131,14 @@ export class ItemTooltip {
       .setDepth(300)
       .setVisible(false);
 
-    this.bg = scene.add.graphics();
-    this.container.add(this.bg);
+    const C = UI_PANEL_CORNER;
+    this.bgPanel = scene.add
+      .nineslice(0, 0, "ui-panel-tooltip", undefined, 100, 100, C, C, C, C)
+      .setOrigin(0, 0);
+    this.container.add(this.bgPanel);
+
+    this.bgOverlay = scene.add.graphics();
+    this.container.add(this.bgOverlay);
 
     // Item sprite in banner top-left (display size set per-show via setSpriteTexture1to1)
     this.itemSprite = scene.add
@@ -804,33 +812,32 @@ export class ItemTooltip {
     const S = this.S;
     const pad = this.tooltipPadding;
 
-    this.bg.clear();
-    this.bg.fillStyle(0x111122, 0.95);
-    this.bg.fillRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
+    // NineSlice background panel
+    this.bgPanel.setSize(this.tooltipWidth, totalHeight);
+    this.bgPanel.setPosition(0, 0);
+
+    // Overlay graphics: banner tint, separator, dividers
+    this.bgOverlay.clear();
 
     // Colored banner at top
-    this.bg.fillStyle(bannerColor, 0.35);
-    this.bg.fillRoundedRect(0, 0, this.tooltipWidth, bannerH, { tl: 4, tr: 4, bl: 0, br: 0 });
+    this.bgOverlay.fillStyle(bannerColor, 0.35);
+    this.bgOverlay.fillRect(0, 0, this.tooltipWidth, bannerH);
 
     // Separator line below banner
-    this.bg.lineStyle(1, bannerColor, 0.5);
-    this.bg.beginPath();
-    this.bg.moveTo(0, bannerH);
-    this.bg.lineTo(this.tooltipWidth, bannerH);
-    this.bg.strokePath();
+    this.bgOverlay.lineStyle(1, bannerColor, 0.5);
+    this.bgOverlay.beginPath();
+    this.bgOverlay.moveTo(0, bannerH);
+    this.bgOverlay.lineTo(this.tooltipWidth, bannerH);
+    this.bgOverlay.strokePath();
 
     // Divider lines
-    this.bg.lineStyle(1, 0x555566, 0.6);
+    this.bgOverlay.lineStyle(1, 0x555566, 0.6);
     for (const y of this.dividerYs) {
-      this.bg.beginPath();
-      this.bg.moveTo(pad, y);
-      this.bg.lineTo(this.tooltipWidth - pad, y);
-      this.bg.strokePath();
+      this.bgOverlay.beginPath();
+      this.bgOverlay.moveTo(pad, y);
+      this.bgOverlay.lineTo(this.tooltipWidth - pad, y);
+      this.bgOverlay.strokePath();
     }
-
-    // Border
-    this.bg.lineStyle(1, borderColor, 0.8);
-    this.bg.strokeRoundedRect(0, 0, this.tooltipWidth, totalHeight, 4);
 
     // Position: above cursor, centered horizontally
     let tx = screenX - this.tooltipWidth / 2;

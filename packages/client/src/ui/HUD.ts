@@ -9,6 +9,7 @@ import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UI
 import { generateItemTextures } from "./ItemTextures";
 import { isFpsVisible, isPingVisible } from "./OptionsUI";
 import { NetworkManager } from "../network/NetworkManager";
+import { UI_PANEL_CORNER, UI_BAR_CORNER, UI_BTN_CORNER, UI_MINIMAP_CORNER } from "./UITextures";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -56,23 +57,26 @@ export class HUD {
   private panelH!: number;
 
   // Unified panel background
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
 
   // Health bar
-  private hpBarBg: Phaser.GameObjects.Graphics;
-  private hpBarFill: Phaser.GameObjects.Graphics;
+  private hpBarFrame: Phaser.GameObjects.NineSlice;
+  private hpBarBgImg: Phaser.GameObjects.Image;
+  private hpBarFillImg: Phaser.GameObjects.Image;
   private hpLabel: Phaser.GameObjects.Text;
   private hpText: Phaser.GameObjects.Text;
 
   // Mana bar
-  private manaBarBg: Phaser.GameObjects.Graphics;
-  private manaBarFill: Phaser.GameObjects.Graphics;
+  private manaBarFrame: Phaser.GameObjects.NineSlice;
+  private manaBarBgImg: Phaser.GameObjects.Image;
+  private manaBarFillImg: Phaser.GameObjects.Image;
   private manaLabel: Phaser.GameObjects.Text;
   private manaText: Phaser.GameObjects.Text;
 
   // Level/XP bar
-  private lvlBarBg: Phaser.GameObjects.Graphics;
-  private lvlBarFill: Phaser.GameObjects.Graphics;
+  private lvlBarFrame: Phaser.GameObjects.NineSlice;
+  private lvlBarBgImg: Phaser.GameObjects.Image;
+  private lvlBarFillImg: Phaser.GameObjects.Image;
   private lvlLabel: Phaser.GameObjects.Text;
   private lvlText: Phaser.GameObjects.Text;
 
@@ -123,7 +127,7 @@ export class HUD {
   private mmVisibleH: number = 0;
 
   // Minimap
-  private minimapBg: Phaser.GameObjects.Graphics;
+  private minimapBg: Phaser.GameObjects.NineSlice;
   private minimapBiomeGraphics: Phaser.GameObjects.Graphics;
   private minimapBiomeCached: boolean = false;
   private minimapBiomeCachedZone: string = "";
@@ -142,7 +146,7 @@ export class HUD {
   dragManager: DragManager;
 
   // Stats button
-  private statsButton: Phaser.GameObjects.Graphics;
+  private statsButton: Phaser.GameObjects.NineSlice;
   private statsButtonZone: Phaser.GameObjects.Zone;
   private statsButtonText: Phaser.GameObjects.Text;
   private onStatsButtonClick: (() => void) | null = null;
@@ -182,11 +186,11 @@ export class HUD {
     const countFontSize = `${Math.round(8 * S)}px`;
 
     // --- Unified panel background ---
-    this.panelBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
-    this.panelBg.fillStyle(0x222222, 0.85);
-    this.panelBg.fillRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
-    this.panelBg.lineStyle(1, 0x555555, 0.8);
-    this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+    const C = UI_PANEL_CORNER;
+    this.panelBg = scene.add.nineslice(
+      this.panelX, this.panelY, "ui-panel-dark", undefined,
+      this.panelW, this.panelH, C, C, C, C
+    ).setOrigin(0, 0).setScrollFactor(0).setDepth(100);
 
     const barTextStyle = {
       fontSize: barFontSize,
@@ -197,8 +201,11 @@ export class HUD {
     };
 
     // --- Health bar ---
-    this.hpBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
-    this.hpBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    const BC = UI_BAR_CORNER;
+    this.hpBarFrame = scene.add.nineslice(0, 0, "ui-bar-frame", undefined, this.barWidth, this.barHeight, BC, BC, BC, BC)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.hpBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.hpBarFillImg = scene.add.image(0, 0, "ui-bar-hp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
     this.hpLabel = scene.add
       .text(0, 0, "HP", { ...barTextStyle })
       .setOrigin(0, 0.5)
@@ -210,8 +217,10 @@ export class HUD {
       .setDepth(102);
 
     // --- Mana bar ---
-    this.manaBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
-    this.manaBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.manaBarFrame = scene.add.nineslice(0, 0, "ui-bar-frame", undefined, this.barWidth, this.barHeight, BC, BC, BC, BC)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.manaBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.manaBarFillImg = scene.add.image(0, 0, "ui-bar-mp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
     this.manaLabel = scene.add
       .text(0, 0, "MP", { ...barTextStyle })
       .setOrigin(0, 0.5)
@@ -223,8 +232,10 @@ export class HUD {
       .setDepth(102);
 
     // --- Level/XP bar ---
-    this.lvlBarBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
-    this.lvlBarFill = scene.add.graphics().setScrollFactor(0).setDepth(101);
+    this.lvlBarFrame = scene.add.nineslice(0, 0, "ui-bar-frame", undefined, this.barWidth, this.barHeight, BC, BC, BC, BC)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.lvlBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
+    this.lvlBarFillImg = scene.add.image(0, 0, "ui-bar-xp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
     this.lvlLabel = scene.add
       .text(0, 0, "LV", { ...barTextStyle })
       .setOrigin(0, 0.5)
@@ -290,7 +301,12 @@ export class HUD {
       .setDepth(102);
 
     // --- Minimap (top-right) ---
-    this.minimapBg = scene.add.graphics().setScrollFactor(0).setDepth(100);
+    const MC = UI_MINIMAP_CORNER;
+    const mmPad0 = Math.round(17 * S);
+    this.minimapBg = scene.add.nineslice(
+      screenW - mmPad0 - this.mmWidth, mmPad0, "ui-minimap-frame", undefined,
+      this.mmWidth, this.mmHeight, MC, MC, MC, MC
+    ).setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.minimapBiomeGraphics = scene.add.graphics().setScrollFactor(0).setDepth(100);
     this.minimapDots = scene.add.graphics().setScrollFactor(0).setDepth(101);
 
@@ -454,11 +470,11 @@ export class HUD {
     const statsBtnW = this.statsBtnSize;
     const statsBtnX = this.eqX + Math.round((this.eqW - this.statsBtnSize) / 2);
 
-    this.statsButton = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.statsButton.fillStyle(0x333344, 0.7);
-    this.statsButton.fillRoundedRect(statsBtnX, statsBtnY, statsBtnW, statsBtnH, 3);
-    this.statsButton.lineStyle(1, 0x555566, 0.8);
-    this.statsButton.strokeRoundedRect(statsBtnX, statsBtnY, statsBtnW, statsBtnH, 3);
+    const SBC = UI_BTN_CORNER;
+    this.statsButton = scene.add.nineslice(
+      statsBtnX, statsBtnY, "ui-btn-default", undefined,
+      statsBtnW, statsBtnH, SBC, SBC, SBC, SBC
+    ).setOrigin(0, 0).setScrollFactor(0).setDepth(101);
 
     this.statsButtonText = scene.add
       .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "P", {
@@ -546,11 +562,8 @@ export class HUD {
     const countFontSize = `${Math.round(8 * S)}px`;
 
     // Update panel background
-    this.panelBg.clear();
-    this.panelBg.fillStyle(0x222222, 0.85);
-    this.panelBg.fillRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
-    this.panelBg.lineStyle(1, 0x555555, 0.8);
-    this.panelBg.strokeRoundedRect(this.panelX, this.panelY, this.panelW, this.panelH, 6);
+    this.panelBg.setPosition(this.panelX, this.panelY);
+    this.panelBg.setSize(this.panelW, this.panelH);
 
     // Update text font sizes
     this.hpLabel.setFontSize(barFontSize);
@@ -566,11 +579,8 @@ export class HUD {
     const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnSize = this.statsBtnSize;
     const statsBtnX = this.eqX + Math.round((this.eqW - statsBtnSize) / 2);
-    this.statsButton.clear();
-    this.statsButton.fillStyle(0x333344, 0.7);
-    this.statsButton.fillRoundedRect(statsBtnX, statsBtnY, statsBtnSize, statsBtnSize, 3);
-    this.statsButton.lineStyle(1, 0x555566, 0.8);
-    this.statsButton.strokeRoundedRect(statsBtnX, statsBtnY, statsBtnSize, statsBtnSize, 3);
+    this.statsButton.setPosition(statsBtnX, statsBtnY);
+    this.statsButton.setSize(statsBtnSize, statsBtnSize);
     this.statsButtonText.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
     this.statsButtonText.setFontSize(`${Math.max(8, Math.round(statsBtnSize * 0.4))}px`);
     this.statsButtonZone.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
@@ -625,24 +635,20 @@ export class HUD {
     const x = this.barsX;
     const y = this.barsY;
     const labelPad = Math.round(4 * this.S);
+    const inset = 2;
+    const innerW = this.barWidth - inset * 2;
+    const innerH = this.barHeight - inset * 2;
 
-    this.hpBarBg.clear();
-    this.hpBarBg.fillStyle(0x333333, 0.8);
-    this.hpBarBg.fillRect(x, y, this.barWidth, this.barHeight);
-    this.hpBarBg.lineStyle(1, 0x666666, 1);
-    this.hpBarBg.strokeRect(x, y, this.barWidth, this.barHeight);
+    this.hpBarFrame.setPosition(x, y);
+    this.hpBarFrame.setSize(this.barWidth, this.barHeight);
+    this.hpBarBgImg.setPosition(x + inset, y + inset);
+    this.hpBarBgImg.setDisplaySize(innerW, innerH);
 
-    this.hpBarFill.clear();
     const ratio = Math.max(0, hp / maxHp);
-    const fillColor =
-      ratio > 0.5 ? 0xcc3333 : ratio > 0.25 ? 0xcc6633 : 0xcc2222;
-    this.hpBarFill.fillStyle(fillColor, 1);
-    this.hpBarFill.fillRect(
-      x + 1,
-      y + 1,
-      (this.barWidth - 2) * ratio,
-      this.barHeight - 2
-    );
+    const fillW = Math.round(innerW * ratio);
+    this.hpBarFillImg.setPosition(x + inset, y + inset);
+    this.hpBarFillImg.setDisplaySize(fillW, innerH);
+    this.hpBarFillImg.setVisible(fillW > 0);
 
     this.hpLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.hpText.setText(`${Math.ceil(hp)} / ${maxHp}`);
@@ -654,22 +660,20 @@ export class HUD {
     const x = this.barsX;
     const y = this.barsY + this.barHeight + this.barGap;
     const labelPad = Math.round(4 * this.S);
+    const inset = 2;
+    const innerW = this.barWidth - inset * 2;
+    const innerH = this.barHeight - inset * 2;
 
-    this.manaBarBg.clear();
-    this.manaBarBg.fillStyle(0x333333, 0.8);
-    this.manaBarBg.fillRect(x, y, this.barWidth, this.barHeight);
-    this.manaBarBg.lineStyle(1, 0x666666, 1);
-    this.manaBarBg.strokeRect(x, y, this.barWidth, this.barHeight);
+    this.manaBarFrame.setPosition(x, y);
+    this.manaBarFrame.setSize(this.barWidth, this.barHeight);
+    this.manaBarBgImg.setPosition(x + inset, y + inset);
+    this.manaBarBgImg.setDisplaySize(innerW, innerH);
 
-    this.manaBarFill.clear();
     const ratio = maxMana > 0 ? Math.max(0, mana / maxMana) : 0;
-    this.manaBarFill.fillStyle(0x4466cc, 1);
-    this.manaBarFill.fillRect(
-      x + 1,
-      y + 1,
-      (this.barWidth - 2) * ratio,
-      this.barHeight - 2
-    );
+    const fillW = Math.round(innerW * ratio);
+    this.manaBarFillImg.setPosition(x + inset, y + inset);
+    this.manaBarFillImg.setDisplaySize(fillW, innerH);
+    this.manaBarFillImg.setVisible(fillW > 0);
 
     this.manaLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.manaText.setText(`${Math.ceil(mana)} / ${maxMana}`);
@@ -681,12 +685,14 @@ export class HUD {
     const x = this.barsX;
     const y = this.barsY + 2 * (this.barHeight + this.barGap);
     const labelPad = Math.round(4 * this.S);
+    const inset = 2;
+    const innerW = this.barWidth - inset * 2;
+    const innerH = this.barHeight - inset * 2;
 
-    this.lvlBarBg.clear();
-    this.lvlBarBg.fillStyle(0x333333, 0.8);
-    this.lvlBarBg.fillRect(x, y, this.barWidth, this.barHeight);
-    this.lvlBarBg.lineStyle(1, 0x666666, 1);
-    this.lvlBarBg.strokeRect(x, y, this.barWidth, this.barHeight);
+    this.lvlBarFrame.setPosition(x, y);
+    this.lvlBarFrame.setSize(this.barWidth, this.barHeight);
+    this.lvlBarBgImg.setPosition(x + inset, y + inset);
+    this.lvlBarBgImg.setDisplaySize(innerW, innerH);
 
     const currentLevelXp = xpForLevel(level);
     const nextLevelXp = xpForLevel(Math.min(level + 1, 100));
@@ -694,14 +700,10 @@ export class HUD {
     const xpProgress = xp - currentLevelXp;
     const ratio = xpNeeded > 0 ? Math.max(0, Math.min(1, xpProgress / xpNeeded)) : 1;
 
-    this.lvlBarFill.clear();
-    this.lvlBarFill.fillStyle(0x33aa55, 1);
-    this.lvlBarFill.fillRect(
-      x + 1,
-      y + 1,
-      (this.barWidth - 2) * ratio,
-      this.barHeight - 2
-    );
+    const fillW = Math.round(innerW * ratio);
+    this.lvlBarFillImg.setPosition(x + inset, y + inset);
+    this.lvlBarFillImg.setDisplaySize(fillW, innerH);
+    this.lvlBarFillImg.setVisible(fillW > 0);
 
     this.lvlLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.lvlText.setText(`${level}`);
@@ -974,11 +976,8 @@ export class HUD {
     if (mmMoved) {
       this.lastMmX = mmX;
       this.lastMmY = mmY;
-      this.minimapBg.clear();
-      this.minimapBg.fillStyle(0x111122, 0.7);
-      this.minimapBg.fillRect(mmX, mmY, this.mmWidth, this.mmHeight);
-      this.minimapBg.lineStyle(1, 0x444466, 1);
-      this.minimapBg.strokeRect(mmX, mmY, this.mmWidth, this.mmHeight);
+      this.minimapBg.setPosition(mmX, mmY);
+      this.minimapBg.setSize(this.mmWidth, this.mmHeight);
     }
 
     // Update dungeon fog of war — reveal tiles near the player

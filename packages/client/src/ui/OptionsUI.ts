@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { UI_PANEL_CORNER, UI_BTN_CORNER } from "./UITextures";
 
 export function isFpsVisible(): boolean {
   return localStorage.getItem("showFps") === "true";
@@ -13,7 +14,7 @@ interface ToggleRow {
   label: Phaser.GameObjects.Text;
   value: Phaser.GameObjects.Text;
   zone: Phaser.GameObjects.Zone;
-  bg: Phaser.GameObjects.Graphics;
+  bg: Phaser.GameObjects.NineSlice;
 }
 
 export class OptionsUI {
@@ -21,7 +22,7 @@ export class OptionsUI {
   private visible = false;
 
   private overlay: Phaser.GameObjects.Graphics;
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
   private titleText: Phaser.GameObjects.Text;
   private backText: Phaser.GameObjects.Text;
   private backZone: Phaser.GameObjects.Zone;
@@ -37,7 +38,9 @@ export class OptionsUI {
     this.overlay.setDepth(310).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.overlay);
 
-    this.panelBg = new Phaser.GameObjects.Graphics(scene);
+    const C = UI_PANEL_CORNER;
+    this.panelBg = new Phaser.GameObjects.NineSlice(scene, 0, 0, "ui-panel-overlay", undefined, 100, 100, C, C, C, C);
+    this.panelBg.setOrigin(0, 0);
     this.panelBg.setDepth(311).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.panelBg);
 
@@ -77,7 +80,9 @@ export class OptionsUI {
     ];
 
     for (const def of toggleDefs) {
-      const bg = new Phaser.GameObjects.Graphics(scene);
+      const BC = UI_BTN_CORNER;
+      const bg = new Phaser.GameObjects.NineSlice(scene, 0, 0, "ui-btn-default", undefined, 10, 10, BC, BC, BC, BC);
+      bg.setOrigin(0, 0);
       bg.setDepth(312).setScrollFactor(0).setVisible(false);
       scene.add.existing(bg);
 
@@ -182,11 +187,8 @@ export class OptionsUI {
     );
 
     // Panel background
-    this.panelBg.clear();
-    this.panelBg.fillStyle(0x111122, 0.95);
-    this.panelBg.fillRoundedRect(px, py, panelW, panelH, 6);
-    this.panelBg.lineStyle(2, 0x6666aa, 0.8);
-    this.panelBg.strokeRoundedRect(px, py, panelW, panelH, 6);
+    this.panelBg.setPosition(px, py);
+    this.panelBg.setSize(panelW, panelH);
 
     // Title
     this.titleText.setPosition(px + panelW / 2, py + pad + titleH / 2);
@@ -199,11 +201,8 @@ export class OptionsUI {
       const rx = px + pad;
       const ry = py + pad + titleH + i * (rowH + rowGap);
 
-      row.bg.clear();
-      row.bg.fillStyle(0x222244, 0.8);
-      row.bg.fillRoundedRect(rx, ry, rowW, rowH, 4);
-      row.bg.lineStyle(1, 0x444466, 0.8);
-      row.bg.strokeRoundedRect(rx, ry, rowW, rowH, 4);
+      row.bg.setPosition(rx, ry);
+      row.bg.setSize(rowW, rowH);
 
       row.label.setPosition(rx + Math.round(10 * S), ry + rowH / 2);
       row.label.setFontSize(Math.round(7 * S));

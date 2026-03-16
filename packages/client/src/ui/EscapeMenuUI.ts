@@ -1,5 +1,6 @@
 import Phaser from "phaser";
 import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
+import { UI_PANEL_CORNER, UI_BTN_CORNER } from "./UITextures";
 
 interface ButtonDef {
   label: string;
@@ -14,12 +15,12 @@ export class EscapeMenuUI {
   // Full-screen dimming overlay
   private overlay: Phaser.GameObjects.Graphics;
   // Panel background
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
   // Title
   private titleText: Phaser.GameObjects.Text;
 
   // Buttons
-  private buttonBgs: Phaser.GameObjects.Graphics[] = [];
+  private buttonBgs: Phaser.GameObjects.NineSlice[] = [];
   private buttonTexts: Phaser.GameObjects.Text[] = [];
   private buttonZones: Phaser.GameObjects.Zone[] = [];
   private buttonDefs: ButtonDef[] = [];
@@ -31,7 +32,9 @@ export class EscapeMenuUI {
     this.overlay.setDepth(299).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.overlay);
 
-    this.panelBg = new Phaser.GameObjects.Graphics(scene);
+    const C = UI_PANEL_CORNER;
+    this.panelBg = new Phaser.GameObjects.NineSlice(scene, 0, 0, "ui-panel-overlay", undefined, 100, 100, C, C, C, C);
+    this.panelBg.setOrigin(0, 0);
     this.panelBg.setDepth(300).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.panelBg);
 
@@ -71,7 +74,9 @@ export class EscapeMenuUI {
     for (let i = 0; i < this.buttonDefs.length; i++) {
       const def = this.buttonDefs[i];
 
-      const bg = new Phaser.GameObjects.Graphics(this.scene);
+      const BC = UI_BTN_CORNER;
+      const bg = new Phaser.GameObjects.NineSlice(this.scene, 0, 0, "ui-btn-default", undefined, 10, 10, BC, BC, BC, BC);
+      bg.setOrigin(0, 0);
       bg.setDepth(301).setScrollFactor(0).setVisible(false);
       this.scene.add.existing(bg);
       this.buttonBgs.push(bg);
@@ -95,11 +100,14 @@ export class EscapeMenuUI {
       const originalColor = def.color;
       zone.on("pointerover", () => {
         text.setColor("#ffffff");
+        bg.setTexture("ui-btn-hover");
       });
       zone.on("pointerout", () => {
         text.setColor(originalColor);
+        bg.setTexture("ui-btn-default");
       });
       zone.on("pointerdown", () => {
+        bg.setTexture("ui-btn-pressed");
         def.callback();
       });
     }
@@ -151,11 +159,8 @@ export class EscapeMenuUI {
     );
 
     // Panel background
-    this.panelBg.clear();
-    this.panelBg.fillStyle(0x111122, 0.95);
-    this.panelBg.fillRoundedRect(px, py, panelW, panelH, 6);
-    this.panelBg.lineStyle(2, 0x6666aa, 0.8);
-    this.panelBg.strokeRoundedRect(px, py, panelW, panelH, 6);
+    this.panelBg.setPosition(px, py);
+    this.panelBg.setSize(panelW, panelH);
 
     // Title
     this.titleText.setPosition(px + panelW / 2, py + pad + titleH / 2);
@@ -169,11 +174,8 @@ export class EscapeMenuUI {
 
       // Background
       const bg = this.buttonBgs[i];
-      bg.clear();
-      bg.fillStyle(0x222244, 0.8);
-      bg.fillRoundedRect(bx, by, btnW, btnH, 4);
-      bg.lineStyle(1, 0x444466, 0.8);
-      bg.strokeRoundedRect(bx, by, btnW, btnH, 4);
+      bg.setPosition(bx, by);
+      bg.setSize(btnW, btnH);
 
       // Text
       const text = this.buttonTexts[i];

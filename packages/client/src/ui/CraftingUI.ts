@@ -29,6 +29,7 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { UI_PANEL_CORNER } from "./UITextures";
 
 const ORB_KEYS = [
   CraftingOrbType.Blank,
@@ -123,7 +124,7 @@ export class CraftingUI {
 
   // Panel background (container for non-interactive visuals)
   private panelContainer: Phaser.GameObjects.Container;
-  private panelBg: Phaser.GameObjects.Graphics;
+  private panelBg: Phaser.GameObjects.NineSlice;
 
   // Title
   private titleText: Phaser.GameObjects.Text;
@@ -153,7 +154,7 @@ export class CraftingUI {
   private separatorGraphics: Phaser.GameObjects.Graphics;
 
   // Static orb info panel (shown to the side when hovering an orb)
-  private orbInfoBg: Phaser.GameObjects.Graphics;
+  private orbInfoBg: Phaser.GameObjects.NineSlice;
   private orbInfoNameText: Phaser.GameObjects.Text;
   private orbInfoDescText: Phaser.GameObjects.Text;
 
@@ -214,7 +215,8 @@ export class CraftingUI {
     // --- Panel container (non-interactive visuals only) ---
     this.panelContainer = scene.add.container(0, 0).setScrollFactor(0).setDepth(250).setVisible(false);
 
-    this.panelBg = scene.add.graphics();
+    const C = UI_PANEL_CORNER;
+    this.panelBg = scene.add.nineslice(0, 0, "ui-panel-dark", undefined, 100, 100, C, C, C, C).setOrigin(0, 0);
     this.panelContainer.add(this.panelBg);
 
     this.itemSlotGraphics = scene.add.graphics();
@@ -397,7 +399,7 @@ export class CraftingUI {
     const orbInfoWidth = Math.round(160 * S);
     const orbInfoPad = Math.round(8 * S);
 
-    this.orbInfoBg = scene.add.graphics().setScrollFactor(0).setDepth(260).setVisible(false);
+    this.orbInfoBg = scene.add.nineslice(0, 0, "ui-panel-tooltip", undefined, 100, 100, C, C, C, C).setOrigin(0, 0).setScrollFactor(0).setDepth(260).setVisible(false);
 
     this.orbInfoNameText = scene.add
       .text(0, 0, "", {
@@ -762,11 +764,8 @@ export class CraftingUI {
   }
 
   private drawPanel(): void {
-    this.panelBg.clear();
-    this.panelBg.fillStyle(0x111122, 0.95);
-    this.panelBg.fillRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
-    this.panelBg.lineStyle(2, 0x6666aa, 0.8);
-    this.panelBg.strokeRoundedRect(this.px, this.py, this.panelWidth, this.panelHeight, 8);
+    this.panelBg.setPosition(this.px, this.py);
+    this.panelBg.setSize(this.panelWidth, this.panelHeight);
   }
 
   private drawSeparator(): void {
@@ -1082,11 +1081,8 @@ export class CraftingUI {
     infoY = Math.min(infoY, screenH - infoHeight - 4);
 
     // Draw background
-    this.orbInfoBg.clear();
-    this.orbInfoBg.fillStyle(0x111122, 0.95);
-    this.orbInfoBg.fillRoundedRect(infoX, infoY, infoWidth, infoHeight, 6);
-    this.orbInfoBg.lineStyle(1, 0x6666aa, 0.6);
-    this.orbInfoBg.strokeRoundedRect(infoX, infoY, infoWidth, infoHeight, 6);
+    this.orbInfoBg.setPosition(infoX, infoY);
+    this.orbInfoBg.setSize(infoWidth, infoHeight);
     this.orbInfoBg.setVisible(true);
 
     // Position text
