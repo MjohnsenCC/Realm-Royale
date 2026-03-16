@@ -103,6 +103,10 @@ export class BootScene extends Phaser.Scene {
     this.load.image("deco-chest", "assets/sprites/decorations/chest.png");
     this.load.image("deco-crafting-table", "assets/sprites/decorations/crafting_table.png");
 
+    // Zone decoration sprites (placed via Tiled object layer)
+    this.load.image("deco-torch_small", "assets/sprites/decorations/torch_small.png");
+    this.load.image("deco-torch_tall", "assets/sprites/decorations/torch_tall.png");
+
     // Item sprites (12x12 pixel art) — one sprite per subtype, used for all tiers
     this.load.image("item-sword", "assets/sprites/items/sword.png");
     this.load.image("item-bow", "assets/sprites/items/bow.png");

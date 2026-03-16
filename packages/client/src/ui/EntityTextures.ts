@@ -78,6 +78,11 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
     upscaleAndOutline(scene, key);
   }
 
+  // Zone decoration sprites (placed via Tiled)
+  for (const key of ["deco-torch_small", "deco-torch_tall"]) {
+    upscaleAndOutline(scene, key);
+  }
+
   // Loot bag sprites
   for (const key of ["bag-green", "bag-red", "bag-black", "bag-orange"]) {
     upscaleAndOutline(scene, key);

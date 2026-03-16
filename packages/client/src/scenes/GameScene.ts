@@ -52,6 +52,7 @@ import {
   generateNexusMap,
   getNexusTiledResult,
   getNexusPortalPositions,
+  getNexusDecorations,
   resolveWallCollision,
   resolveHostileCollision,
   resolveDecorationCollision,
@@ -71,6 +72,8 @@ import {
   generateVaultMap,
   getVaultTiledResult,
   getVaultPositions,
+  getVaultDecorations,
+  resolveZoneDecorationCollision,
   getItemCategory,
   isCraftingOrbItem,
   PORTAL_GEM_ID,
@@ -901,33 +904,9 @@ export class GameScene extends Phaser.Scene {
 
   private drawNexusGround(): void {
     const mapData = this.nexusMap;
-    const { tiles, width, height } = mapData;
-    const edgeColor = 0x44aa66;
 
     // Floor tiles via multi-tile tilemap from Tiled map
     this.createTiledZoneTilemap("tileset-nexus", getNexusTiledResult());
-
-    // Draw highlighted edges where floor meets wall
-    this.groundGraphics.lineStyle(2, edgeColor, 0.6);
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
-        const px = tx * TILE_SIZE;
-        const py = ty * TILE_SIZE;
-        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
-        }
-        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
-        }
-        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
-        }
-        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
-        }
-      }
-    }
 
     // Nexus label at spawn center
     this.clearNexusLabels();
@@ -942,59 +921,36 @@ export class GameScene extends Phaser.Scene {
 
     const label = this.add
       .text(mapData.spawnRoom.centerX, mapData.spawnRoom.centerY + 60, "~ The Nexus ~", {
-        fontSize: "11px",
+        fontSize: "13px",
         color: "#44aa66",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
-        strokeThickness: 1,
+        strokeThickness: 2,
       })
       .setOrigin(0.5)
-      .setAlpha(0.5);
+      .setDepth(-0.2);
     this.nexusLabels.push(label);
 
     // Crafting table label
     const craftLabel = this.add
-      .text(ctx, cty + 31 + 14, "Crafting Table", {
-        fontSize: "7px",
+      .text(ctx, cty - 31 - 6, "Crafting Table", {
+        fontSize: "9px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       })
       .setOrigin(0.5)
-      .setAlpha(0.6);
+      .setDepth(-0.2);
     this.nexusLabels.push(craftLabel);
+
+    // Decorations from Tiled object layer
+    this.drawDecorations(getNexusDecorations());
   }
 
   private drawVaultGround(): void {
-    const mapData = this.vaultMap;
-    const { tiles, width, height } = mapData;
-    const edgeColor = 0xddaa55;
-
     // Floor tiles via multi-tile tilemap from Tiled map
     this.createTiledZoneTilemap("tileset-vault", getVaultTiledResult());
-
-    // Draw highlighted edges where floor meets wall
-    this.groundGraphics.lineStyle(2, edgeColor, 0.4);
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
-        const px = tx * TILE_SIZE;
-        const py = ty * TILE_SIZE;
-        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
-        }
-        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
-        }
-        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
-        }
-        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
-        }
-      }
-    }
 
     this.clearNexusLabels();
 
@@ -1009,15 +965,15 @@ export class GameScene extends Phaser.Scene {
 
     // Chest label
     const chestLabel = this.add
-      .text(chestX, chestY + 31 + 14, "Vault Chest", {
-        fontSize: "7px",
+      .text(chestX, chestY - 31 - 6, "Vault Chest", {
+        fontSize: "9px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       })
       .setOrigin(0.5)
-      .setAlpha(0.6);
+      .setDepth(-0.2);
     this.nexusLabels.push(chestLabel);
 
     // Draw return portal sprite near spawn area
@@ -1029,15 +985,15 @@ export class GameScene extends Phaser.Scene {
 
     const returnLabel = this.enteredVaultViaPortalGem ? "Return" : "Return to Nexus";
     const portalLabel = this.add
-      .text(rpx, rpy + 31 + 14, returnLabel, {
-        fontSize: "6px",
+      .text(rpx, rpy - 31 - 6, returnLabel, {
+        fontSize: "9px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       })
       .setOrigin(0.5)
-      .setAlpha(0.5);
+      .setDepth(-0.2);
     this.nexusLabels.push(portalLabel);
 
     // Draw crafting table sprite in vault
@@ -1049,16 +1005,30 @@ export class GameScene extends Phaser.Scene {
 
     // Crafting table label
     const vaultCraftLabel = this.add
-      .text(vctx, vcty + 31 + 14, "Crafting Table", {
-        fontSize: "7px",
+      .text(vctx, vcty - 31 - 6, "Crafting Table", {
+        fontSize: "9px",
         color: "#ddaa55",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       })
       .setOrigin(0.5)
-      .setAlpha(0.6);
+      .setDepth(-0.2);
     this.nexusLabels.push(vaultCraftLabel);
+
+    // Decorations from Tiled object layer
+    this.drawDecorations(getVaultDecorations());
+  }
+
+  private drawDecorations(decorations: import("@rotmg-lite/shared").DecorationDef[]): void {
+    for (const deco of decorations) {
+      const key = `deco-${deco.sprite}`;
+      if (!this.textures.exists(key) || this.textures.get(key).key === "__MISSING") continue;
+      const img = this.add.image(deco.x, deco.y, key).setDepth(10);
+      // Set origin to bottom-center so tall sprites anchor at their base
+      img.setOrigin(0.5, 1);
+      this.nexusLabels.push(img);
+    }
   }
 
   private drawVaultPortalGem(): void {
@@ -1785,13 +1755,13 @@ export class GameScene extends Phaser.Scene {
       this.realmPortalImages.push(img);
 
       // Label
-      const lbl = this.add.text(p.x, p.y - PORTAL_RADIUS - 14, p.label, {
-        fontSize: "7px",
+      const lbl = this.add.text(p.x, p.y - PORTAL_RADIUS - 6, p.label, {
+        fontSize: "9px",
         color: "#aa66ff",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
-      }).setOrigin(0.5).setDepth(6);
+      }).setOrigin(0.5).setDepth(-0.2);
       this.realmPortalLabels.push(lbl);
     }
 
@@ -1802,13 +1772,13 @@ export class GameScene extends Phaser.Scene {
     const vaultPortalImg = this.add.image(vpx, vpy, "portal-vault").setDepth(-0.3);
     this.realmPortalImages.push(vaultPortalImg);
 
-    const vaultLbl = this.add.text(vpx, vpy - 31 - 14, "Vault", {
-      fontSize: "7px",
+    const vaultLbl = this.add.text(vpx, vpy - 31 - 6, "Vault", {
+      fontSize: "9px",
       color: "#ddaa55",
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 1,
-    }).setOrigin(0.5).setDepth(6);
+    }).setOrigin(0.5).setDepth(-0.2);
     this.realmPortalLabels.push(vaultLbl);
   }
 
@@ -1913,6 +1883,16 @@ export class GameScene extends Phaser.Scene {
               const wallResult = resolveWallCollision(reconX, reconY, PLAYER_RADIUS, this.currentDungeonMap);
               reconX = wallResult.x;
               reconY = wallResult.y;
+            }
+            // Zone decoration collision (circle-vs-circle)
+            {
+              const decos = this.localZone === "nexus" ? getNexusDecorations()
+                : isVaultZone(this.localZone) ? getVaultDecorations() : undefined;
+              if (decos) {
+                const dr = resolveZoneDecorationCollision(reconX, reconY, PLAYER_RADIUS, decos);
+                reconX = dr.x;
+                reconY = dr.y;
+              }
             }
             // Water collision in hostile zone
             if (isHostileZone(this.localZone) && getRealmMap()) {
@@ -2525,6 +2505,16 @@ export class GameScene extends Phaser.Scene {
           predX = wallResult.x;
           predY = wallResult.y;
         }
+        // Zone decoration collision (circle-vs-circle)
+        {
+          const decos = this.localZone === "nexus" ? getNexusDecorations()
+            : isVaultZone(this.localZone) ? getVaultDecorations() : undefined;
+          if (decos) {
+            const dr = resolveZoneDecorationCollision(predX, predY, PLAYER_RADIUS, decos);
+            predX = dr.x;
+            predY = dr.y;
+          }
+        }
         // Water collision in hostile zone
         if (isHostileZone(this.localZone) && getRealmMap()) {
           const waterResult = resolveHostileCollision(predX, predY, PLAYER_RADIUS);
@@ -2875,15 +2865,15 @@ export class GameScene extends Phaser.Scene {
       }
 
       const label = this.add
-        .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
-          fontSize: "7px",
+        .text(px, py - DUNGEON_PORTAL_RADIUS - 6, labelText, {
+          fontSize: "9px",
           color: labelColor,
           fontFamily: "'Press Start 2P', monospace",
           stroke: "#000000",
           strokeThickness: 1,
         })
         .setOrigin(0.5)
-        .setDepth(6);
+        .setDepth(-0.2);
 
       this.dungeonPortalSprites.set(id, { sprite, label, x: px, y: py, portalType: pType });
     });
@@ -2939,15 +2929,15 @@ export class GameScene extends Phaser.Scene {
       }
 
       const label = this.add
-        .text(px, py - DUNGEON_PORTAL_RADIUS - 16, labelText, {
-          fontSize: "7px",
+        .text(px, py - DUNGEON_PORTAL_RADIUS - 6, labelText, {
+          fontSize: "9px",
           color: labelColor,
           fontFamily: "'Press Start 2P', monospace",
           stroke: "#000000",
           strokeThickness: 1,
         })
         .setOrigin(0.5)
-        .setDepth(6);
+        .setDepth(-0.2);
 
       this.dungeonPortalSprites.set(id, { sprite, label, x: px, y: py, portalType: pType });
     });

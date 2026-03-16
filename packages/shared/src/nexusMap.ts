@@ -4,9 +4,11 @@ import {
   parseTiledMap,
   TiledMapResult,
   TiledObjectDef,
+  DecorationDef,
   findObjectsByClass,
   findObjectByClass,
   getObjectProperty,
+  getDecorations,
 } from "./tiledMapLoader";
 import nexusTmj from "./maps/nexus.tmj.json";
 
@@ -57,6 +59,11 @@ export function getNexusTiledResult(): TiledMapResult {
 /** Get all objects from the nexus Tiled map. */
 export function getNexusObjects(): TiledObjectDef[] {
   return loadNexus().tiled.objects;
+}
+
+/** Get decoration objects from the nexus Tiled map. */
+export function getNexusDecorations(): DecorationDef[] {
+  return getDecorations(getNexusObjects());
 }
 
 /** Get nexus portal positions from the Tiled object layer. */

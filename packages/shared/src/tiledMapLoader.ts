@@ -235,3 +235,57 @@ export function getObjectProperty<T extends string | number | boolean>(
 ): T | undefined {
   return obj.properties[key] as T | undefined;
 }
+
+/** A decoration placed via the Tiled object layer. */
+export interface DecorationDef {
+  sprite: string; // sprite name (e.g. "torch_small") — maps to texture key "deco-{sprite}"
+  x: number; // world x
+  y: number; // world y
+  collisionRadius: number; // 0 = no collision; >0 = circle collider radius in world pixels
+  collisionOffsetY: number; // vertical offset for collision center (negative = higher up)
+}
+
+/** Extract all decoration objects from a Tiled object list. */
+export function getDecorations(objects: TiledObjectDef[]): DecorationDef[] {
+  return findObjectsByClass(objects, "decoration")
+    .map((o) => {
+      const sprite = getObjectProperty<string>(o, "sprite") || o.name;
+      if (!sprite) return null;
+      const collisionRadius = getObjectProperty<number>(o, "radius") ?? 0;
+      const collisionOffsetY = getObjectProperty<number>(o, "collisionOffsetY") ?? 0;
+      return { sprite, x: o.x, y: o.y, collisionRadius, collisionOffsetY };
+    })
+    .filter((d): d is DecorationDef => d !== null);
+}
+
+/**
+ * Resolve circle-vs-circle collision between a player and zone decorations.
+ * Only decorations with collisionRadius > 0 are checked.
+ */
+export function resolveZoneDecorationCollision(
+  px: number,
+  py: number,
+  playerRadius: number,
+  decorations: DecorationDef[]
+): { x: number; y: number } {
+  let rx = px;
+  let ry = py;
+
+  for (const deco of decorations) {
+    if (deco.collisionRadius <= 0) continue;
+
+    const dx = rx - deco.x;
+    const dy = ry - (deco.y + deco.collisionOffsetY);
+    const distSq = dx * dx + dy * dy;
+    const minDist = playerRadius + deco.collisionRadius;
+
+    if (distSq < minDist * minDist && distSq > 0) {
+      const dist = Math.sqrt(distSq);
+      const overlap = minDist - dist;
+      rx += (dx / dist) * overlap;
+      ry += (dy / dist) * overlap;
+    }
+  }
+
+  return { x: rx, y: ry };
+}

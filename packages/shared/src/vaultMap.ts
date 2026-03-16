@@ -4,8 +4,10 @@ import {
   parseTiledMap,
   TiledMapResult,
   TiledObjectDef,
+  DecorationDef,
   findObjectByClass,
   getObjectProperty,
+  getDecorations,
 } from "./tiledMapLoader";
 import vaultTmj from "./maps/vault.tmj.json";
 
@@ -56,6 +58,11 @@ export function getVaultTiledResult(): TiledMapResult {
 /** Get all objects from the vault Tiled map. */
 export function getVaultObjects(): TiledObjectDef[] {
   return loadVault().tiled.objects;
+}
+
+/** Get decoration objects from the vault Tiled map. */
+export function getVaultDecorations(): DecorationDef[] {
+  return getDecorations(getVaultObjects());
 }
 
 /** Get vault object positions from the Tiled object layer. */

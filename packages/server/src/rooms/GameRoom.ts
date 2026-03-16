@@ -58,6 +58,9 @@ import {
   VAULT_SIZE,
   generateVaultMap,
   getVaultPositions,
+  getVaultDecorations,
+  getNexusDecorations,
+  resolveZoneDecorationCollision,
   getDungeonTypeFromZone,
   resolveWallCollision,
   resolveHostileCollision,
@@ -1455,6 +1458,13 @@ export class GameRoom extends Room<GameState> {
               ? generateVaultMap()
               : undefined;
 
+        // Get zone decorations for circle collision
+        const zoneDecos = player.zone === "nexus"
+          ? getNexusDecorations()
+          : isVaultZone(player.zone)
+            ? getVaultDecorations()
+            : undefined;
+
         for (const input of player.pendingInputs) {
           // Terrain speed modifiers in hostile zone
           let inputSpeed = effectiveSpeed;
@@ -1485,6 +1495,13 @@ export class GameRoom extends Room<GameState> {
             const wallResult = resolveWallCollision(player.x, player.y, PLAYER_RADIUS, dungeonMap);
             player.x = wallResult.x;
             player.y = wallResult.y;
+          }
+
+          // Zone decoration collision (circle-vs-circle, nexus + vault)
+          if (zoneDecos) {
+            const decoResult = resolveZoneDecorationCollision(player.x, player.y, PLAYER_RADIUS, zoneDecos);
+            player.x = decoResult.x;
+            player.y = decoResult.y;
           }
 
           // Water collision in hostile zone

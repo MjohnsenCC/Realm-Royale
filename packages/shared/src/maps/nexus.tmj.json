@@ -31,14 +31,14 @@
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 24, 24, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 16, 17, 17, 17, 58, 24, 24, 56, 17, 17, 17, 18, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 24, 24, 24, 24, 0, 0, 36, 26, 24, 24, 26, 24, 7, 24, 26, 24, 24, 38, 0, 0, 24, 24, 24, 24, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 24, 26, 24, 7, 5, 24, 24, 5, 7, 26, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 24, 3, 24, 7, 5, 24, 24, 5, 3, 26, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 24, 5, 24, 24, 24, 24, 7, 24, 5, 24, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 32, 17, 58, 7, 24, 24, 3, 3, 3, 3, 24, 24, 7, 56, 17, 34, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 24, 24, 24, 24, 26, 24, 3, 1, 1, 3, 24, 26, 24, 24, 24, 24, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 24, 24, 24, 24, 26, 24, 3, 1, 1, 3, 24, 7, 24, 24, 24, 24, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 32, 17, 18, 26, 24, 24, 3, 3, 3, 3, 24, 7, 7, 16, 57, 34, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 24, 24, 7, 24, 24, 24, 24, 7, 5, 24, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
-            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 26, 7, 5, 26, 7, 24, 24, 24, 5, 24, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
+            0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 3, 3, 3, 24, 0, 0, 36, 26, 3, 5, 26, 7, 24, 24, 24, 3, 24, 38, 0, 0, 24, 3, 3, 3, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 24, 24, 24, 24, 24, 0, 0, 36, 24, 5, 24, 7, 24, 24, 5, 7, 24, 7, 38, 0, 0, 24, 24, 24, 24, 24, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 56, 57, 57, 57, 18, 24, 24, 16, 57, 57, 57, 58, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
             0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 36, 24, 24, 36, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0, 0,
@@ -91,8 +91,8 @@
                  "type":"portal",
                  "visible":true,
                  "width":0,
-                 "x":179.818181818182,
-                 "y":115.636363636364
+                 "x":179.818,
+                 "y":115.636
                 }, 
                 {
                  "height":0,
@@ -110,8 +110,8 @@
                  "type":"portal",
                  "visible":true,
                  "width":0,
-                 "x":219.454545454545,
-                 "y":115.454545454545
+                 "x":219.455,
+                 "y":115.455
                 }, 
                 {
                  "height":0,
@@ -121,16 +121,16 @@
                  "point":true,
                  "properties":[
                         {
-                         "name":"portalType",
+                         "name":"portalType: \"InfernalPitEntrance\"\n",
                          "type":"string",
-                         "value":"InfernalPitEntrance"
+                         "value":""
                         }],
                  "rotation":0,
                  "type":"portal",
                  "visible":true,
                  "width":0,
-                 "x":179.636363636364,
-                 "y":283.636363636364
+                 "x":179.636,
+                 "y":283.636
                 }, 
                 {
                  "height":0,
@@ -143,7 +143,7 @@
                  "visible":true,
                  "width":0,
                  "x":284,
-                 "y":198.666666666667
+                 "y":198.667
                 }, 
                 {
                  "height":0,
@@ -153,16 +153,16 @@
                  "point":true,
                  "properties":[
                         {
-                         "name":"portalType",
+                         "name":"portalType: \"NexusToVault\"\n",
                          "type":"string",
-                         "value":"NexusToVault"
+                         "value":""
                         }],
                  "rotation":0,
                  "type":"portal",
                  "visible":true,
                  "width":0,
                  "x":116,
-                 "y":198.666666666667
+                 "y":198.667
                 }, 
                 {
                  "height":0,
@@ -172,15 +172,15 @@
                  "point":true,
                  "properties":[
                         {
-                         "name":"portalType",
+                         "name":"portalType: \"VoidSanctumEntrance\"\n",
                          "type":"string",
-                         "value":"VoidSanctumEntrance"
+                         "value":""
                         }],
                  "rotation":0,
                  "type":"portal",
                  "visible":true,
                  "width":0,
-                 "x":220.181818181818,
+                 "x":220.182,
                  "y":284
                 }, 
                 {
@@ -193,8 +193,124 @@
                  "type":"spawn_point",
                  "visible":true,
                  "width":0,
-                 "x":199.272727272727,
+                 "x":199.273,
                  "y":200
+                }, 
+                {
+                 "height":0,
+                 "id":11,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":171.818,
+                 "y":227.727
+                }, 
+                {
+                 "height":0,
+                 "id":13,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":228,
+                 "y":228.091
+                }, 
+                {
+                 "height":0,
+                 "id":14,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":228,
+                 "y":172.091
+                }, 
+                {
+                 "height":0,
+                 "id":15,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":172,
+                 "y":172.091
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -203,7 +319,7 @@
          "y":0
         }],
  "nextlayerid":3,
- "nextobjectid":11,
+ "nextobjectid":16,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.0",
@@ -212,7 +328,7 @@
         {
          "columns":20,
          "firstgid":1,
-         "image":"..\/..\/..\/..\/..\/..\/..\/Desktop\/realmlite\/nexus_tilemap.png",
+         "image":"nexus_tilemap.png",
          "imageheight":160,
          "imagewidth":160,
          "margin":0,
@@ -295,10 +411,6 @@
                 }, 
                 {
                  "id":57,
-                 "type":"wall"
-                }, 
-                {
-                 "id":84,
                  "type":"wall"
                 }],
          "tilewidth":8

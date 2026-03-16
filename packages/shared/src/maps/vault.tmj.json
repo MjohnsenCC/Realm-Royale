@@ -1,4 +1,11 @@
 { "compressionlevel":-1,
+ "editorsettings":
+    {
+     "export":
+        {
+         "format":"json"
+        }
+    },
  "height":20,
  "infinite":false,
  "layers":[
@@ -95,6 +102,64 @@
                  "width":0,
                  "x":119.5,
                  "y":131.25
+                }, 
+                {
+                 "height":0,
+                 "id":8,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":88.0909090909091,
+                 "y":55.9090909090909
+                }, 
+                {
+                 "height":0,
+                 "id":9,
+                 "name":"torch_tall",
+                 "opacity":1,
+                 "point":true,
+                 "properties":[
+                        {
+                         "name":"collisionOffsetY",
+                         "type":"int",
+                         "value":-8
+                        }, 
+                        {
+                         "name":"radius",
+                         "type":"int",
+                         "value":15
+                        }, 
+                        {
+                         "name":"sprite",
+                         "type":"string",
+                         "value":"torch_tall"
+                        }],
+                 "rotation":0,
+                 "type":"decoration",
+                 "visible":true,
+                 "width":0,
+                 "x":152.090909090909,
+                 "y":56.0909090909091
                 }],
          "opacity":1,
          "type":"objectgroup",
@@ -103,7 +168,7 @@
          "y":0
         }],
  "nextlayerid":3,
- "nextobjectid":5,
+ "nextobjectid":10,
  "orientation":"orthogonal",
  "renderorder":"right-down",
  "tiledversion":"1.12.0",
@@ -120,104 +185,214 @@
          "spacing":0,
          "tilecount":10000,
          "tileheight":8,
-         "tilewidth":8,
          "tiles":[
                 {
                  "id":0,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":2,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":9,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":12,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":13,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":14,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":108,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":109,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":110,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":112,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":114,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":204,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":205,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":206,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":209,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":212,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":213,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":214,
                  "type":"wall"
-                },
+                }, 
                 {
                  "id":304,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":305,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":306,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":404,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":405,
                  "type":"floor"
-                },
+                }, 
                 {
                  "id":406,
                  "type":"floor"
-                }]
+                }],
+         "tilewidth":8
+        }, 
+        {
+         "columns":100,
+         "firstgid":10001,
+         "image":"..\/..\/Documents\/GitHub\/Realm-Royale\/packages\/client\/public\/assets\/sprites\/tiles\/VaultTileset.png",
+         "imageheight":800,
+         "imagewidth":800,
+         "margin":0,
+         "name":"VaultTileset",
+         "spacing":0,
+         "tilecount":10000,
+         "tileheight":8,
+         "tiles":[
+                {
+                 "id":0,
+                 "type":"floor"
+                }, 
+                {
+                 "id":2,
+                 "type":"floor"
+                }, 
+                {
+                 "id":9,
+                 "type":"wall"
+                }, 
+                {
+                 "id":12,
+                 "type":"wall"
+                }, 
+                {
+                 "id":13,
+                 "type":"wall"
+                }, 
+                {
+                 "id":14,
+                 "type":"wall"
+                }, 
+                {
+                 "id":108,
+                 "type":"wall"
+                }, 
+                {
+                 "id":109,
+                 "type":"wall"
+                }, 
+                {
+                 "id":110,
+                 "type":"wall"
+                }, 
+                {
+                 "id":112,
+                 "type":"wall"
+                }, 
+                {
+                 "id":114,
+                 "type":"wall"
+                }, 
+                {
+                 "id":204,
+                 "type":"floor"
+                }, 
+                {
+                 "id":205,
+                 "type":"floor"
+                }, 
+                {
+                 "id":206,
+                 "type":"floor"
+                }, 
+                {
+                 "id":209,
+                 "type":"wall"
+                }, 
+                {
+                 "id":212,
+                 "type":"wall"
+                }, 
+                {
+                 "id":213,
+                 "type":"wall"
+                }, 
+                {
+                 "id":214,
+                 "type":"wall"
+                }, 
+                {
+                 "id":304,
+                 "type":"floor"
+                }, 
+                {
+                 "id":305,
+                 "type":"floor"
+                }, 
+                {
+                 "id":306,
+                 "type":"floor"
+                }, 
+                {
+                 "id":404,
+                 "type":"floor"
+                }, 
+                {
+                 "id":405,
+                 "type":"floor"
+                }, 
+                {
+                 "id":406,
+                 "type":"floor"
+                }],
+         "tilewidth":8
         }],
  "tilewidth":8,
  "type":"map",
