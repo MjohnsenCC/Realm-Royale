@@ -29,9 +29,12 @@ import {
   ItemInstanceData,
   isEmptyItem,
   getStatValue,
+  getLockedStatValue,
   getScaledWeaponStats,
   getScaledAbilityStats,
   ARMOR_LOCKED_STAT_MULTIPLIER,
+  ARMOR_LOCKED_STATS,
+  LOCKED_STATS_BY_CATEGORY,
 } from "./itemStats";
 
 /** Cumulative XP required to reach a given level. Level 1 = 0 XP. */
@@ -81,19 +84,49 @@ function accumulateItemBonuses(
   },
   lockedStatMultiplier: number = 1.0
 ): void {
-  if (isEmptyItem(item) || item.isUT) return;
+  if (isEmptyItem(item)) return;
 
-  // Locked stats (pass roll instead of item tier)
-  addStatBonus(bonuses, item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true, lockedStatMultiplier);
-  addStatBonus(bonuses, item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true, lockedStatMultiplier);
+  // Locked stats — value determined by item tier (or UT range) + roll
+  addLockedStatBonus(bonuses, item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT, lockedStatMultiplier);
+  addLockedStatBonus(bonuses, item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT, lockedStatMultiplier);
 
   // Open stats (packed as [type, tier, roll, type, tier, roll, ...])
   for (let i = 0; i < item.openStats.length; i += 3) {
-    addStatBonus(bonuses, item.openStats[i], item.openStats[i + 1], item.openStats[i + 2], false);
+    addOpenStatBonus(bonuses, item.openStats[i], item.openStats[i + 1], item.openStats[i + 2]);
   }
 }
 
-function addStatBonus(
+function addLockedStatBonus(
+  bonuses: {
+    damage: number;
+    cooldownReduction: number;
+    maxHp: number;
+    hpRegen: number;
+    manaRegen: number;
+    maxMana: number;
+    speed: number;
+    projSpeed: number;
+    physDmgReduce: number;
+    magicDmgReduce: number;
+    abilityDamage: number;
+    abilityCooldownReduction: number;
+    projSpeedPercent: number;
+    critChance: number;
+    critMultiplier: number;
+  },
+  statType: number,
+  itemTier: number,
+  roll: number,
+  isUT: boolean,
+  multiplier: number = 1.0
+): void {
+  if (statType < 0) return;
+  const rawValue = getLockedStatValue(statType, itemTier, roll, isUT);
+  const value = multiplier !== 1.0 ? Math.round(rawValue * multiplier) : rawValue;
+  applyStatBonus(bonuses, statType, value);
+}
+
+function addOpenStatBonus(
   bonuses: {
     damage: number;
     cooldownReduction: number;
@@ -113,13 +146,34 @@ function addStatBonus(
   },
   statType: number,
   statTier: number,
-  roll: number,
-  isLocked: boolean = false,
-  multiplier: number = 1.0
+  roll: number
 ): void {
   if (statType < 0 || statTier <= 0) return;
-  const rawValue = getStatValue(statType, statTier, roll, isLocked);
-  const value = multiplier !== 1.0 ? Math.round(rawValue * multiplier) : rawValue;
+  const value = getStatValue(statType, statTier, roll);
+  applyStatBonus(bonuses, statType, value);
+}
+
+function applyStatBonus(
+  bonuses: {
+    damage: number;
+    cooldownReduction: number;
+    maxHp: number;
+    hpRegen: number;
+    manaRegen: number;
+    maxMana: number;
+    speed: number;
+    projSpeed: number;
+    physDmgReduce: number;
+    magicDmgReduce: number;
+    abilityDamage: number;
+    abilityCooldownReduction: number;
+    projSpeedPercent: number;
+    critChance: number;
+    critMultiplier: number;
+  },
+  statType: number,
+  value: number
+): void {
   switch (statType) {
     case StatType.AttackDamage:
       bonuses.damage += value;
@@ -217,18 +271,27 @@ export function computePlayerStats(
   // --- Weapon ---
   const weapon = equipment[ItemCategory.Weapon];
   if (weapon && !isEmptyItem(weapon)) {
+    const subtype = getItemSubtype(weapon.baseItemId);
     if (weapon.isUT) {
+      // UT weapons use ITEM_DEFS base values with quality roll applied
       const def = ITEM_DEFS[weapon.baseItemId];
       if (def?.weaponStats) {
-        weaponDamage = def.weaponStats.damage;
-        weaponCooldown = def.weaponStats.shootCooldown;
-        weaponRange = def.weaponStats.range;
-        weaponProjSpeed = def.weaponStats.projectileSpeed;
-        weaponProjSize = def.weaponStats.projectileSize;
+        const utBase = {
+          baseDamage: def.weaponStats.damage,
+          baseCooldown: def.weaponStats.shootCooldown,
+          baseRange: def.weaponStats.range,
+          baseProjSpeed: def.weaponStats.projectileSpeed,
+          baseProjSize: def.weaponStats.projectileSize,
+        };
+        const scaled = getScaledWeaponStats(subtype, 0, weapon.lockedStat1Roll, weapon.lockedStat2Roll, true, utBase);
+        weaponDamage = scaled.damage;
+        weaponCooldown = scaled.shootCooldown;
+        weaponRange = scaled.range;
+        weaponProjSpeed = scaled.projectileSpeed;
+        weaponProjSize = scaled.projectileSize;
       }
     } else {
-      const subtype = getItemSubtype(weapon.baseItemId);
-      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier, weapon.lockedStat1Tier, weapon.lockedStat2Tier, weapon.lockedStat1Roll, weapon.lockedStat2Roll);
+      const scaled = getScaledWeaponStats(subtype, weapon.instanceTier, weapon.lockedStat1Roll, weapon.lockedStat2Roll);
       weaponDamage = scaled.damage;
       weaponCooldown = scaled.shootCooldown;
       weaponRange = scaled.range;
@@ -237,19 +300,18 @@ export function computePlayerStats(
     }
   }
 
-  // --- Armor (UT fallback) ---
+  // --- UT Armor unique bonuses (beyond locked stats) ---
   const armor = equipment[ItemCategory.Armor];
   if (armor && !isEmptyItem(armor) && armor.isUT) {
     const def = ITEM_DEFS[armor.baseItemId];
     if (def?.armorStats) {
-      bonuses.maxHp += def.armorStats.maxHpBonus;
-      if (def.armorStats.manaRegenBonus) {
-        bonuses.manaRegen += def.armorStats.manaRegenBonus;
-      }
+      // Only apply unique bonuses — HP and HealthRegen come from locked stats
+      if (def.armorStats.manaRegenBonus) bonuses.manaRegen += def.armorStats.manaRegenBonus;
+      if (def.armorStats.speedBonus) bonuses.speed += def.armorStats.speedBonus;
     }
   }
 
-  // --- Ring (UT fallback) ---
+  // --- UT Ring unique bonuses (beyond locked stats) ---
   const ring = equipment[ItemCategory.Ring];
   if (ring && !isEmptyItem(ring) && ring.isUT) {
     const def = ITEM_DEFS[ring.baseItemId];
@@ -264,13 +326,13 @@ export function computePlayerStats(
     }
   }
 
-  // --- Accumulate locked + open stat bonuses from all tiered equipment ---
+  // --- Accumulate locked + open stat bonuses from all equipment ---
   for (let i = 0; i < equipment.length; i++) {
     const item = equipment[i];
     if (item) {
-      // Light armor gets reduced locked stat values
+      // Armor gets subtype-specific locked stat multiplier
       let lockedMult = 1.0;
-      if (i === ItemCategory.Armor && !isEmptyItem(item) && !item.isUT) {
+      if (i === ItemCategory.Armor && !isEmptyItem(item)) {
         const armorSubtype = getItemSubtype(item.baseItemId);
         lockedMult = ARMOR_LOCKED_STAT_MULTIPLIER[armorSubtype] ?? 1.0;
       }
@@ -299,6 +361,45 @@ export function computePlayerStats(
     abilityCooldownReduction: bonuses.abilityCooldownReduction,
     critChance: bonuses.critChance,
     critMultiplier: bonuses.critMultiplier,
+  };
+}
+
+/** Migrate an item from the old locked-stat-tier system to the new item-tier-based system.
+ *  Old items have lockedStat1Tier > 0; new items have lockedStat1Tier = 0.
+ *  For old UT items (lockedStat1Type === -1, isUT === true), re-roll locked stats. */
+export function migrateLockedStats(item: ItemInstanceData): ItemInstanceData {
+  // Already migrated or new system
+  if (item.lockedStat1Tier === 0 && item.lockedStat2Tier === 0) return item;
+
+  // Old UT items had no locked stats — give them fresh rolls
+  if (item.isUT && item.lockedStat1Type === -1) {
+    const category = getItemCategory(item.baseItemId);
+    const subtype = getItemSubtype(item.baseItemId);
+    let lockedStats: [number, number] = [-1, -1];
+    if (category === ItemCategory.Armor) {
+      lockedStats = ARMOR_LOCKED_STATS[subtype] ?? LOCKED_STATS_BY_CATEGORY[category] ?? [-1, -1];
+    } else if (category === ItemCategory.Ring) {
+      lockedStats = LOCKED_STATS_BY_CATEGORY[category] ?? [-1, -1];
+    }
+    return {
+      ...item,
+      lockedStat1Type: lockedStats[0],
+      lockedStat1Tier: 0,
+      lockedStat1Roll: Math.floor(Math.random() * 101),
+      lockedStat2Type: lockedStats[1],
+      lockedStat2Tier: 0,
+      lockedStat2Roll: Math.floor(Math.random() * 101),
+    };
+  }
+
+  // Old tiered items: just clear the tier fields, keep the rolls as-is.
+  // The old roll (0-100) within the old tier range is repurposed as the roll
+  // within the new item-tier range. Values will shift but this is acceptable
+  // for a one-time migration.
+  return {
+    ...item,
+    lockedStat1Tier: 0,
+    lockedStat2Tier: 0,
   };
 }
 

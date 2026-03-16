@@ -14,7 +14,6 @@ import {
   ItemInstanceData,
   LOCKED_STATS_BY_CATEGORY,
   ARMOR_LOCKED_STATS,
-  rollStatTier,
   rollStatRoll,
   createEmptyItemInstance,
   pickRandom,
@@ -105,6 +104,7 @@ export interface AbilityStats {
 export interface ArmorStats {
   maxHpBonus: number;
   manaRegenBonus?: number;
+  speedBonus?: number; // UT-only: unique movement speed bonus
 }
 
 export interface RingStats {
@@ -132,6 +132,7 @@ export interface ItemDefinition {
   tierColor: number;
   description: string;
   usageHint?: string;
+  uniqueStats?: { title: string; desc: string }[];   // UT-only: unique stat lines displayed like open stats with UT icon
   weaponStats?: WeaponStats;
   abilityStats?: AbilityStats;
   armorStats?: ArmorStats;
@@ -921,7 +922,8 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(0, 0, 13)]: {
     id: 13, name: "Doom Blade", category: 0, subtype: 0, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "An accursed blade that fractures reality into three slashes.",
+    description: "Forged in the fires of a dying realm, each swing tears through reality itself.",
+    uniqueStats: [{ title: "Shatter", desc: "Fires 3 Projectiles" }, { title: "Fan", desc: "30\u00B0 Spread Pattern" }],
     weaponStats: {
       damage: 55, range: 170, shootCooldown: 350,
       projectileSpeed: 420, projectileSize: 14,
@@ -931,7 +933,8 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(1, 0, 13)]: {
     id: 1013, name: "Phantom Quiver", category: 1, subtype: 0, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "Spectral arrows grant otherworldly swiftness.",
+    description: "Arrows loosed from beyond the veil carry spectral momentum.",
+    uniqueStats: [{ title: "Spectral Rush", desc: "+80 Move Speed for 3s on cast" }],
     abilityStats: {
       damage: 120, range: 500, projectileSpeed: 700, projectileSize: 14,
       manaCost: 45, cooldown: 1200, piercing: true,
@@ -941,19 +944,22 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(2, 0, 13)]: {
     id: 2013, name: "Ethereal Shroud", category: 2, subtype: 0, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "Woven from ether, it feeds your magic at the cost of protection.",
-    armorStats: { maxHpBonus: 50, manaRegenBonus: 8 },
+    description: "Ether-woven threads hum with arcane currents, feeding the wearer's magic.",
+    uniqueStats: [{ title: "Arcane Flow", desc: "+8 Mana Regen" }],
+    armorStats: { maxHpBonus: 0, manaRegenBonus: 8 },
   },
   [makeItemId(3, 0, 13)]: {
     id: 3013, name: "Ring of the Void", category: 3, subtype: 0, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "The void amplifies power but offers no shelter.",
+    description: "A band of condensed void energy pulses with destructive power.",
+    uniqueStats: [{ title: "Void Haste", desc: "+30 Move Speed" }, { title: "Void Strike", desc: "+25 Weapon Damage" }, { title: "Void Bolt", desc: "+100 Proj Speed" }],
     ringStats: { speedBonus: 30, damageBonus: 25, hpRegenBonus: 0, maxHpBonus: 0, maxManaBonus: 0, projSpeedBonus: 100 },
   },
   [makeItemId(1, 1, 13)]: {
     id: 1113, name: "Berserker's Crown", category: 1, subtype: 1, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "Spins with devastating fury, striking all nearby foes.",
+    description: "The crown seethes with uncontainable fury, striking in every direction.",
+    uniqueStats: [{ title: "Fury", desc: "8 Piercing Strikes" }, { title: "Whirlwind", desc: "360\u00B0 Ring Pattern" }],
     abilityStats: {
       damage: 100, range: 200, projectileSpeed: 450, projectileSize: 14,
       manaCost: 50, cooldown: 1400, piercing: true,
@@ -962,8 +968,9 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
   [makeItemId(2, 1, 13)]: {
     id: 2113, name: "Windrunner's Cloak", category: 2, subtype: 1, tier: 13,
     color: 0x00cccc, tierColor: TIER_COLORS[13],
-    description: "Sacrifices protection for unmatched agility.",
-    armorStats: { maxHpBonus: 30, manaRegenBonus: 5 },
+    description: "Barely more than a whisper of protection, woven from windsilk and speed.",
+    uniqueStats: [{ title: "Windstride", desc: "+20 Move Speed" }],
+    armorStats: { maxHpBonus: 0, speedBonus: 20 },
   },
 
   // ===== CONSUMABLES (category=4) =====
@@ -1095,7 +1102,8 @@ export function getItemColor(item: ItemInstanceData): number {
 
 // --- Item Instance Generation ---
 
-/** Generate a tiered item instance with random locked stat tiers and optional pre-rolled open stats. */
+/** Generate a tiered item instance with random locked stat rolls and optional pre-rolled open stats.
+ *  Locked stats no longer have individual tiers — value is determined by item tier + roll. */
 export function generateItemInstance(
   category: number,
   subtype: number,
@@ -1115,10 +1123,10 @@ export function generateItemInstance(
     instanceTier: tier,
     isUT: false,
     lockedStat1Type: lockedStats[0],
-    lockedStat1Tier: rollStatTier(tier),
+    lockedStat1Tier: 0, // deprecated — item tier determines range now
     lockedStat1Roll: rollStatRoll(),
     lockedStat2Type: lockedStats[1],
-    lockedStat2Tier: rollStatTier(tier),
+    lockedStat2Tier: 0, // deprecated — item tier determines range now
     lockedStat2Roll: rollStatRoll(),
     openStats: prerollOpenStats ? rollInitialOpenStats(category, tier) : [],
     forgeProtectedSlot: -1,
@@ -1127,18 +1135,30 @@ export function generateItemInstance(
   };
 }
 
-/** Generate a UT item instance (static stats from ITEM_DEFS, no crafting). */
+/** Generate a UT item instance with rolled locked stats. No open stats or crafting. */
 export function generateUTItemInstance(baseItemId: number): ItemInstanceData {
+  const category = getItemCategory(baseItemId);
+  const subtype = getItemSubtype(baseItemId);
+
+  // Determine locked stat types (same as tiered items of same category)
+  let lockedStats: [number, number] = [-1, -1];
+  if (category === ItemCategory.Armor) {
+    lockedStats = ARMOR_LOCKED_STATS[subtype] ?? LOCKED_STATS_BY_CATEGORY[category] ?? [-1, -1];
+  } else if (category === ItemCategory.Ring) {
+    lockedStats = LOCKED_STATS_BY_CATEGORY[category] ?? [-1, -1];
+  }
+  // Weapons/Abilities keep [-1, -1] — quality rolls are implicit for these categories
+
   return {
     baseItemId,
     instanceTier: 0,
     isUT: true,
-    lockedStat1Type: -1,
+    lockedStat1Type: lockedStats[0],
     lockedStat1Tier: 0,
-    lockedStat1Roll: 0,
-    lockedStat2Type: -1,
+    lockedStat1Roll: rollStatRoll(),
+    lockedStat2Type: lockedStats[1],
     lockedStat2Tier: 0,
-    lockedStat2Roll: 0,
+    lockedStat2Roll: rollStatRoll(),
     openStats: [],
     forgeProtectedSlot: -1,
     forgeProtectedSlot2: -1,

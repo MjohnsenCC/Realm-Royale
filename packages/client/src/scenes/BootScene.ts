@@ -128,6 +128,7 @@ export class BootScene extends Phaser.Scene {
     for (let t = 1; t <= 6; t++) {
       this.load.image(`open-stat-icon-t${t}`, `assets/sprites/UI/stat_icons/open_stat_icon_t${t}.png`);
     }
+    this.load.image("ut-stat-icon", "assets/sprites/UI/stat_icons/ut_stat_icon_0.png");
 
     // Portal sprites
     this.load.image("portal-the-wild", "assets/sprites/decorations/portals/the_wild_portal.png");

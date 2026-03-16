@@ -40,8 +40,13 @@ game.canvas.addEventListener("webglcontextlost", (e) => {
 
 // Rebuild renderer state when WebGL context is restored after alt-tab
 game.canvas.addEventListener("webglcontextrestored", () => {
-  const w = game.canvas.clientWidth;
-  const h = game.canvas.clientHeight;
-  game.renderer.resize(w, h);
-  game.scale.refresh();
+  // Short delay to let the GL context fully stabilize before touching it
+  setTimeout(() => {
+    const w = game.canvas.clientWidth;
+    const h = game.canvas.clientHeight;
+    if (w > 0 && h > 0) {
+      game.renderer.resize(w, h);
+      game.scale.refresh();
+    }
+  }, 100);
 });

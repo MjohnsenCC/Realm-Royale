@@ -234,8 +234,11 @@ export class GameScene extends Phaser.Scene {
   // Q key cooldown to prevent spam
   private returnToNexusCooldown: number = 0;
 
-  // E key (portal interact) cooldown
-  private portalInteractCooldown: number = 0;
+  // Crafting table request pending (waiting for server response)
+  private craftingTablePending: boolean = false;
+
+  // Cooldown after tab regains focus — prevents interactions during WebGL recovery
+  private tabResumeCooldown: number = 0;
 
   // Dungeon map data (for rendering and client-side prediction)
   private dungeonSeed: number = 0;
@@ -347,7 +350,7 @@ export class GameScene extends Phaser.Scene {
 
     // Listen for resize events
     this.scale.on("resize", (gameSize: Phaser.Structs.Size) => {
-      updateScreenDimensions(gameSize.width, gameSize.height);
+        updateScreenDimensions(gameSize.width, gameSize.height);
       this.relayoutUI();
     });
 
@@ -366,26 +369,35 @@ export class GameScene extends Phaser.Scene {
     // On Windows, alt-tab exits fullscreen and Phaser pauses the game loop.
     // When the tab regains focus the WebGL viewport/framebuffer is stale,
     // so we force the renderer to resize and relayout the UI.
+    let recoverScheduled = false;
     const recoverFromBlur = () => {
+      recoverScheduled = false;
       const canvas = this.game.canvas;
       const w = canvas.clientWidth;
       const h = canvas.clientHeight;
-      // Force WebGL viewport to match actual canvas size
+      if (w <= 0 || h <= 0) return; // tab minimised or not ready
       this.game.renderer.resize(w, h);
       this.scale.refresh();
       updateScreenDimensions(this.scale.width, this.scale.height);
       this.relayoutUI();
     };
 
-    document.addEventListener("visibilitychange", () => {
-      if (!document.hidden) {
-        // Small delay so the browser finishes any fullscreen exit / resize
+    const scheduleRecover = () => {
+      // Block game interactions during recovery (prevents freeze from stale GL state)
+      this.tabResumeCooldown = 600;
+      // Deduplicate: both visibilitychange and focus fire on alt-tab back
+      if (!recoverScheduled) {
+        recoverScheduled = true;
         setTimeout(recoverFromBlur, 300);
       }
+    };
+
+    document.addEventListener("visibilitychange", () => {
+      if (!document.hidden) scheduleRecover();
     });
 
     window.addEventListener("focus", () => {
-      setTimeout(recoverFromBlur, 300);
+      scheduleRecover();
     });
 
     // Draw ground for current zone
@@ -2100,14 +2112,39 @@ export class GameScene extends Phaser.Scene {
           this.returnToNexusCooldown = 1000;
         }
 
-        // E key — interact with portals or crafting table
-        if (this.portalInteractCooldown > 0) {
-          this.portalInteractCooldown -= delta;
-        }
-        if (
-          this.keys.E.isDown &&
-          this.portalInteractCooldown <= 0
-        ) {
+        // Tick down tab-resume cooldown (blocks interactions after alt-tab)
+        if (this.tabResumeCooldown > 0) this.tabResumeCooldown -= delta;
+
+        // E key — interact with portals, crafting table, or vault chest
+        if (Phaser.Input.Keyboard.JustDown(this.keys.E) && this.tabResumeCooldown <= 0) {
+          // Re-check proximity with current-frame position (updatePressEPrompt runs later)
+          if (localSprite) {
+            const epx = localSprite.x;
+            const epy = localSprite.y;
+            this.nearCraftingTable = false;
+            this.nearVaultChest = false;
+            if (this.localZone === "nexus") {
+              const dx = epx - CRAFTING_TABLE_X;
+              const dy = epy - CRAFTING_TABLE_Y;
+              if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
+                this.nearCraftingTable = true;
+              }
+            }
+            if (!this.nearCraftingTable && isVaultZone(this.localZone)) {
+              const dx = epx - VAULT_CRAFTING_TABLE_X;
+              const dy = epy - VAULT_CRAFTING_TABLE_Y;
+              if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
+                this.nearCraftingTable = true;
+              }
+            }
+            if (!this.nearCraftingTable && isVaultZone(this.localZone)) {
+              const dx = epx - VAULT_CHEST_X;
+              const dy = epy - VAULT_CHEST_Y;
+              if (dx * dx + dy * dy < VAULT_CHEST_INTERACT_RADIUS * VAULT_CHEST_INTERACT_RADIUS) {
+                this.nearVaultChest = true;
+              }
+            }
+          }
           if (this.nearCraftingTable) {
             this.openCraftingUI(state, sessionId);
           } else if (this.nearVaultChest) {
@@ -2115,7 +2152,6 @@ export class GameScene extends Phaser.Scene {
           } else {
             this.network.sendInteractPortal();
           }
-          this.portalInteractCooldown = 500;
         }
 
         // T key — open vault portal with portal gem
@@ -2309,16 +2345,22 @@ export class GameScene extends Phaser.Scene {
       if (useAbility) {
         const abilityItem = eqData[ItemCategory.Ability];
         if (abilityItem && !isEmptyItem(abilityItem)) {
-          // Get ability stats (UT uses ITEM_DEFS, tiered uses templates)
+          // Get ability stats (UT uses ITEM_DEFS base + quality roll, tiered uses templates)
           let as: { damage: number; range: number; projectileSpeed: number; projectileSize: number; manaCost: number; cooldown: number; piercing: boolean } | null = null;
+          const subtype = getItemSubtype(abilityItem.baseItemId);
           if (abilityItem.isUT) {
             const abilityDef = ITEM_DEFS[abilityItem.baseItemId];
             if (abilityDef?.abilityStats) {
-              as = abilityDef.abilityStats;
+              const utBase = {
+                baseDamage: abilityDef.abilityStats.damage, baseCooldown: abilityDef.abilityStats.cooldown,
+                baseRange: abilityDef.abilityStats.range, baseProjSpeed: abilityDef.abilityStats.projectileSpeed,
+                baseProjSize: abilityDef.abilityStats.projectileSize, baseManaCost: abilityDef.abilityStats.manaCost,
+                piercing: abilityDef.abilityStats.piercing,
+              };
+              as = getScaledAbilityStats(subtype, 0, abilityItem.lockedStat1Roll, abilityItem.lockedStat2Roll, true, utBase);
             }
           } else {
-            const subtype = getItemSubtype(abilityItem.baseItemId);
-            as = getScaledAbilityStats(subtype, abilityItem.instanceTier, abilityItem.lockedStat1Tier, abilityItem.lockedStat2Tier, abilityItem.lockedStat1Roll, abilityItem.lockedStat2Roll);
+            as = getScaledAbilityStats(subtype, abilityItem.instanceTier, abilityItem.lockedStat1Roll, abilityItem.lockedStat2Roll);
           }
           if (as && now - this.lastLocalAbilityTime >= as.cooldown) {
             const mana = (localPlayer.mana as number) ?? 0;
@@ -2626,10 +2668,19 @@ export class GameScene extends Phaser.Scene {
           let cooldownMs = 0;
           if (abilityEquip.isUT) {
             const abilityDef = ITEM_DEFS[abilityEquip.baseItemId];
-            if (abilityDef?.abilityStats) cooldownMs = abilityDef.abilityStats.cooldown;
+            if (abilityDef?.abilityStats) {
+              const utBase = {
+                baseDamage: abilityDef.abilityStats.damage, baseCooldown: abilityDef.abilityStats.cooldown,
+                baseRange: abilityDef.abilityStats.range, baseProjSpeed: abilityDef.abilityStats.projectileSpeed,
+                baseProjSize: abilityDef.abilityStats.projectileSize, baseManaCost: abilityDef.abilityStats.manaCost,
+                piercing: abilityDef.abilityStats.piercing,
+              };
+              const as = getScaledAbilityStats(getItemSubtype(abilityEquip.baseItemId), 0, abilityEquip.lockedStat1Roll, abilityEquip.lockedStat2Roll, true, utBase);
+              cooldownMs = as.cooldown;
+            }
           } else {
             const subtype = getItemSubtype(abilityEquip.baseItemId);
-            const as = getScaledAbilityStats(subtype, abilityEquip.instanceTier, abilityEquip.lockedStat1Tier, abilityEquip.lockedStat2Tier, abilityEquip.lockedStat1Roll, abilityEquip.lockedStat2Roll);
+            const as = getScaledAbilityStats(subtype, abilityEquip.instanceTier, abilityEquip.lockedStat1Roll, abilityEquip.lockedStat2Roll);
             cooldownMs = as.cooldown;
           }
           if (cooldownMs > 0) {
@@ -2654,6 +2705,7 @@ export class GameScene extends Phaser.Scene {
         // Close crafting UI if player walks away from table
         if (!this.nearCraftingTable) {
           this.craftingUI.hide();
+          if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
         }
       }
 
@@ -2686,6 +2738,7 @@ export class GameScene extends Phaser.Scene {
     this.pressEText?.destroy();
     this.dungeonTooltip?.hide();
     this.craftingUI?.hide();
+    this.craftingTablePending = false;
     this.statsPanel?.hide();
     this.escapeMenuUI?.hide();
     this.inputSequence = 0;
@@ -3002,21 +3055,35 @@ export class GameScene extends Phaser.Scene {
     // Toggle: if already open, close it
     if (this.craftingUI.isVisible()) {
       this.craftingUI.hide();
+      this.craftingTablePending = false;
+      if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
       return;
     }
 
+    // Don't send duplicate requests while waiting for server
+    if (this.craftingTablePending) return;
+
     // Request server to open crafting table (it will lazy-load vault and respond)
+    this.craftingTablePending = true;
     this.network.sendOpenCraftingTable();
   }
 
   /** Called when server responds with vault orb counts. */
   private openCraftingUIFromServer(state: DecodedState, sessionId: string): void {
+    this.craftingTablePending = false;
+
     if (this.craftingUI.isVisible()) return; // already open
+
+    // Verify player is still near the crafting table and in the right zone
+    if (!this.nearCraftingTable) return;
+    if (this.localZone !== "nexus" && !isVaultZone(this.localZone)) return;
 
     this.closeLeftPanels("crafting");
 
     const orbCounts = this.computeOrbCounts(state, sessionId);
     this.craftingUI.show(orbCounts);
+
+    if (this.statsPanel.isVisible()) this.statsPanel.setSide("right");
   }
 
   /** Compute combined orb counts from inventory (synced schema) + vault (server-sent). */
@@ -3053,16 +3120,23 @@ export class GameScene extends Phaser.Scene {
   }
 
   private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {
-    if (except !== "stats" && this.statsPanel.isVisible()) this.statsPanel.hide();
     if (except !== "vault" && this.hud.vaultUI.isVisible()) this.hud.vaultUI.hide();
-    if (except !== "crafting" && this.craftingUI.isVisible()) this.craftingUI.hide();
+    if (except !== "crafting" && this.craftingUI.isVisible()) {
+      this.craftingUI.hide();
+      if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+    }
   }
 
   private toggleStatsPanel(): void {
     if (this.statsPanel.isVisible()) {
       this.statsPanel.hide();
     } else {
-      this.closeLeftPanels("stats");
+      if (this.craftingUI.isVisible()) {
+        this.statsPanel.setSide("right");
+      } else {
+        this.closeLeftPanels("stats");
+        this.statsPanel.setSide("left");
+      }
       this.statsPanel.show();
     }
   }

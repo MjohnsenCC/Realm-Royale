@@ -124,10 +124,8 @@ export const LOCKED_STAT_RANGES_BY_TIER: Record<number, Record<number, [number, 
   [StatType.ManaRegen]: { 1: [3, 8],    2: [8, 16],    3: [16, 26],   4: [26, 38],   5: [38, 52],    6: [52, 68] },
 };
 
-// --- Locked Quality Multiplier ---
-// For weapon/ability inherent stats, the locked stat tier acts as a quality modifier.
-// T3 is baseline (~1.0), lower tiers reduce, higher tiers boost.
-// Each tier is a [min, max] range; the locked roll (0-100) interpolates within it.
+// --- Locked Quality Multiplier (DEPRECATED — kept for backward compat) ---
+/** @deprecated Use LOCKED_QUALITY_BY_ITEM_TIER instead. */
 export const LOCKED_QUALITY_MULTIPLIER: Record<number, [number, number]> = {
   1: [0.80, 0.90],
   2: [0.88, 0.98],
@@ -137,12 +135,100 @@ export const LOCKED_QUALITY_MULTIPLIER: Record<number, [number, number]> = {
   6: [1.22, 1.38],
 };
 
-/** Get the quality multiplier for a locked quality tier and roll (0-100). */
+/** @deprecated Use getLockedQualityMultiplier instead. */
 export function getQualityMultiplier(tier: number, roll: number): number {
   const range = LOCKED_QUALITY_MULTIPLIER[tier];
   if (!range) return 1.0;
   const [min, max] = range;
   return min + (max - min) * (roll / 100);
+}
+
+// --- NEW: Locked Quality by Item Tier (non-overlapping) ---
+// Weapon/ability quality multiplier determined directly by item tier (1-12).
+// Each entry is [min, max]; roll (0-100) interpolates within the range.
+// Strict non-overlapping: min[n+1] > max[n].
+export const LOCKED_QUALITY_BY_ITEM_TIER: Record<number, [number, number]> = {
+  1:  [0.70, 0.74],  2:  [0.75, 0.79],
+  3:  [0.80, 0.85],  4:  [0.86, 0.91],
+  5:  [0.92, 0.97],  6:  [0.98, 1.04],
+  7:  [1.05, 1.11],  8:  [1.12, 1.19],
+  9:  [1.20, 1.28],  10: [1.29, 1.37],
+  11: [1.38, 1.47],  12: [1.48, 1.58],
+};
+
+// UT weapons/abilities: single quality range (~T9-11 equivalent).
+export const UT_LOCKED_QUALITY: [number, number] = [1.20, 1.47];
+
+/** Get the locked quality multiplier for an item tier and roll (0-100). */
+export function getLockedQualityMultiplier(itemTier: number, roll: number, isUT: boolean = false): number {
+  const range = isUT ? UT_LOCKED_QUALITY : LOCKED_QUALITY_BY_ITEM_TIER[itemTier];
+  if (!range) return 1.0;
+  const [min, max] = range;
+  return min + (max - min) * (roll / 100);
+}
+
+/** Get the locked quality range for an item tier (or UT). */
+export function getLockedQualityRange(itemTier: number, isUT: boolean = false): [number, number] {
+  return isUT ? UT_LOCKED_QUALITY : (LOCKED_QUALITY_BY_ITEM_TIER[itemTier] ?? [1.0, 1.0]);
+}
+
+// --- NEW: Locked Stat Ranges by Item Tier (non-overlapping) ---
+// For armor/ring locked stats. Indexed by stat type -> item tier (1-12).
+// Strict non-overlapping: min[n+1] > max[n].
+export const LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number, [number, number]>> = {
+  [StatType.Health]: {
+    1: [40, 70],     2: [75, 120],    3: [125, 180],   4: [185, 250],
+    5: [255, 330],   6: [335, 420],   7: [425, 520],   8: [525, 640],
+    9: [645, 770],   10: [775, 920],  11: [925, 1090],  12: [1095, 1280],
+  },
+  [StatType.HealthRegen]: {
+    1: [1, 2],   2: [3, 4],   3: [5, 7],   4: [8, 10],
+    5: [11, 14], 6: [15, 19], 7: [20, 25], 8: [26, 32],
+    9: [33, 40], 10: [41, 49], 11: [50, 59], 12: [60, 70],
+  },
+  [StatType.Mana]: {
+    1: [15, 35],     2: [40, 65],     3: [70, 100],    4: [105, 145],
+    5: [150, 195],   6: [200, 255],   7: [260, 320],   8: [325, 395],
+    9: [400, 475],   10: [480, 565],  11: [570, 665],   12: [670, 770],
+  },
+  [StatType.ManaRegen]: {
+    1: [3, 6],     2: [7, 11],    3: [12, 18],   4: [19, 26],
+    5: [27, 36],   6: [37, 48],   7: [49, 62],   8: [63, 78],
+    9: [79, 96],   10: [97, 116], 11: [117, 138], 12: [139, 162],
+  },
+};
+
+// UT armor/ring: single range per stat type (~T9-11 equivalent).
+export const UT_LOCKED_STAT_RANGES: Record<number, [number, number]> = {
+  [StatType.Health]:     [645, 1090],
+  [StatType.HealthRegen]: [33, 59],
+  [StatType.Mana]:       [400, 665],
+  [StatType.ManaRegen]:  [79, 138],
+};
+
+/** Get the locked stat value for an item tier and roll (new system — no stat tier). */
+export function getLockedStatValue(
+  statType: number,
+  itemTier: number,
+  roll: number,
+  isUT: boolean = false
+): number {
+  const range = isUT
+    ? UT_LOCKED_STAT_RANGES[statType]
+    : LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier];
+  if (!range) return 0;
+  const [min, max] = range;
+  return Math.round(min + (max - min) * (roll / 100));
+}
+
+/** Get the locked stat range for an item tier (or UT). */
+export function getLockedStatRange(
+  statType: number,
+  itemTier: number,
+  isUT: boolean = false
+): [number, number] {
+  if (isUT) return UT_LOCKED_STAT_RANGES[statType] ?? [0, 0];
+  return LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier] ?? [0, 0];
 }
 
 // --- Item Tier Multiplier ---
@@ -281,6 +367,44 @@ export const STAT_NAMES: Record<number, string> = {
   [StatType.IncreasedProjectileSpeed]: "Proj Speed",
   [StatType.CriticalStrikeChance]: "Crit Chance",
   [StatType.CriticalStrikeMultiplier]: "Crit Multiplier",
+};
+
+// --- Stat Titles (thematic names for tooltip display) ---
+
+export const STAT_TITLES: Record<number, string> = {
+  [StatType.AttackDamage]: "Might",
+  [StatType.AttackSpeed]: "Fervor",
+  [StatType.Health]: "Vitality",
+  [StatType.HealthRegen]: "Regeneration",
+  [StatType.ManaRegen]: "Clarity",
+  [StatType.MovementSpeed]: "Swiftness",
+  [StatType.Mana]: "Arcana",
+  [StatType.PhysicalDamageReduction]: "Fortitude",
+  [StatType.MagicDamageReduction]: "Warding",
+  [StatType.AbilityDamage]: "Sorcery",
+  [StatType.ReducedAbilityCooldown]: "Alacrity",
+  [StatType.IncreasedProjectileSpeed]: "Velocity",
+  [StatType.CriticalStrikeChance]: "Precision",
+  [StatType.CriticalStrikeMultiplier]: "Ferocity",
+};
+
+// --- Stat Verbose Descriptions (template with {value} placeholder) ---
+
+export const STAT_DESCRIPTIONS: Record<number, string> = {
+  [StatType.AttackDamage]: "Increases Weapon Damage by {value}",
+  [StatType.AttackSpeed]: "Increases Attack Speed by {value}",
+  [StatType.Health]: "Increases Health by {value}",
+  [StatType.HealthRegen]: "Increases Health Regen by {value}",
+  [StatType.ManaRegen]: "Increases Mana Regen by {value}",
+  [StatType.MovementSpeed]: "Increases Move Speed by {value}",
+  [StatType.Mana]: "Increases Mana by {value}",
+  [StatType.PhysicalDamageReduction]: "Increases Phys Reduction by {value}",
+  [StatType.MagicDamageReduction]: "Increases Magic Reduction by {value}",
+  [StatType.AbilityDamage]: "Increases Ability Damage by {value}",
+  [StatType.ReducedAbilityCooldown]: "Reduces Ability Cooldown by {value}",
+  [StatType.IncreasedProjectileSpeed]: "Increases Proj Speed by {value}",
+  [StatType.CriticalStrikeChance]: "Increases Crit Chance by {value}",
+  [StatType.CriticalStrikeMultiplier]: "Increases Crit Multiplier by {value}",
 };
 
 // --- Crafting Orb Definitions ---
@@ -583,14 +707,15 @@ export function getEmptySlotCount(item: ItemInstanceData): number {
   return MAX_OPEN_STATS - getOpenStatCount(item);
 }
 
-/** Get weapon stats scaled by item tier and optional locked quality tiers. */
+/** Get weapon stats scaled by item tier and locked quality rolls.
+ *  For UT weapons, pass isUT=true and utBaseStats with ITEM_DEFS base values. */
 export function getScaledWeaponStats(
   subtype: number,
   itemTier: number,
-  damageTier: number = 0,
-  fireRateTier: number = 0,
   damageRoll: number = 50,
-  fireRateRoll: number = 50
+  fireRateRoll: number = 50,
+  isUT: boolean = false,
+  utBaseStats?: { baseDamage: number; baseCooldown: number; baseRange: number; baseProjSpeed: number; baseProjSize: number }
 ): {
   damage: number;
   shootCooldown: number;
@@ -598,13 +723,25 @@ export function getScaledWeaponStats(
   projectileSpeed: number;
   projectileSize: number;
 } {
+  if (isUT && utBaseStats) {
+    // UT weapons use their own base stats with UT quality roll
+    const dmgQuality = getLockedQualityMultiplier(0, damageRoll, true);
+    const frQuality = getLockedQualityMultiplier(0, fireRateRoll, true);
+    return {
+      damage: Math.round(utBaseStats.baseDamage * dmgQuality),
+      shootCooldown: Math.round(utBaseStats.baseCooldown / frQuality),
+      range: utBaseStats.baseRange,
+      projectileSpeed: utBaseStats.baseProjSpeed,
+      projectileSize: utBaseStats.baseProjSize,
+    };
+  }
   const template = WEAPON_TEMPLATES[subtype];
   if (!template) {
     return { damage: 20, shootCooldown: 300, range: 100, projectileSpeed: 300, projectileSize: 5 };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  const dmgQuality = damageTier > 0 ? getQualityMultiplier(damageTier, damageRoll) : 1.0;
-  const frQuality = fireRateTier > 0 ? getQualityMultiplier(fireRateTier, fireRateRoll) : 1.0;
+  const dmgQuality = getLockedQualityMultiplier(itemTier, damageRoll);
+  const frQuality = getLockedQualityMultiplier(itemTier, fireRateRoll);
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
     shootCooldown: Math.round(template.baseCooldown / mult / frQuality),
@@ -614,14 +751,15 @@ export function getScaledWeaponStats(
   };
 }
 
-/** Get ability stats scaled by item tier and optional locked quality tiers. */
+/** Get ability stats scaled by item tier and locked quality rolls.
+ *  For UT abilities, pass isUT=true and utBaseStats with ITEM_DEFS base values. */
 export function getScaledAbilityStats(
   subtype: number,
   itemTier: number,
-  damageTier: number = 0,
-  manaCostTier: number = 0,
   damageRoll: number = 50,
-  manaCostRoll: number = 50
+  manaCostRoll: number = 50,
+  isUT: boolean = false,
+  utBaseStats?: { baseDamage: number; baseCooldown: number; baseRange: number; baseProjSpeed: number; baseProjSize: number; baseManaCost: number; piercing: boolean }
 ): {
   damage: number;
   range: number;
@@ -631,13 +769,26 @@ export function getScaledAbilityStats(
   cooldown: number;
   piercing: boolean;
 } {
+  if (isUT && utBaseStats) {
+    const dmgQuality = getLockedQualityMultiplier(0, damageRoll, true);
+    const manaQuality = getLockedQualityMultiplier(0, manaCostRoll, true);
+    return {
+      damage: Math.round(utBaseStats.baseDamage * dmgQuality),
+      range: utBaseStats.baseRange,
+      projectileSpeed: utBaseStats.baseProjSpeed,
+      projectileSize: utBaseStats.baseProjSize,
+      manaCost: Math.round(utBaseStats.baseManaCost / manaQuality),
+      cooldown: utBaseStats.baseCooldown,
+      piercing: utBaseStats.piercing,
+    };
+  }
   const template = ABILITY_TEMPLATES[subtype];
   if (!template) {
     return { damage: 50, range: 500, projectileSpeed: 600, projectileSize: 12, manaCost: 30, cooldown: 1000, piercing: true };
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  const dmgQuality = damageTier > 0 ? getQualityMultiplier(damageTier, damageRoll) : 1.0;
-  const manaQuality = manaCostTier > 0 ? getQualityMultiplier(manaCostTier, manaCostRoll) : 1.0;
+  const dmgQuality = getLockedQualityMultiplier(itemTier, damageRoll);
+  const manaQuality = getLockedQualityMultiplier(itemTier, manaCostRoll);
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
@@ -653,14 +804,14 @@ export function getScaledAbilityStats(
 export function getScaledWeaponStatsRange(
   subtype: number,
   itemTier: number,
-  damageTier: number,
-  fireRateTier: number
+  isUT: boolean = false,
+  utBaseStats?: { baseDamage: number; baseCooldown: number; baseRange: number; baseProjSpeed: number; baseProjSize: number }
 ): {
   damageMin: number; damageMax: number;
   shootCooldownMin: number; shootCooldownMax: number;
 } {
-  const minStats = getScaledWeaponStats(subtype, itemTier, damageTier, fireRateTier, 0, 0);
-  const maxStats = getScaledWeaponStats(subtype, itemTier, damageTier, fireRateTier, 100, 100);
+  const minStats = getScaledWeaponStats(subtype, itemTier, 0, 0, isUT, utBaseStats);
+  const maxStats = getScaledWeaponStats(subtype, itemTier, 100, 100, isUT, utBaseStats);
   return {
     damageMin: minStats.damage,
     damageMax: maxStats.damage,
@@ -673,14 +824,14 @@ export function getScaledWeaponStatsRange(
 export function getScaledAbilityStatsRange(
   subtype: number,
   itemTier: number,
-  damageTier: number,
-  manaCostTier: number
+  isUT: boolean = false,
+  utBaseStats?: { baseDamage: number; baseCooldown: number; baseRange: number; baseProjSpeed: number; baseProjSize: number; baseManaCost: number; piercing: boolean }
 ): {
   damageMin: number; damageMax: number;
   manaCostMin: number; manaCostMax: number;
 } {
-  const minStats = getScaledAbilityStats(subtype, itemTier, damageTier, manaCostTier, 0, 0);
-  const maxStats = getScaledAbilityStats(subtype, itemTier, damageTier, manaCostTier, 100, 100);
+  const minStats = getScaledAbilityStats(subtype, itemTier, 0, 0, isUT, utBaseStats);
+  const maxStats = getScaledAbilityStats(subtype, itemTier, 100, 100, isUT, utBaseStats);
   return {
     damageMin: minStats.damage,
     damageMax: maxStats.damage,

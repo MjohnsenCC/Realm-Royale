@@ -9,8 +9,12 @@ import {
   ItemCategory,
   StatType,
   STAT_NAMES,
+  STAT_TITLES,
+  STAT_DESCRIPTIONS,
   getStatValue,
   getStatRange,
+  getLockedStatValue,
+  getLockedStatRange,
   getScaledWeaponStats,
   getScaledAbilityStats,
   getScaledWeaponStatsRange,
@@ -223,7 +227,7 @@ export class ItemTooltip {
       const txt = scene.add
         .text(statTextX, 0, "", {
           fontSize: statFontSize,
-          color: "#4488ff",
+          color: "#66bbff",
           fontFamily,
           align: "left",
           stroke,
@@ -237,7 +241,7 @@ export class ItemTooltip {
       this.openStatPool.push({ icon, text: txt });
     }
 
-    // Generic stats text (for static items / consumables)
+    // Generic stats text (for static items / consumables / UT lore)
     this.statsText = scene.add
       .text(pad, 0, "", {
         fontSize: statFontSize,
@@ -278,8 +282,8 @@ export class ItemTooltip {
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
 
-    // For UT items and consumables, fall back to static ITEM_DEFS display
-    if (item.isUT || category === ItemCategory.Consumable) {
+    // Consumables still use static ITEM_DEFS display
+    if (category === ItemCategory.Consumable) {
       this.showStaticItem(item.baseItemId, screenX, screenY);
       return;
     }
@@ -308,7 +312,7 @@ export class ItemTooltip {
     this.nameText.setText(itemName);
     this.nameText.setColor("#ffffff");
 
-    const tierLabel = `T${item.instanceTier}`;
+    const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
     this.tierBadge.setText(tierLabel);
     this.tierBadge.setColor(TIER_BADGE_COLOR);
 
@@ -349,81 +353,81 @@ export class ItemTooltip {
       this.descText.setVisible(false);
     }
 
-    // === Build locked stats ===
+    // === Build locked stats (value determined by item tier + roll, no stat tiers) ===
     const lockedLines: string[] = [];
-    const lockedTiers: (number | null)[] = [];
+
+    // For UT weapons/abilities, read base stats from ITEM_DEFS
+    const utDef = item.isUT ? ITEM_DEFS[item.baseItemId] : undefined;
+    const utWeaponBase = utDef?.weaponStats ? {
+      baseDamage: utDef.weaponStats.damage, baseCooldown: utDef.weaponStats.shootCooldown,
+      baseRange: utDef.weaponStats.range, baseProjSpeed: utDef.weaponStats.projectileSpeed,
+      baseProjSize: utDef.weaponStats.projectileSize,
+    } : undefined;
+    const utAbilityBase = utDef?.abilityStats ? {
+      baseDamage: utDef.abilityStats.damage, baseCooldown: utDef.abilityStats.cooldown,
+      baseRange: utDef.abilityStats.range, baseProjSpeed: utDef.abilityStats.projectileSpeed,
+      baseProjSize: utDef.abilityStats.projectileSize, baseManaCost: utDef.abilityStats.manaCost,
+      piercing: utDef.abilityStats.piercing,
+    } : undefined;
 
     if (category === ItemCategory.Weapon) {
-      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
-      if (shiftHeld && item.lockedStat1Tier > 0) {
-        const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll, item.isUT, utWeaponBase);
+      if (shiftHeld) {
+        const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.isUT, utWeaponBase);
         lockedLines.push(`Damage: ${ws.damage}(${range.damageMin}-${range.damageMax})`);
-      } else {
-        lockedLines.push(`Damage: ${ws.damage}`);
-      }
-      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
-      if (shiftHeld && item.lockedStat2Tier > 0) {
-        const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
         const frMin = (1000 / range.shootCooldownMax).toFixed(1);
         const frMax = (1000 / range.shootCooldownMin).toFixed(1);
         lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`);
       } else {
+        lockedLines.push(`Damage: ${ws.damage}`);
         lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
       }
-      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
     } else if (category === ItemCategory.Ability) {
-      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier, item.lockedStat1Roll, item.lockedStat2Roll);
-      if (shiftHeld && item.lockedStat1Tier > 0) {
-        const range = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
+      const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll, item.isUT, utAbilityBase);
+      if (shiftHeld) {
+        const range = getScaledAbilityStatsRange(subtype, item.instanceTier, item.isUT, utAbilityBase);
         lockedLines.push(`Damage: ${as.damage}(${range.damageMin}-${range.damageMax})`);
-      } else {
-        lockedLines.push(`Damage: ${as.damage}`);
-      }
-      lockedTiers.push(item.lockedStat1Tier > 0 ? item.lockedStat1Tier : null);
-      if (shiftHeld && item.lockedStat2Tier > 0) {
-        const range = getScaledAbilityStatsRange(subtype, item.instanceTier, item.lockedStat1Tier, item.lockedStat2Tier);
         lockedLines.push(`Mana Cost: ${as.manaCost}(${range.manaCostMin}-${range.manaCostMax})`);
       } else {
+        lockedLines.push(`Damage: ${as.damage}`);
         lockedLines.push(`Mana Cost: ${as.manaCost}`);
       }
-      lockedTiers.push(item.lockedStat2Tier > 0 ? item.lockedStat2Tier : null);
     } else {
-      // Armor and Ring: rolled locked stat bonuses
+      // Armor and Ring: locked stat values determined by item tier (or UT range)
       const armorMult = category === ItemCategory.Armor
         ? (ARMOR_LOCKED_STAT_MULTIPLIER[subtype] ?? 1.0)
         : 1.0;
-      if (item.lockedStat1Type >= 0 && item.lockedStat1Tier > 0) {
-        const rawVal = getStatValue(item.lockedStat1Type, item.lockedStat1Tier, item.lockedStat1Roll, true);
+      if (item.lockedStat1Type >= 0) {
+        const rawVal = getLockedStatValue(item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
         if (shiftHeld) {
-          const [rawMin, rawMax] = getStatRange(item.lockedStat1Type, item.lockedStat1Tier, true);
+          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat1Type, item.instanceTier, item.isUT);
           const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
           const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)}) ${name}`);
         } else {
           lockedLines.push(`+${fmtStat(val)} ${name}`);
         }
-        lockedTiers.push(item.lockedStat1Tier);
       }
-      if (item.lockedStat2Type >= 0 && item.lockedStat2Tier > 0) {
-        const rawVal = getStatValue(item.lockedStat2Type, item.lockedStat2Tier, item.lockedStat2Roll, true);
+      if (item.lockedStat2Type >= 0) {
+        const rawVal = getLockedStatValue(item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
         if (shiftHeld) {
-          const [rawMin, rawMax] = getStatRange(item.lockedStat2Type, item.lockedStat2Tier, true);
+          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat2Type, item.instanceTier, item.isUT);
           const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
           const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)}) ${name}`);
         } else {
           lockedLines.push(`+${fmtStat(val)} ${name}`);
         }
-        lockedTiers.push(item.lockedStat2Tier);
       }
     }
 
     // === Build open stats ===
-    const openLines: string[] = [];
+    const openTitles: string[] = [];
+    const openDescs: string[] = [];
     const openTiers: number[] = [];
     const openForgeProtected: boolean[] = [];
     const openStatCount = Math.floor(item.openStats.length / 3);
@@ -433,14 +437,18 @@ export class ItemTooltip {
         const sTier = item.openStats[i + 1];
         const sRoll = item.openStats[i + 2];
         const val = getStatValue(sType, sTier, sRoll);
-        const name = STAT_NAMES[sType] ?? "???";
         const suffix = isPercentStat(sType) ? "%" : "";
+        const title = STAT_TITLES[sType] ?? "???";
+        const descTemplate = STAT_DESCRIPTIONS[sType] ?? `+{value} ${STAT_NAMES[sType] ?? "???"}`;
+        let desc: string;
         if (shiftHeld) {
           const [min, max] = getStatRange(sType, sTier);
-          openLines.push(`+${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)})${suffix} ${name}`);
+          desc = descTemplate.replace("{value}", `${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)})${suffix}`);
         } else {
-          openLines.push(`+${fmtStat(val)}${suffix} ${name}`);
+          desc = descTemplate.replace("{value}", `${fmtStat(val)}${suffix}`);
         }
+        openTitles.push(title + ":");
+        openDescs.push(desc);
         openTiers.push(sTier);
         const slotIdx = Math.floor(i / 3);
         openForgeProtected.push(item.forgeProtectedSlot === slotIdx || item.forgeProtectedSlot2 === slotIdx);
@@ -458,11 +466,7 @@ export class ItemTooltip {
 
       for (let i = 0; i < lockedLines.length; i++) {
         const txt = this.lockedStatPool[i];
-        let line = lockedLines[i];
-        if (shiftHeld && lockedTiers[i] != null) {
-          line += `  T${lockedTiers[i]}`;
-        }
-        txt.setText(line);
+        txt.setText(lockedLines[i]);
         txt.setColor("#ffffff");
         txt.setY(currentY);
         txt.setVisible(true);
@@ -470,21 +474,57 @@ export class ItemTooltip {
       }
     }
 
-    // === Layout open stats ===
-    if (openLines.length > 0) {
+    // === Layout open stats or UT unique stats ===
+    const statTextX = this.tooltipPadding + this.statIconSize + Math.round(3 * this.S);
+    const statWrapW = this.tooltipWidth - this.tooltipPadding * 2 - this.statIconSize - Math.round(3 * this.S);
+    const statDescColor = "#66bbff";
+    if (item.isUT) {
+      // UT items: show unique stats with UT icon (same layout as open stats)
+      const utDef2 = ITEM_DEFS[item.baseItemId];
+      const uStats = utDef2?.uniqueStats;
+      if (uStats && uStats.length > 0) {
+        currentY += sectionGap;
+        this.dividerYs.push(currentY);
+        currentY += sectionGap;
+
+        for (let i = 0; i < uStats.length && i < this.openStatPool.length; i++) {
+          const entry = this.openStatPool[i];
+          const stat = uStats[i];
+          const titleStr = stat.title + ": ";
+
+          entry.text.setX(statTextX);
+          entry.text.setWordWrapWidth(statWrapW);
+          setStatTextWithTitle(entry.text, titleStr, titleStr + stat.desc, statDescColor);
+          entry.text.setVisible(true);
+
+          entry.icon.setTexture("ut-stat-icon");
+          entry.icon.setDisplaySize(this.statIconSize, this.statIconSize);
+          const rowH = Math.max(entry.text.height, this.statIconSize);
+          entry.text.setY(currentY + (rowH - entry.text.height) / 2);
+          entry.icon.setY(currentY + rowH / 2);
+          entry.icon.setVisible(true);
+
+          currentY += rowH + lineGap;
+        }
+      }
+    } else if (openDescs.length > 0) {
       // Divider between locked and open (symmetric spacing)
       currentY += sectionGap;
       this.dividerYs.push(currentY);
       currentY += sectionGap;
 
-      for (let i = 0; i < openLines.length; i++) {
+      for (let i = 0; i < openDescs.length; i++) {
         const entry = this.openStatPool[i];
-        let line = openLines[i];
+        const titleStr = openTitles[i] + " ";
+        let desc = openDescs[i];
         if (shiftHeld) {
-          line += `  T${openTiers[i]}`;
+          desc += `  T${openTiers[i]}`;
         }
-        entry.text.setText(line);
-        entry.text.setColor(openForgeProtected[i] ? "#ffaa00" : "#4488ff");
+
+        const descColor = openForgeProtected[i] ? "#ffaa00" : statDescColor;
+        entry.text.setX(statTextX);
+        entry.text.setWordWrapWidth(statWrapW);
+        setStatTextWithTitle(entry.text, titleStr, titleStr + desc, descColor);
         entry.text.setVisible(true);
 
         const tierKey = `open-stat-icon-t${Math.min(Math.max(openTiers[i], 1), 6)}`;
@@ -900,6 +940,73 @@ export class ItemTooltip {
     this.shiftHintText.setWordWrapWidth(wrapWidth);
 
     this.hide();
+  }
+}
+
+/**
+ * Sets text with a title prefix in white and the rest in descColor.
+ * Uses a single Phaser Text object: first lets Phaser render the full text
+ * normally, then repaints the title portion in white on the canvas and
+ * re-uploads to WebGL.
+ */
+function setStatTextWithTitle(
+  textObj: Phaser.GameObjects.Text,
+  titleStr: string,
+  fullText: string,
+  descColor: string,
+): void {
+  // Let Phaser render the full text in the description color
+  textObj.setColor(descColor);
+  textObj.setText(fullText);
+  // setText calls updateText() which renders to canvas AND uploads to GL.
+
+  // Now repaint the title portion in white on the already-rendered canvas.
+  const canvas = textObj.canvas;
+  const ctx = canvas.getContext("2d");
+  if (!ctx) return;
+
+  const style = textObj.style as any;
+  const resolution = style.resolution ?? 1;
+  const strokeThickness = style.strokeThickness ?? 0;
+  const strokeColor = style.stroke ?? "#000000";
+  const metrics = style.metrics;
+
+  // Match Phaser's internal font setup
+  ctx.save();
+  ctx.scale(resolution, resolution);
+  style.syncFont(canvas, ctx);
+  style.syncStyle(canvas, ctx);
+
+  // Phaser applies padding translation
+  const padding = (textObj as any).padding ?? { left: 0, top: 0 };
+  ctx.translate(padding.left, padding.top);
+
+  // Position matches Phaser's first-line drawing position
+  const lineX = strokeThickness / 2;
+  const lineY = (strokeThickness / 2) + metrics.ascent;
+
+  // Redraw stroke for title in black
+  if (strokeThickness > 0) {
+    style.syncShadow(ctx, style.shadowStroke);
+    ctx.strokeStyle = strokeColor;
+    ctx.lineWidth = strokeThickness;
+    ctx.lineCap = "round";
+    ctx.lineJoin = "round";
+    ctx.strokeText(titleStr, lineX, lineY);
+  }
+
+  // Redraw fill for title in white
+  style.syncShadow(ctx, style.shadowFill);
+  ctx.fillStyle = "#ffffff";
+  ctx.fillText(titleStr, lineX, lineY);
+
+  ctx.restore();
+
+  // Re-upload the modified canvas to the WebGL texture
+  const renderer = (textObj as any).renderer;
+  if (renderer && renderer.gl) {
+    const source = textObj.frame.source;
+    source.glTexture = renderer.canvasToTexture(canvas, source.glTexture, true);
   }
 }
 

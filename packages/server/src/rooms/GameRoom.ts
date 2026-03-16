@@ -1603,18 +1603,26 @@ export class GameRoom extends Room<GameState> {
             const def = ITEM_DEFS[abilitySchema.baseItemId];
             const as = def?.abilityStats;
             if (!as) return;
-            abilityDamage = as.damage;
-            abilityRange = as.range;
-            abilityProjSpeed = as.projectileSpeed;
-            abilityProjSize = as.projectileSize;
-            abilityManaCost = as.manaCost;
-            abilityCooldown = as.cooldown;
-            abilityPiercing = as.piercing;
+            const utBase = {
+              baseDamage: as.damage, baseCooldown: as.cooldown,
+              baseRange: as.range, baseProjSpeed: as.projectileSpeed,
+              baseProjSize: as.projectileSize, baseManaCost: as.manaCost,
+              piercing: as.piercing,
+            };
+            const subtype = getItemSubtype(abilitySchema.baseItemId);
+            const scaled = getScaledAbilityStats(subtype, 0, abilitySchema.lockedStat1Roll, abilitySchema.lockedStat2Roll, true, utBase);
+            abilityDamage = scaled.damage;
+            abilityRange = scaled.range;
+            abilityProjSpeed = scaled.projectileSpeed;
+            abilityProjSize = scaled.projectileSize;
+            abilityManaCost = scaled.manaCost;
+            abilityCooldown = scaled.cooldown;
+            abilityPiercing = scaled.piercing;
             speedBoostAmt = as.speedBoostAmount;
             speedBoostDur = as.speedBoostDuration;
           } else {
             const subtype = getItemSubtype(abilitySchema.baseItemId);
-            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier, abilitySchema.lockedStat1Tier, abilitySchema.lockedStat2Tier, abilitySchema.lockedStat1Roll, abilitySchema.lockedStat2Roll);
+            const scaled = getScaledAbilityStats(subtype, abilitySchema.instanceTier, abilitySchema.lockedStat1Roll, abilitySchema.lockedStat2Roll);
             abilityDamage = scaled.damage;
             abilityRange = scaled.range;
             abilityProjSpeed = scaled.projectileSpeed;

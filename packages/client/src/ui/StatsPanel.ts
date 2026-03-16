@@ -46,6 +46,7 @@ const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility"
 export class StatsPanel {
   private scene: Phaser.Scene;
   private visible = false;
+  private side: "left" | "right" = "left";
   private S: number;
 
   // Panel outer position & visible size (the clipped viewport)
@@ -281,9 +282,11 @@ export class StatsPanel {
       totalRows * this.lineH +
       this.pad;
 
-    // Left panel: full height from margin to margin
+    // Panel position: left or right side
     const panelMargin = Math.round(12 * S);
-    this.px = panelMargin;
+    this.px = this.side === "right"
+      ? screenW - panelMargin - this.panelWidth
+      : panelMargin;
     this.py = panelMargin;
     this.viewHeight = screenH - panelMargin * 2;
 
@@ -416,6 +419,23 @@ export class StatsPanel {
     return this.visible;
   }
 
+  setSide(side: "left" | "right"): void {
+    if (this.side === side) return;
+    this.side = side;
+    this.computeLayout();
+    // Update mask
+    this.maskGraphics.clear();
+    this.maskGraphics.fillStyle(0xffffff);
+    this.maskGraphics.fillRect(this.px, this.py, this.panelWidth, this.viewHeight);
+    const mask = this.maskGraphics.createGeometryMask();
+    this.contentContainer.setMask(mask);
+    if (this.visible) {
+      this.drawBackground();
+      this.drawSeparators();
+      this.applyScroll();
+    }
+  }
+
   update(level: number, equipment: ItemInstanceData[]): void {
     if (!this.visible) return;
     this.redraw(level, equipment);
@@ -474,16 +494,22 @@ export class StatsPanel {
     let weaponBaseDamage = baseStats.damage;
     let weaponBaseProjSpeed = 300;
     if (weaponItem && !isEmptyItem(weaponItem)) {
+      const subtype = getItemSubtype(weaponItem.baseItemId);
       if (weaponItem.isUT) {
         const def = ITEM_DEFS[weaponItem.baseItemId];
         if (def?.weaponStats) {
-          weaponCooldown = def.weaponStats.shootCooldown;
-          weaponBaseDamage = def.weaponStats.damage;
-          weaponBaseProjSpeed = def.weaponStats.projectileSpeed;
+          const utBase = {
+            baseDamage: def.weaponStats.damage, baseCooldown: def.weaponStats.shootCooldown,
+            baseRange: def.weaponStats.range, baseProjSpeed: def.weaponStats.projectileSpeed,
+            baseProjSize: def.weaponStats.projectileSize,
+          };
+          const scaled = getScaledWeaponStats(subtype, 0, weaponItem.lockedStat1Roll, weaponItem.lockedStat2Roll, true, utBase);
+          weaponCooldown = scaled.shootCooldown;
+          weaponBaseDamage = scaled.damage;
+          weaponBaseProjSpeed = scaled.projectileSpeed;
         }
       } else {
-        const subtype = getItemSubtype(weaponItem.baseItemId);
-        const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Tier, weaponItem.lockedStat2Tier, weaponItem.lockedStat1Roll, weaponItem.lockedStat2Roll);
+        const scaled = getScaledWeaponStats(subtype, weaponItem.instanceTier, weaponItem.lockedStat1Roll, weaponItem.lockedStat2Roll);
         weaponCooldown = scaled.shootCooldown;
         weaponBaseDamage = scaled.damage;
         weaponBaseProjSpeed = scaled.projectileSpeed;
@@ -499,20 +525,25 @@ export class StatsPanel {
 
     if (abilityItem && !isEmptyItem(abilityItem)) {
       hasAbility = true;
+      const subtype = getItemSubtype(abilityItem.baseItemId);
       if (abilityItem.isUT) {
         const def = ITEM_DEFS[abilityItem.baseItemId];
         if (def?.abilityStats) {
-          abilityDmg = def.abilityStats.damage;
-          abilityCooldown = def.abilityStats.cooldown;
-          abilityManaCost = def.abilityStats.manaCost;
+          const utBase = {
+            baseDamage: def.abilityStats.damage, baseCooldown: def.abilityStats.cooldown,
+            baseRange: def.abilityStats.range, baseProjSpeed: def.abilityStats.projectileSpeed,
+            baseProjSize: def.abilityStats.projectileSize, baseManaCost: def.abilityStats.manaCost,
+            piercing: def.abilityStats.piercing,
+          };
+          const as = getScaledAbilityStats(subtype, 0, abilityItem.lockedStat1Roll, abilityItem.lockedStat2Roll, true, utBase);
+          abilityDmg = as.damage;
+          abilityCooldown = as.cooldown;
+          abilityManaCost = as.manaCost;
         }
       } else {
-        const subtype = getItemSubtype(abilityItem.baseItemId);
         const as = getScaledAbilityStats(
           subtype,
           abilityItem.instanceTier,
-          abilityItem.lockedStat1Tier,
-          abilityItem.lockedStat2Tier,
           abilityItem.lockedStat1Roll,
           abilityItem.lockedStat2Roll
         );
