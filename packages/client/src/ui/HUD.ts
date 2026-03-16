@@ -29,14 +29,7 @@ import {
   DungeonTile,
   isHostileZone,
   isVaultZone,
-  REALM_PORTAL_1_X,
-  REALM_PORTAL_1_Y,
-  REALM_PORTAL_2_X,
-  REALM_PORTAL_2_Y,
-  VAULT_PORTAL_X,
-  VAULT_PORTAL_Y,
-  CRAFTING_TABLE_X,
-  CRAFTING_TABLE_Y,
+  getNexusPortalPositions,
   VAULT_CHEST_X,
   VAULT_CHEST_Y,
   VAULT_RETURN_PORTAL_X,
@@ -1263,18 +1256,19 @@ export class HUD {
     };
 
     if (zone === "nexus") {
+      const nPos = getNexusPortalPositions();
       // The Wild portals (purple)
-      for (const [px, py] of [[REALM_PORTAL_1_X, REALM_PORTAL_1_Y], [REALM_PORTAL_2_X, REALM_PORTAL_2_Y]]) {
-        const p = toScreen(px, py);
+      for (const wp of nPos.wildPortals) {
+        const p = toScreen(wp.x, wp.y);
         if (p) this.drawMinimapPortalIcon(g, p.sx, p.sy, 0xaa66ff, r);
       }
 
       // Vault portal (gold)
-      const vp = toScreen(VAULT_PORTAL_X, VAULT_PORTAL_Y);
+      const vp = toScreen(nPos.vaultPortal.x, nPos.vaultPortal.y);
       if (vp) this.drawMinimapPortalIcon(g, vp.sx, vp.sy, 0xddaa55, r);
 
       // Crafting table (anvil)
-      const ct = toScreen(CRAFTING_TABLE_X, CRAFTING_TABLE_Y);
+      const ct = toScreen(nPos.craftingTable.x, nPos.craftingTable.y);
       if (ct) this.drawMinimapCraftingIcon(g, ct.sx, ct.sy, r);
     } else if (isVaultZone(zone)) {
       // Vault chest

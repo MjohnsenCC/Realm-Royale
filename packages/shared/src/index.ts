@@ -9,6 +9,7 @@ export * from "./crafting";
 export * from "./dungeonMap";
 export * from "./dungeonModifiers";
 export * from "./nexusMap";
+export * from "./tiledMapLoader";
 export * from "./vaultMap";
 export * from "./realmMap";
 export * from "./auth";

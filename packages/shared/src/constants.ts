@@ -63,27 +63,14 @@ export const MINIMAP_HEIGHT = 150;
 // Enemy sync (area-of-interest filtering)
 export const ENEMY_SYNC_RADIUS = 1600;
 
-// Nexus (safe zone — hub with center room + 4 side rooms)
-export const NEXUS_TILES_X = 50;
-export const NEXUS_TILES_Y = 50;
-export const NEXUS_WIDTH = NEXUS_TILES_X * TILE_SIZE; // 2000
-export const NEXUS_HEIGHT = NEXUS_TILES_Y * TILE_SIZE; // 2000
+// Nexus dimensions now derived from Tiled map via generateNexusMap()
 
-// Crafting table (located in nexus east room)
-export const CRAFTING_TABLE_X = 43 * TILE_SIZE; // 1720 — center of east room
-export const CRAFTING_TABLE_Y = 25.5 * TILE_SIZE; // 1020 — center of east room
+// Crafting table interaction (position comes from Tiled map via getNexusPortalPositions)
 export const CRAFTING_TABLE_RADIUS = 36;
 export const CRAFTING_TABLE_INTERACT_RADIUS = 60;
 
-// The Wild portals (nexus north room, side by side)
-export const REALM_PORTAL_1_X = 23 * TILE_SIZE; // left side of north room
-export const REALM_PORTAL_1_Y = 7 * TILE_SIZE;
-export const REALM_PORTAL_2_X = 28 * TILE_SIZE; // right side of north room
-export const REALM_PORTAL_2_Y = 7 * TILE_SIZE;
+// Portal interaction radius
 export const PORTAL_RADIUS = 40;
-// Legacy alias (kept for reference, no longer used directly)
-export const PORTAL_X = 25.5 * TILE_SIZE;
-export const PORTAL_Y = 7 * TILE_SIZE;
 
 // Inventory & Loot Bags
 export const INVENTORY_SIZE = 8;
@@ -139,8 +126,7 @@ export const VAULT_CHEST_Y = 6 * TILE_SIZE; // 240 — upper area
 export const VAULT_CHEST_INTERACT_RADIUS = 60;
 export const VAULT_SPAWN_X = 10 * TILE_SIZE; // 400 — center
 export const VAULT_SPAWN_Y = 14 * TILE_SIZE; // 560 — lower area
-export const VAULT_PORTAL_X = 7 * TILE_SIZE; // 280 — nexus west room center X
-export const VAULT_PORTAL_Y = 25.5 * TILE_SIZE; // 1020 — nexus west room center Y
+// Vault portal position in nexus comes from Tiled map via getNexusPortalPositions()
 export const VAULT_RETURN_PORTAL_X = 10 * TILE_SIZE; // 400 — center bottom
 export const VAULT_RETURN_PORTAL_Y = 16 * TILE_SIZE; // 640 — bottom of room
 export const VAULT_CRAFTING_TABLE_X = 14 * TILE_SIZE; // 560 — right side of vault room

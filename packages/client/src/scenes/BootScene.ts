@@ -66,8 +66,8 @@ export class BootScene extends Phaser.Scene {
       ["tile-volcanicridge", "VolcanicRidge"],
       ["tile-volcanicridge-1", "VolcanicRidge_1"],
       ["tile-lake", "Lake"],
-      // Zone-specific floor tiles
-      ["tile-nexus", "Nexus"],
+      // Zone-specific floor tiles (nexus uses tileset spritesheet below)
+      ["tile-nexus", "Nexus"], // kept as fallback
       ["tile-vault", "Vault"],
       ["tile-infernalpit", "InfernalPit"],
       ["tile-voidsanctum", "VoidSanctum"],
@@ -75,6 +75,9 @@ export class BootScene extends Phaser.Scene {
     for (const [key, file] of tiles) {
       this.load.image(key, `assets/sprites/tiles/${file}.png`);
     }
+
+    // Nexus tileset spritesheet (multi-tile, loaded from Tiled export)
+    this.load.image("tileset-nexus", "assets/sprites/tiles/NexusTileset.png");
 
     // Decoration sprites — trees (top/bottom split), ground objects
     for (let i = 0; i <= 3; i++) {

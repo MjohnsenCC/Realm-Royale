@@ -20,13 +20,7 @@ import {
   HOSTILE_HEIGHT,
   HOSTILE_TILES,
   HOSTILE_TILE_SIZE,
-  REALM_PORTAL_1_X,
-  REALM_PORTAL_1_Y,
-  REALM_PORTAL_2_X,
-  REALM_PORTAL_2_Y,
   PORTAL_RADIUS,
-  CRAFTING_TABLE_X,
-  CRAFTING_TABLE_Y,
   CRAFTING_TABLE_INTERACT_RADIUS,
   TILE_SIZE,
   PLAYER_RADIUS,
@@ -56,6 +50,8 @@ import {
   DUNGEON_PORTAL_INTERACT_RADIUS,
   generateDungeonMap,
   generateNexusMap,
+  getNexusTiledResult,
+  getNexusPortalPositions,
   resolveWallCollision,
   resolveHostileCollision,
   resolveDecorationCollision,
@@ -71,8 +67,6 @@ import {
   HITBOX_PADDING,
   isEmptyItem,
   createEmptyItemInstance,
-  VAULT_PORTAL_X,
-  VAULT_PORTAL_Y,
   VAULT_CHEST_X,
   VAULT_CHEST_Y,
   VAULT_CHEST_INTERACT_RADIUS,
@@ -914,8 +908,8 @@ export class GameScene extends Phaser.Scene {
     const { tiles, width, height } = mapData;
     const edgeColor = 0x44aa66;
 
-    // Floor tiles via tilemap (single draw call, replaces per-tile fillRect)
-    this.createZoneTilemap("tile-nexus", tiles, width, height);
+    // Floor tiles via multi-tile tilemap from Tiled map
+    this.createTiledZoneTilemap("tileset-nexus", getNexusTiledResult());
 
     // Draw highlighted edges where floor meets wall
     this.groundGraphics.lineStyle(2, edgeColor, 0.6);
@@ -942,9 +936,10 @@ export class GameScene extends Phaser.Scene {
     // Nexus label at spawn center
     this.clearNexusLabels();
 
-    // Draw crafting table sprite in east room
-    const ctx = CRAFTING_TABLE_X;
-    const cty = CRAFTING_TABLE_Y;
+    // Draw crafting table sprite
+    const nexusPositions = getNexusPortalPositions();
+    const ctx = nexusPositions.craftingTable.x;
+    const cty = nexusPositions.craftingTable.y;
 
     const craftImg = this.add.image(ctx, cty, "deco-crafting-table").setDepth(-0.3);
     this.nexusLabels.push(craftImg);
@@ -1677,6 +1672,89 @@ export class GameScene extends Phaser.Scene {
     this.zoneLayer = layer;
   }
 
+  /**
+   * Build a multi-tile extruded tileset from a Tiled map result and create a
+   * tilemap using the visual tile IDs. Used for maps with multiple tile variants.
+   */
+  private createTiledZoneTilemap(
+    imageKey: string,
+    tiledResult: import("@rotmg-lite/shared").TiledMapResult
+  ): void {
+    this.destroyZoneTilemap();
+
+    const ts = TILE_SIZE;
+    const EXTRUDE = 1;
+    const tilesetKey = `zone-tileset-tiled-${imageKey}`;
+    const { tileset: tsInfo, visualTileIds, width, height } = tiledResult;
+
+    if (!this.textures.exists(tilesetKey)) {
+      const tex = this.textures.get(imageKey);
+      if (!tex || tex.key === "__MISSING") return;
+      const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+
+      const cols = tsInfo.columns;
+      const rows = Math.ceil(tsInfo.tileCount / cols);
+      const extTs = ts + EXTRUDE * 2; // extruded tile size
+
+      const canvas = document.createElement("canvas");
+      canvas.width = cols * extTs;
+      canvas.height = rows * extTs;
+      const ctx = canvas.getContext("2d")!;
+      ctx.imageSmoothingEnabled = false;
+
+      for (let tileId = 0; tileId < tsInfo.tileCount; tileId++) {
+        const col = tileId % cols;
+        const row = Math.floor(tileId / cols);
+        // Source position in the tileset image, accounting for spacing and margin
+        const sx = tsInfo.margin + col * (tsInfo.tileWidth + tsInfo.spacing);
+        const sy = tsInfo.margin + row * (tsInfo.tileHeight + tsInfo.spacing);
+        // Destination position in the extruded canvas
+        const dx = col * extTs + EXTRUDE;
+        const dy = row * extTs + EXTRUDE;
+
+        // Draw tile scaled to TILE_SIZE
+        ctx.drawImage(src, sx, sy, tsInfo.tileWidth, tsInfo.tileHeight, dx, dy, ts, ts);
+        // Extrude edges
+        ctx.drawImage(canvas, dx, dy, ts, 1, dx, dy - 1, ts, 1); // top
+        ctx.drawImage(canvas, dx, dy + ts - 1, ts, 1, dx, dy + ts, ts, 1); // bottom
+        ctx.drawImage(canvas, dx, dy - 1, 1, ts + 2, dx - 1, dy - 1, 1, ts + 2); // left
+        ctx.drawImage(canvas, dx + ts - 1, dy - 1, 1, ts + 2, dx + ts, dy - 1, 1, ts + 2); // right
+      }
+      this.textures.addCanvas(tilesetKey, canvas);
+    }
+
+    // Build tile data from visual tile IDs
+    const tileData: number[][] = [];
+    for (let ty = 0; ty < height; ty++) {
+      const row: number[] = [];
+      for (let tx = 0; tx < width; tx++) {
+        row.push(visualTileIds[ty * width + tx]); // -1 = empty, >=0 = tile index
+      }
+      tileData.push(row);
+    }
+
+    const extTs = ts + EXTRUDE * 2;
+    const map = this.make.tilemap({ data: tileData, tileWidth: ts, tileHeight: ts });
+    const tileset = map.addTilesetImage(
+      "zone-tiles-tiled", tilesetKey,
+      ts, ts,
+      EXTRUDE, EXTRUDE * 2
+    );
+    if (!tileset) {
+      map.destroy();
+      return;
+    }
+    const layer = map.createLayer(0, tileset, 0, 0);
+    if (!layer) {
+      map.destroy();
+      return;
+    }
+    layer.setDepth(-1);
+
+    this.zoneTilemap = map;
+    this.zoneLayer = layer;
+  }
+
   private realmPortalLabels: Phaser.GameObjects.Text[] = [];
   private realmPortalImages: Phaser.GameObjects.Image[] = [];
 
@@ -1690,10 +1768,10 @@ export class GameScene extends Phaser.Scene {
 
     if (this.localZone !== "nexus") return;
 
-    const portals = [
-      { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, label: "The Wild 1" },
-      { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, label: "The Wild 2" },
-    ];
+    const nexusPositions = getNexusPortalPositions();
+    const portals = nexusPositions.wildPortals.map((p, i) => ({
+      x: p.x, y: p.y, label: `The Wild ${i + 1}`,
+    }));
 
     for (const p of portals) {
       const img = this.add.image(p.x, p.y, "portal-the-wild").setDepth(-0.3);
@@ -1710,9 +1788,9 @@ export class GameScene extends Phaser.Scene {
       this.realmPortalLabels.push(lbl);
     }
 
-    // Vault portal sprite in west room
-    const vpx = VAULT_PORTAL_X;
-    const vpy = VAULT_PORTAL_Y;
+    // Vault portal sprite
+    const vpx = nexusPositions.vaultPortal.x;
+    const vpy = nexusPositions.vaultPortal.y;
 
     const vaultPortalImg = this.add.image(vpx, vpy, "portal-vault").setDepth(-0.3);
     this.realmPortalImages.push(vaultPortalImg);
@@ -2124,8 +2202,9 @@ export class GameScene extends Phaser.Scene {
             this.nearCraftingTable = false;
             this.nearVaultChest = false;
             if (this.localZone === "nexus") {
-              const dx = epx - CRAFTING_TABLE_X;
-              const dy = epy - CRAFTING_TABLE_Y;
+              const ncp = getNexusPortalPositions().craftingTable;
+              const dx = epx - ncp.x;
+              const dy = epy - ncp.y;
               if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
                 this.nearCraftingTable = true;
               }
@@ -2952,10 +3031,10 @@ export class GameScene extends Phaser.Scene {
 
     // Check nexus realm portals + vault portal
     if (this.localZone === "nexus") {
+      const nPos = getNexusPortalPositions();
       const realmPortals = [
-        { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y },
-        { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y },
-        { x: VAULT_PORTAL_X, y: VAULT_PORTAL_Y },
+        ...nPos.wildPortals,
+        nPos.vaultPortal,
       ];
       for (const rp of realmPortals) {
         const dx = px - rp.x;
@@ -2972,12 +3051,13 @@ export class GameScene extends Phaser.Scene {
     // Check crafting table in nexus or vault
     this.nearCraftingTable = false;
     if (!nearPortal && this.localZone === "nexus") {
-      const dx = px - CRAFTING_TABLE_X;
-      const dy = py - CRAFTING_TABLE_Y;
+      const nct = getNexusPortalPositions().craftingTable;
+      const dx = px - nct.x;
+      const dy = py - nct.y;
       if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
         nearPortal = true;
-        portalX = CRAFTING_TABLE_X;
-        portalY = CRAFTING_TABLE_Y;
+        portalX = nct.x;
+        portalY = nct.y;
         this.nearCraftingTable = true;
       }
     }

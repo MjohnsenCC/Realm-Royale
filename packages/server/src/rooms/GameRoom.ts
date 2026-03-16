@@ -31,10 +31,7 @@ import {
   RIVER_SPEED_MULTIPLIER,
   HOSTILE_CENTER_X,
   HOSTILE_CENTER_Y,
-  REALM_PORTAL_1_X,
-  REALM_PORTAL_1_Y,
-  REALM_PORTAL_2_X,
-  REALM_PORTAL_2_Y,
+  getNexusPortalPositions,
   PORTAL_RADIUS,
   DUNGEON_PORTAL_INTERACT_RADIUS,
   INVENTORY_SIZE,
@@ -57,8 +54,6 @@ import {
   DUNGEON_TO_ZONE,
   isHostileZone,
   isVaultZone,
-  VAULT_PORTAL_X,
-  VAULT_PORTAL_Y,
   VAULT_CHEST_X,
   VAULT_CHEST_Y,
   VAULT_CHEST_INTERACT_RADIUS,
@@ -98,8 +93,6 @@ import {
   applyCraftingOrb,
   makeItemId,
   ORB_MAX_STACK,
-  CRAFTING_TABLE_X,
-  CRAFTING_TABLE_Y,
   CRAFTING_TABLE_INTERACT_RADIUS,
   VAULT_CRAFTING_TABLE_X,
   VAULT_CRAFTING_TABLE_Y,
@@ -237,10 +230,10 @@ export class GameRoom extends Room<GameState> {
 
       // Check nexus realm portals
       if (player.zone === "nexus") {
-        const realmPortals = [
-          { x: REALM_PORTAL_1_X, y: REALM_PORTAL_1_Y, realmId: "1" },
-          { x: REALM_PORTAL_2_X, y: REALM_PORTAL_2_Y, realmId: "2" },
-        ];
+        const nexusPositions = getNexusPortalPositions();
+        const realmPortals = nexusPositions.wildPortals.map((p, i) => ({
+          x: p.x, y: p.y, realmId: String(i + 1),
+        }));
         for (const rp of realmPortals) {
           const dist = distanceBetween(player.x, player.y, rp.x, rp.y);
           if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
@@ -256,8 +249,9 @@ export class GameRoom extends Room<GameState> {
           }
         }
 
-        // Check vault portal (nexus west room)
-        const vaultDist = distanceBetween(player.x, player.y, VAULT_PORTAL_X, VAULT_PORTAL_Y);
+        // Check vault portal (nexus)
+        const vaultPos = getNexusPortalPositions().vaultPortal;
+        const vaultDist = distanceBetween(player.x, player.y, vaultPos.x, vaultPos.y);
         if (vaultDist < PORTAL_RADIUS + PLAYER_RADIUS) {
           // Lazy-load vault from DB if not yet loaded
           if (player.vaultItems === null && player.accountId) {
@@ -854,8 +848,9 @@ export class GameRoom extends Room<GameState> {
       if (!player || !player.alive) return;
       if (player.zone !== "nexus" && !isVaultZone(player.zone)) return;
 
-      const tableX = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_X : CRAFTING_TABLE_X;
-      const tableY = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_Y : CRAFTING_TABLE_Y;
+      const nexusCraft = getNexusPortalPositions().craftingTable;
+      const tableX = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_X : nexusCraft.x;
+      const tableY = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_Y : nexusCraft.y;
       const dist = distanceBetween(player.x, player.y, tableX, tableY);
       if (dist > CRAFTING_TABLE_INTERACT_RADIUS) return;
 
@@ -1285,13 +1280,13 @@ export class GameRoom extends Room<GameState> {
   }
 
   private spawnNexusTestPortals(): void {
-    const testRoom = this.nexusMap.rooms[2]; // south room (dungeon test portals)
+    const nexusPositions = getNexusPortalPositions();
 
-    // Infernal Pit test portal (left side of test room)
+    // Infernal Pit test portal
     const infernal = new DungeonPortal();
     infernal.id = generateId("nportal");
-    infernal.x = testRoom.centerX - 80;
-    infernal.y = testRoom.centerY + 20;
+    infernal.x = nexusPositions.infernalPitPortal.x;
+    infernal.y = nexusPositions.infernalPitPortal.y;
     infernal.portalType = PortalType.InfernalPitEntrance;
     infernal.zone = "nexus";
     infernal.createdAt = 0; // never expires (DungeonSystem skips nexus portals)
@@ -1303,11 +1298,11 @@ export class GameRoom extends Room<GameState> {
     infernal.modifierTiers = new ArraySchema<number>(...infernalStats.modifierTiers);
     this.state.dungeonPortals.set(infernal.id, infernal);
 
-    // Void Sanctum test portal (right side of test room)
+    // Void Sanctum test portal
     const voidPortal = new DungeonPortal();
     voidPortal.id = generateId("nportal");
-    voidPortal.x = testRoom.centerX + 80;
-    voidPortal.y = testRoom.centerY + 20;
+    voidPortal.x = nexusPositions.voidSanctumPortal.x;
+    voidPortal.y = nexusPositions.voidSanctumPortal.y;
     voidPortal.portalType = PortalType.VoidSanctumEntrance;
     voidPortal.zone = "nexus";
     voidPortal.createdAt = 0;

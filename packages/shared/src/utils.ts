@@ -18,12 +18,11 @@ import {
   MANA_REGEN_PER_LEVEL,
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
-  NEXUS_WIDTH,
-  NEXUS_HEIGHT,
   TILE_SIZE,
 } from "./constants";
 import { ItemCategory, PlayerZone, DungeonType, StatType, getZoneBase, ArmorSubtype } from "./types";
 import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
+import { generateNexusMap } from "./nexusMap";
 import { ITEM_DEFS, getItemCategory, getItemSubtype } from "./items";
 import {
   ItemInstanceData,
@@ -459,8 +458,10 @@ export function getZoneDimensions(zone: string): {
   height: number;
 } {
   const base = getZoneBase(zone);
-  if (base === PlayerZone.Nexus)
-    return { width: NEXUS_WIDTH, height: NEXUS_HEIGHT };
+  if (base === PlayerZone.Nexus) {
+    const nexus = generateNexusMap();
+    return { width: nexus.width * TILE_SIZE, height: nexus.height * TILE_SIZE };
+  }
   if (base === PlayerZone.Vault)
     return { width: 20 * TILE_SIZE, height: 20 * TILE_SIZE };
   const dType = ZONE_TO_DUNGEON_TYPE[base];
