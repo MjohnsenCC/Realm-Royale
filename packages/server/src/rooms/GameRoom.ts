@@ -54,15 +54,10 @@ import {
   DUNGEON_TO_ZONE,
   isHostileZone,
   isVaultZone,
-  VAULT_CHEST_X,
-  VAULT_CHEST_Y,
   VAULT_CHEST_INTERACT_RADIUS,
-  VAULT_SPAWN_X,
-  VAULT_SPAWN_Y,
   VAULT_SIZE,
-  VAULT_RETURN_PORTAL_X,
-  VAULT_RETURN_PORTAL_Y,
   generateVaultMap,
+  getVaultPositions,
   getDungeonTypeFromZone,
   resolveWallCollision,
   resolveHostileCollision,
@@ -94,8 +89,6 @@ import {
   makeItemId,
   ORB_MAX_STACK,
   CRAFTING_TABLE_INTERACT_RADIUS,
-  VAULT_CRAFTING_TABLE_X,
-  VAULT_CRAFTING_TABLE_Y,
   getScaledWeaponStats,
   getScaledAbilityStats,
   determineBagRarity,
@@ -273,8 +266,9 @@ export class GameRoom extends Room<GameState> {
           player.invulnerable = true;
           player.invulnerableSince = Date.now();
           player.zone = `vault:${player.characterId || client.sessionId}`;
-          player.x = VAULT_SPAWN_X;
-          player.y = VAULT_SPAWN_Y;
+          const vaultSpawn = getVaultPositions().spawnPoint;
+          player.x = vaultSpawn.x;
+          player.y = vaultSpawn.y;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: player.zone });
           return;
@@ -283,7 +277,8 @@ export class GameRoom extends Room<GameState> {
 
       // Check return portal inside vault
       if (isVaultZone(player.zone)) {
-        const returnDist = distanceBetween(player.x, player.y, VAULT_RETURN_PORTAL_X, VAULT_RETURN_PORTAL_Y);
+        const vaultReturnPortal = getVaultPositions().returnPortal;
+        const returnDist = distanceBetween(player.x, player.y, vaultReturnPortal.x, vaultReturnPortal.y);
         if (returnDist < PORTAL_RADIUS + PLAYER_RADIUS) {
           player.nearVaultChest = false;
           if (player.portalGemPortalActive) {
@@ -400,9 +395,10 @@ export class GameRoom extends Room<GameState> {
 
           player.invulnerable = true;
           player.invulnerableSince = Date.now();
+          const vaultSpawn2 = getVaultPositions().spawnPoint;
           player.zone = `vault:${player.characterId || client.sessionId}`;
-          player.x = VAULT_SPAWN_X;
-          player.y = VAULT_SPAWN_Y;
+          player.x = vaultSpawn2.x;
+          player.y = vaultSpawn2.y;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: player.zone });
           return;
@@ -849,8 +845,8 @@ export class GameRoom extends Room<GameState> {
       if (player.zone !== "nexus" && !isVaultZone(player.zone)) return;
 
       const nexusCraft = getNexusPortalPositions().craftingTable;
-      const tableX = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_X : nexusCraft.x;
-      const tableY = isVaultZone(player.zone) ? VAULT_CRAFTING_TABLE_Y : nexusCraft.y;
+      const tableX = isVaultZone(player.zone) ? getVaultPositions().craftingTable.x : nexusCraft.x;
+      const tableY = isVaultZone(player.zone) ? getVaultPositions().craftingTable.y : nexusCraft.y;
       const dist = distanceBetween(player.x, player.y, tableX, tableY);
       if (dist > CRAFTING_TABLE_INTERACT_RADIUS) return;
 
@@ -881,7 +877,8 @@ export class GameRoom extends Room<GameState> {
       if (!isVaultZone(player.zone)) return;
       if (!player.vaultItems) return;
 
-      const dist = distanceBetween(player.x, player.y, VAULT_CHEST_X, VAULT_CHEST_Y);
+      const vaultChest = getVaultPositions().chest;
+      const dist = distanceBetween(player.x, player.y, vaultChest.x, vaultChest.y);
       if (dist > VAULT_CHEST_INTERACT_RADIUS) return;
 
       client.send(ServerMessage.VaultOpened, { items: player.vaultItems });
@@ -2046,7 +2043,8 @@ export class GameRoom extends Room<GameState> {
         return;
       }
 
-      const dist = distanceBetween(player.x, player.y, VAULT_CHEST_X, VAULT_CHEST_Y);
+      const vaultChestPos = getVaultPositions().chest;
+      const dist = distanceBetween(player.x, player.y, vaultChestPos.x, vaultChestPos.y);
       const nearNow = dist <= VAULT_CHEST_INTERACT_RADIUS;
 
       if (!nearNow && player.nearVaultChest) {

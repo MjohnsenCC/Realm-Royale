@@ -119,18 +119,7 @@ export const DUNGEON_DROP_CHANCE = 0.30; // 30% for specific Godlands enemies
 export const VAULT_COLS = 9;
 export const VAULT_ROWS = 6;
 export const VAULT_SIZE = VAULT_COLS * VAULT_ROWS; // 54
-export const VAULT_TILES_X = 20;
-export const VAULT_TILES_Y = 20;
-export const VAULT_CHEST_X = 10 * TILE_SIZE; // 400 — center of vault room
-export const VAULT_CHEST_Y = 6 * TILE_SIZE; // 240 — upper area
 export const VAULT_CHEST_INTERACT_RADIUS = 60;
-export const VAULT_SPAWN_X = 10 * TILE_SIZE; // 400 — center
-export const VAULT_SPAWN_Y = 14 * TILE_SIZE; // 560 — lower area
-// Vault portal position in nexus comes from Tiled map via getNexusPortalPositions()
-export const VAULT_RETURN_PORTAL_X = 10 * TILE_SIZE; // 400 — center bottom
-export const VAULT_RETURN_PORTAL_Y = 16 * TILE_SIZE; // 640 — bottom of room
-export const VAULT_CRAFTING_TABLE_X = 14 * TILE_SIZE; // 560 — right side of vault room
-export const VAULT_CRAFTING_TABLE_Y = 6 * TILE_SIZE; // 240 — upper area (same height as chest)
 
 // Consumables
 export const PORTAL_GEM_MAX_STACK = 20;

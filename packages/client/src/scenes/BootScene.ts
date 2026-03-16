@@ -76,8 +76,9 @@ export class BootScene extends Phaser.Scene {
       this.load.image(key, `assets/sprites/tiles/${file}.png`);
     }
 
-    // Nexus tileset spritesheet (multi-tile, loaded from Tiled export)
+    // Tileset spritesheets (multi-tile, loaded from Tiled exports)
     this.load.image("tileset-nexus", "assets/sprites/tiles/NexusTileset.png");
+    this.load.image("tileset-vault", "assets/sprites/tiles/VaultTileset.png");
 
     // Decoration sprites — trees (top/bottom split), ground objects
     for (let i = 0; i <= 3; i++) {

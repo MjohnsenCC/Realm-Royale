@@ -30,10 +30,7 @@ import {
   isHostileZone,
   isVaultZone,
   getNexusPortalPositions,
-  VAULT_CHEST_X,
-  VAULT_CHEST_Y,
-  VAULT_RETURN_PORTAL_X,
-  VAULT_RETURN_PORTAL_Y,
+  getVaultPositions,
   PortalType,
   isBossEnemy,
 } from "@rotmg-lite/shared";
@@ -1271,12 +1268,13 @@ export class HUD {
       const ct = toScreen(nPos.craftingTable.x, nPos.craftingTable.y);
       if (ct) this.drawMinimapCraftingIcon(g, ct.sx, ct.sy, r);
     } else if (isVaultZone(zone)) {
+      const vp = getVaultPositions();
       // Vault chest
-      const vc = toScreen(VAULT_CHEST_X, VAULT_CHEST_Y);
+      const vc = toScreen(vp.chest.x, vp.chest.y);
       if (vc) this.drawMinimapChestIcon(g, vc.sx, vc.sy, r);
 
       // Return portal (blue)
-      const rp = toScreen(VAULT_RETURN_PORTAL_X, VAULT_RETURN_PORTAL_Y);
+      const rp = toScreen(vp.returnPortal.x, vp.returnPortal.y);
       if (rp) this.drawMinimapPortalIcon(g, rp.sx, rp.sy, 0x4488ff, r);
     }
 

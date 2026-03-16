@@ -67,14 +67,10 @@ import {
   HITBOX_PADDING,
   isEmptyItem,
   createEmptyItemInstance,
-  VAULT_CHEST_X,
-  VAULT_CHEST_Y,
   VAULT_CHEST_INTERACT_RADIUS,
-  VAULT_RETURN_PORTAL_X,
-  VAULT_RETURN_PORTAL_Y,
-  VAULT_CRAFTING_TABLE_X,
-  VAULT_CRAFTING_TABLE_Y,
   generateVaultMap,
+  getVaultTiledResult,
+  getVaultPositions,
   getItemCategory,
   isCraftingOrbItem,
   PORTAL_GEM_ID,
@@ -975,8 +971,8 @@ export class GameScene extends Phaser.Scene {
     const { tiles, width, height } = mapData;
     const edgeColor = 0xddaa55;
 
-    // Floor tiles via tilemap (single draw call, replaces per-tile fillRect)
-    this.createZoneTilemap("tile-vault", tiles, width, height);
+    // Floor tiles via multi-tile tilemap from Tiled map
+    this.createTiledZoneTilemap("tileset-vault", getVaultTiledResult());
 
     // Draw highlighted edges where floor meets wall
     this.groundGraphics.lineStyle(2, edgeColor, 0.4);
@@ -1002,9 +998,11 @@ export class GameScene extends Phaser.Scene {
 
     this.clearNexusLabels();
 
+    const vaultPos = getVaultPositions();
+
     // Draw vault chest sprite
-    const chestX = VAULT_CHEST_X;
-    const chestY = VAULT_CHEST_Y;
+    const chestX = vaultPos.chest.x;
+    const chestY = vaultPos.chest.y;
 
     const chestImg = this.add.image(chestX, chestY, "deco-chest").setDepth(-0.3);
     this.nexusLabels.push(chestImg);
@@ -1023,8 +1021,8 @@ export class GameScene extends Phaser.Scene {
     this.nexusLabels.push(chestLabel);
 
     // Draw return portal sprite near spawn area
-    const rpx = VAULT_RETURN_PORTAL_X;
-    const rpy = VAULT_RETURN_PORTAL_Y;
+    const rpx = vaultPos.returnPortal.x;
+    const rpy = vaultPos.returnPortal.y;
 
     const returnPortalImg = this.add.image(rpx, rpy, "portal-vault").setDepth(-0.3);
     this.nexusLabels.push(returnPortalImg);
@@ -1043,8 +1041,8 @@ export class GameScene extends Phaser.Scene {
     this.nexusLabels.push(portalLabel);
 
     // Draw crafting table sprite in vault
-    const vctx = VAULT_CRAFTING_TABLE_X;
-    const vcty = VAULT_CRAFTING_TABLE_Y;
+    const vctx = vaultPos.craftingTable.x;
+    const vcty = vaultPos.craftingTable.y;
 
     const vaultCraftImg = this.add.image(vctx, vcty, "deco-crafting-table").setDepth(-0.3);
     this.nexusLabels.push(vaultCraftImg);
@@ -1692,8 +1690,16 @@ export class GameScene extends Phaser.Scene {
       if (!tex || tex.key === "__MISSING") return;
       const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
 
+      // Only extrude tiles actually used in the map (avoids processing thousands of unused tiles)
+      const usedTiles = new Set<number>();
+      for (let i = 0; i < visualTileIds.length; i++) {
+        if (visualTileIds[i] >= 0) usedTiles.add(visualTileIds[i]);
+      }
+      const maxTileId = usedTiles.size > 0 ? Math.max(...usedTiles) + 1 : tsInfo.tileCount;
+      const effectiveTileCount = Math.min(maxTileId, tsInfo.tileCount);
+
       const cols = tsInfo.columns;
-      const rows = Math.ceil(tsInfo.tileCount / cols);
+      const rows = Math.ceil(effectiveTileCount / cols);
       const extTs = ts + EXTRUDE * 2; // extruded tile size
 
       const canvas = document.createElement("canvas");
@@ -1702,7 +1708,8 @@ export class GameScene extends Phaser.Scene {
       const ctx = canvas.getContext("2d")!;
       ctx.imageSmoothingEnabled = false;
 
-      for (let tileId = 0; tileId < tsInfo.tileCount; tileId++) {
+      for (const tileId of usedTiles) {
+        if (tileId >= effectiveTileCount) continue;
         const col = tileId % cols;
         const row = Math.floor(tileId / cols);
         // Source position in the tileset image, accounting for spacing and margin
@@ -2210,15 +2217,17 @@ export class GameScene extends Phaser.Scene {
               }
             }
             if (!this.nearCraftingTable && isVaultZone(this.localZone)) {
-              const dx = epx - VAULT_CRAFTING_TABLE_X;
-              const dy = epy - VAULT_CRAFTING_TABLE_Y;
+              const vp = getVaultPositions();
+              const dx = epx - vp.craftingTable.x;
+              const dy = epy - vp.craftingTable.y;
               if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
                 this.nearCraftingTable = true;
               }
             }
             if (!this.nearCraftingTable && isVaultZone(this.localZone)) {
-              const dx = epx - VAULT_CHEST_X;
-              const dy = epy - VAULT_CHEST_Y;
+              const vp = getVaultPositions();
+              const dx = epx - vp.chest.x;
+              const dy = epy - vp.chest.y;
               if (dx * dx + dy * dy < VAULT_CHEST_INTERACT_RADIUS * VAULT_CHEST_INTERACT_RADIUS) {
                 this.nearVaultChest = true;
               }
@@ -3062,12 +3071,13 @@ export class GameScene extends Phaser.Scene {
       }
     }
     if (!nearPortal && isVaultZone(this.localZone)) {
-      const dx = px - VAULT_CRAFTING_TABLE_X;
-      const dy = py - VAULT_CRAFTING_TABLE_Y;
+      const vp = getVaultPositions();
+      const dx = px - vp.craftingTable.x;
+      const dy = py - vp.craftingTable.y;
       if (dx * dx + dy * dy < CRAFTING_TABLE_INTERACT_RADIUS * CRAFTING_TABLE_INTERACT_RADIUS) {
         nearPortal = true;
-        portalX = VAULT_CRAFTING_TABLE_X;
-        portalY = VAULT_CRAFTING_TABLE_Y;
+        portalX = vp.craftingTable.x;
+        portalY = vp.craftingTable.y;
         this.nearCraftingTable = true;
       }
     }
@@ -3075,23 +3085,24 @@ export class GameScene extends Phaser.Scene {
     // Check vault chest in vault zone
     this.nearVaultChest = false;
     if (!nearPortal && isVaultZone(this.localZone)) {
-      const dx = px - VAULT_CHEST_X;
-      const dy = py - VAULT_CHEST_Y;
+      const vp = getVaultPositions();
+      const dx = px - vp.chest.x;
+      const dy = py - vp.chest.y;
       if (dx * dx + dy * dy < VAULT_CHEST_INTERACT_RADIUS * VAULT_CHEST_INTERACT_RADIUS) {
         nearPortal = true;
-        portalX = VAULT_CHEST_X;
-        portalY = VAULT_CHEST_Y;
+        portalX = vp.chest.x;
+        portalY = vp.chest.y;
         this.nearVaultChest = true;
       }
 
       // Also check return portal in vault
       if (!nearPortal) {
-        const rdx = px - VAULT_RETURN_PORTAL_X;
-        const rdy = py - VAULT_RETURN_PORTAL_Y;
+        const rdx = px - vp.returnPortal.x;
+        const rdy = py - vp.returnPortal.y;
         if (rdx * rdx + rdy * rdy < (PORTAL_RADIUS + 20) * (PORTAL_RADIUS + 20)) {
           nearPortal = true;
-          portalX = VAULT_RETURN_PORTAL_X;
-          portalY = VAULT_RETURN_PORTAL_Y;
+          portalX = vp.returnPortal.x;
+          portalY = vp.returnPortal.y;
         }
       }
     }

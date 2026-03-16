@@ -23,6 +23,7 @@ import {
 import { ItemCategory, PlayerZone, DungeonType, StatType, getZoneBase, ArmorSubtype } from "./types";
 import { DUNGEON_CONFIGS, getGeneratedDungeonDimensions } from "./dungeonMap";
 import { generateNexusMap } from "./nexusMap";
+import { generateVaultMap } from "./vaultMap";
 import { ITEM_DEFS, getItemCategory, getItemSubtype } from "./items";
 import {
   ItemInstanceData,
@@ -462,8 +463,10 @@ export function getZoneDimensions(zone: string): {
     const nexus = generateNexusMap();
     return { width: nexus.width * TILE_SIZE, height: nexus.height * TILE_SIZE };
   }
-  if (base === PlayerZone.Vault)
-    return { width: 20 * TILE_SIZE, height: 20 * TILE_SIZE };
+  if (base === PlayerZone.Vault) {
+    const vault = generateVaultMap();
+    return { width: vault.width * TILE_SIZE, height: vault.height * TILE_SIZE };
+  }
   const dType = ZONE_TO_DUNGEON_TYPE[base];
   if (dType !== undefined) {
     // Use actual generated dimensions if available (dynamic grid sizing)
