@@ -12,7 +12,7 @@ const originalSources = new Map<string, HTMLImageElement | HTMLCanvasElement>();
  * Ratio of item sprite display size to slot size.
  * 0.85 = 85% fill, leaving ~7.5% padding on each side.
  */
-export const ITEM_FILL_RATIO = 0.85;
+export const ITEM_FILL_RATIO = 0.80;
 
 /**
  * Current outlined display size — the exact pixel dimension of the

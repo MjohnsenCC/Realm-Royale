@@ -2051,7 +2051,7 @@ export class GameScene extends Phaser.Scene {
           collisionRadius: 0, // server handles hit detection
           damage: 0,
           isCrit: false,
-          piercing: false,
+          piercing: pt === ProjectileType.RelicExpand || pt === ProjectileType.HelmSpin || pt === ProjectileType.WandBolt,
           hitEnemies: new Set(),
         });
         // Re-sync local timer to prevent continued drift
