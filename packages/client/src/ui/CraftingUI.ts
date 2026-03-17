@@ -506,7 +506,7 @@ export class CraftingUI {
     const margin = Math.round(12 * S);
 
     // Left panel: 30% width
-    const totalPanelW = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
+    const totalPanelW = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.28));
     this.orbColumnWidth = Math.round(77 * S);
     this.columnGap = Math.round(8 * S);
     this.statsColumnWidth = totalPanelW - this.columnGap - this.orbColumnWidth;

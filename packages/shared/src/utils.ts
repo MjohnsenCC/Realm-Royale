@@ -9,7 +9,6 @@ import {
   MIN_SHOOT_COOLDOWN,
   BASE_SPEED,
   SPEED_PER_LEVEL,
-  MAX_SPEED,
   BASE_HP_REGEN,
   HP_REGEN_PER_LEVEL,
   BASE_MAX_MANA,
@@ -57,7 +56,7 @@ export function getStatsForLevel(level: number) {
     maxHp: BASE_MAX_HP + (l - 1) * HP_PER_LEVEL,
     damage: BASE_DAMAGE + (l - 1) * DAMAGE_PER_LEVEL,
     shootCooldown: Math.max(MIN_SHOOT_COOLDOWN, BASE_SHOOT_COOLDOWN - (l - 1) * COOLDOWN_REDUCTION_PER_LEVEL),
-    speed: Math.min(MAX_SPEED, BASE_SPEED + (l - 1) * SPEED_PER_LEVEL),
+    speed: BASE_SPEED + (l - 1) * SPEED_PER_LEVEL,
     hpRegen: BASE_HP_REGEN + (l - 1) * HP_REGEN_PER_LEVEL,
   };
 }
@@ -348,7 +347,7 @@ export function computePlayerStats(
     maxHp: base.maxHp + bonuses.maxHp,
     damage: weaponDamage + bonuses.damage,
     shootCooldown: Math.max(MIN_SHOOT_COOLDOWN, Math.round(weaponCooldown / (1 + bonuses.cooldownReduction / 100))),
-    speed: Math.min(MAX_SPEED, base.speed + bonuses.speed),
+    speed: base.speed + bonuses.speed,
     hpRegen: base.hpRegen + bonuses.hpRegen,
     maxMana: manaBase + bonuses.maxMana,
     manaRegen: manaRegenBase + bonuses.manaRegen,

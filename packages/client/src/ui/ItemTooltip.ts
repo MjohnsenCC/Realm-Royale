@@ -33,7 +33,7 @@ import { UI_PANEL_CORNER } from "./UITextures";
 const BASE_TOOLTIP_WIDTH = 240;
 const BASE_TOOLTIP_PADDING = 8;
 const BASE_BANNER_HEIGHT = 32;
-const BASE_STAT_ICON_SIZE = 16;
+const BASE_STAT_ICON_SIZE = 18;
 
 /** Generic placeholder descriptions by category+subtype. */
 function getPlaceholderDesc(category: number, subtype: number): string {
@@ -524,7 +524,7 @@ export class ItemTooltip {
           entry.icon.setY(currentY + rowH / 2);
           entry.icon.setVisible(true);
 
-          currentY += rowH + Math.round(5 * this.S);
+          currentY += rowH + Math.round(7 * this.S);
         }
       }
     } else if (openDescs.length > 0) {
@@ -553,7 +553,7 @@ export class ItemTooltip {
         entry.icon.setY(currentY + rowH / 2);
         entry.icon.setVisible(true);
 
-        currentY += rowH + Math.round(5 * this.S);
+        currentY += rowH + Math.round(7 * this.S);
       }
     }
 

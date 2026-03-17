@@ -1,20 +1,16 @@
-const REFERENCE_WIDTH = 800;
-const REFERENCE_HEIGHT = 600;
-export const PANEL_REF_WIDTH = 280; // 35% of 800 reference width
-export const HUD_REF_WIDTH = 340; // gameplay HUD (wider to fit bars + slots)
+const REFERENCE_WIDTH = 1066;
+export const PANEL_REF_WIDTH = 280;
+export const HUD_REF_WIDTH = 430; // gameplay HUD (wider to fit bars + slots)
 
 let cachedWidth = REFERENCE_WIDTH;
-let cachedHeight = REFERENCE_HEIGHT;
+let cachedHeight = 600;
 let cachedScale = 1.0;
 
 /** Call once at scene creation and on every resize event */
 export function updateScreenDimensions(width: number, height: number): void {
   cachedWidth = width;
   cachedHeight = height;
-  cachedScale = Math.max(
-    0.75,
-    Math.min(Math.min(width / REFERENCE_WIDTH, height / REFERENCE_HEIGHT), 3.0)
-  );
+  cachedScale = Math.max(0.75, Math.min(width / REFERENCE_WIDTH, 3.0));
 }
 
 export function getUIScale(): number {

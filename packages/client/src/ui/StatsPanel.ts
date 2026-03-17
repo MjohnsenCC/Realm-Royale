@@ -272,7 +272,7 @@ export class StatsPanel {
     this.headerH = Math.round(22 * S);
     this.scrollBarWidth = Math.round(8 * S);
 
-    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
+    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.28));
 
     // Calculate full content height
     const offensiveRows = 13;

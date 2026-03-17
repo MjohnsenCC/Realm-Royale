@@ -219,7 +219,7 @@ export class VaultUI {
     const margin = Math.round(12 * S);
 
     // Standard panel width (same as stats/crafting panels)
-    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.40));
+    this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.28));
     this.padding = Math.round(BASE_PADDING * S);
     this.header = Math.round(BASE_HEADER * S);
     this.slotGap = Math.round(BASE_SLOT_GAP * S);

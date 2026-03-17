@@ -116,8 +116,8 @@ export const VOID_PORTAL_CHANCE = 0.015; // legacy — no longer used
 export const DUNGEON_DROP_CHANCE = 0.30; // 30% for specific Godlands enemies
 
 // Vault (personal storage instance)
-export const VAULT_COLS = 9;
-export const VAULT_ROWS = 6;
+export const VAULT_COLS = 7;
+export const VAULT_ROWS = 8;
 export const VAULT_SIZE = VAULT_COLS * VAULT_ROWS; // 54
 export const VAULT_CHEST_INTERACT_RADIUS = 60;
 

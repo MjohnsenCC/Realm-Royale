@@ -125,6 +125,24 @@ export class BootScene extends Phaser.Scene {
     }
     // UT sword sprite
     this.load.image("item-ut-sword", "assets/sprites/items/weapons/swords/ut_sword.png");
+
+    // Per-tier armor sprites (8x8 pixel art)
+    const armorTypes: [string, string, string][] = [
+      ["heavy-armor", "heavy-armor", "heavy-armors"],
+      ["light-armor", "light-armor", "light-armors"],
+      ["robe", "robe", "robes"],
+    ];
+    for (const [key, folder, file] of armorTypes) {
+      for (let t = 1; t <= 12; t++) {
+        this.load.image(`item-${key}-t${t}`, `assets/sprites/items/armors/${folder}/${file}_t${t}.png`);
+      }
+    }
+
+    // Per-tier ring sprites (8x8 pixel art)
+    for (let t = 1; t <= 12; t++) {
+      this.load.image(`item-ring-t${t}`, `assets/sprites/items/rings/rings_t${t}.png`);
+    }
+
     this.load.image("item-quiver", "assets/sprites/items/quiver.png");
     this.load.image("item-helm", "assets/sprites/items/helm.png");
     this.load.image("item-relic", "assets/sprites/items/relic.png");

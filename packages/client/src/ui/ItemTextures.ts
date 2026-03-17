@@ -33,6 +33,13 @@ const WEAPON_SUBTYPE_NAMES: Record<number, string> = {
   2: "wand",   // WeaponSubtype.Wand
 };
 
+/** Maps armor subtype index to name for per-tier sprite keys. */
+const ARMOR_SUBTYPE_NAMES: Record<number, string> = {
+  0: "heavy-armor",  // ArmorSubtype.Heavy
+  1: "light-armor",  // ArmorSubtype.Light
+  2: "robe",         // ArmorSubtype.Mantle
+};
+
 /** Maps "category-subtype" to the loaded sprite texture key. */
 const ITEM_SPRITE_MAP: Record<string, string> = {
   "0-0": "item-sword",
@@ -70,8 +77,6 @@ export function getItemSpriteKey(
   tier?: number,
   isUT?: boolean,
 ): string | null {
-  if (category === ItemCategory.Ring) return "item-ring";
-
   // Weapons: per-tier sprites
   if (category === ItemCategory.Weapon) {
     const weaponName = WEAPON_SUBTYPE_NAMES[subtype];
@@ -80,6 +85,19 @@ export function getItemSpriteKey(
       if (tier && tier >= 1 && tier <= 12) return `item-${weaponName}-t${tier}`;
     }
     return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
+  }
+
+  // Armors: per-tier sprites
+  if (category === ItemCategory.Armor) {
+    const armorName = ARMOR_SUBTYPE_NAMES[subtype];
+    if (armorName && tier && tier >= 1 && tier <= 12) return `item-${armorName}-t${tier}`;
+    return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
+  }
+
+  // Rings: per-tier sprites
+  if (category === ItemCategory.Ring) {
+    if (tier && tier >= 1 && tier <= 12) return `item-ring-t${tier}`;
+    return "item-ring";
   }
 
   return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
@@ -94,6 +112,12 @@ function getAllKeys(): string[] {
     for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
     keys.add(`item-ut-${name}`);
   }
+  // Per-tier armor keys
+  for (const name of Object.values(ARMOR_SUBTYPE_NAMES)) {
+    for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
+  }
+  // Per-tier ring keys
+  for (let t = 1; t <= 12; t++) keys.add(`item-ring-t${t}`);
   return Array.from(keys);
 }
 
