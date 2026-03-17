@@ -222,7 +222,7 @@ export class GameScene extends Phaser.Scene {
   private vaultPortalActive: boolean = false;
   private vaultPortalX: number = 0;
   private vaultPortalY: number = 0;
-  private vaultPortalGraphics: Phaser.GameObjects.Graphics | null = null;
+  private vaultPortalSprite: Phaser.GameObjects.Image | null = null;
   private vaultPortalLabel: Phaser.GameObjects.Text | null = null;
   private enteredVaultViaPortalGem: boolean = false;
 
@@ -1039,40 +1039,28 @@ export class GameScene extends Phaser.Scene {
 
   private drawVaultPortalGem(): void {
     this.destroyVaultPortalGem();
-    const g = this.add.graphics().setDepth(1);
     const px = this.vaultPortalX;
     const py = this.vaultPortalY;
-    const r = 20;
 
-    g.lineStyle(3, 0xaa44ff, 0.3);
-    g.strokeCircle(px, py, r + 8);
-    g.lineStyle(2, 0xaa44ff, 0.5);
-    g.strokeCircle(px, py, r + 2);
-    g.lineStyle(2, 0xaa44ff, 0.8);
-    g.strokeCircle(px, py, r);
-    g.fillStyle(0x6622aa, 0.4);
-    g.fillCircle(px, py, r - 2);
-    g.fillStyle(0xaa44ff, 0.2);
-    g.fillCircle(px, py, r / 2);
-
-    this.vaultPortalGraphics = g;
+    const sprite = this.add.image(px, py, "portal-gem").setDepth(-0.3);
+    this.vaultPortalSprite = sprite;
 
     const label = this.add
-      .text(px, py + r + 14, "Vault Portal", {
-        fontSize: "6px",
+      .text(px, py - DUNGEON_PORTAL_RADIUS - 6, "Vault Portal", {
+        fontSize: "9px",
         color: "#aa44ff",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       })
       .setOrigin(0.5)
-      .setAlpha(0.5);
+      .setDepth(-0.2);
     this.vaultPortalLabel = label;
   }
 
   private destroyVaultPortalGem(): void {
-    this.vaultPortalGraphics?.destroy();
-    this.vaultPortalGraphics = null;
+    this.vaultPortalSprite?.destroy();
+    this.vaultPortalSprite = null;
     this.vaultPortalLabel?.destroy();
     this.vaultPortalLabel = null;
   }

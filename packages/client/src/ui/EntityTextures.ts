@@ -69,7 +69,7 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
   }
 
   // Portal sprites
-  for (const key of ["portal-the-wild", "portal-infernal-pit", "portal-void-sanctum", "portal-vault"]) {
+  for (const key of ["portal-the-wild", "portal-infernal-pit", "portal-void-sanctum", "portal-vault", "portal-gem"]) {
     upscaleAndOutline(scene, key);
   }
 

@@ -157,6 +157,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("portal-infernal-pit", "assets/sprites/decorations/portals/infernal_pit_portal.png");
     this.load.image("portal-void-sanctum", "assets/sprites/decorations/portals/void_sanctum_portal.png");
     this.load.image("portal-vault", "assets/sprites/decorations/portals/vault_portal.png");
+    this.load.image("portal-gem", "assets/sprites/decorations/portals/portal-gem_portal.png");
 
     // Loot bag sprites
     this.load.image("bag-green", "assets/sprites/items/bags/green_bag.png");
