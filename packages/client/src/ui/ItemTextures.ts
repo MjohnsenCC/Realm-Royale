@@ -26,6 +26,13 @@ export function getItemOutlinedSize(): number {
   return currentOutlinedSize;
 }
 
+/** Maps weapon subtype index to name for per-tier sprite keys. */
+const WEAPON_SUBTYPE_NAMES: Record<number, string> = {
+  0: "sword",  // WeaponSubtype.Sword
+  1: "bow",    // WeaponSubtype.Bow
+  2: "wand",   // WeaponSubtype.Wand
+};
+
 /** Maps "category-subtype" to the loaded sprite texture key. */
 const ITEM_SPRITE_MAP: Record<string, string> = {
   "0-0": "item-sword",
@@ -53,18 +60,40 @@ const ITEM_SPRITE_MAP: Record<string, string> = {
 };
 
 /**
- * Returns the sprite texture key for a given item category and subtype,
- * or null if no sprite exists for this item.
+ * Returns the sprite texture key for a given item category and subtype.
+ * For weapons, pass tier and isUT to get the per-tier sprite.
+ * Falls back to the generic sprite if no per-tier sprite is loaded.
  */
-export function getItemSpriteKey(category: number, subtype: number): string | null {
+export function getItemSpriteKey(
+  category: number,
+  subtype: number,
+  tier?: number,
+  isUT?: boolean,
+): string | null {
   if (category === ItemCategory.Ring) return "item-ring";
+
+  // Weapons: per-tier sprites
+  if (category === ItemCategory.Weapon) {
+    const weaponName = WEAPON_SUBTYPE_NAMES[subtype];
+    if (weaponName) {
+      if (isUT) return `item-ut-${weaponName}`;
+      if (tier && tier >= 1 && tier <= 12) return `item-${weaponName}-t${tier}`;
+    }
+    return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
+  }
+
   return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
 }
 
-/** All unique item sprite keys. */
+/** All unique item sprite keys (includes per-tier weapon keys). */
 function getAllKeys(): string[] {
   const keys = new Set<string>(Object.values(ITEM_SPRITE_MAP));
   keys.add("item-ring");
+  // Per-tier weapon keys
+  for (const name of Object.values(WEAPON_SUBTYPE_NAMES)) {
+    for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
+    keys.add(`item-ut-${name}`);
+  }
   return Array.from(keys);
 }
 

@@ -4,6 +4,7 @@ import { Enemy } from "./Enemy";
 import { Projectile } from "./Projectile";
 import { LootBag } from "./LootBag";
 import { DungeonPortal } from "./DungeonPortal";
+import { Gravestone } from "./Gravestone";
 
 // IMPORTANT: Keep in sync with ENEMY_SYNC_RADIUS in @rotmg-lite/shared/constants.ts
 const ENEMY_SYNC_RADIUS = 1600;
@@ -85,4 +86,11 @@ export class GameState extends Schema {
   })
   @type({ map: DungeonPortal })
   dungeonPortals = new MapSchema<DungeonPortal>();
+
+  // No @filterChildren on gravestones — filterChildren only controls whether
+  // property CHANGES are forwarded, not onAdd/onRemove on filter transitions.
+  // Since gravestones are static (x/y never change), re-entering a zone would
+  // not trigger onAdd. Gravestones are lightweight so syncing all is fine.
+  @type({ map: Gravestone })
+  gravestones = new MapSchema<Gravestone>();
 }

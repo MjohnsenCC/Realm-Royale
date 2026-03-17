@@ -30,12 +30,18 @@ const UI_SPRITE_KEYS = [
   "ui-btn-hover",
   "ui-btn-pressed",
   "ui-btn-close",
+  "ui-btn-statpanel",
   // Minimap icons
   "ui-icon-player",
   "ui-icon-enemy",
   "ui-icon-portal",
   "ui-icon-chest",
   "ui-icon-bag",
+  // Minimap button icons
+  "ui-icon-zoom-in",
+  "ui-icon-zoom-out",
+  "ui-icon-fullscreen-enter",
+  "ui-icon-fullscreen-exit",
   // Misc
   "ui-minimap-frame",
   "ui-scrollbar-track",

@@ -264,21 +264,21 @@ export interface WeaponTemplate {
 export const WEAPON_TEMPLATES: Record<number, WeaponTemplate> = {
   [WeaponSubtype.Sword]: {
     baseDamage: 95,
-    baseCooldown: 240,
+    baseCooldown: 667,
     baseRange: 180,
     baseProjSpeed: 460,
     baseProjSize: 18,
   },
   [WeaponSubtype.Bow]: {
     baseDamage: 55,
-    baseCooldown: 290,
+    baseCooldown: 370,
     baseRange: 470,
     baseProjSpeed: 560,
     baseProjSize: 6,
   },
   [WeaponSubtype.Wand]: {
     baseDamage: 45,
-    baseCooldown: 340,
+    baseCooldown: 435,
     baseRange: 520,
     baseProjSpeed: 620,
     baseProjSize: 5,
@@ -354,7 +354,7 @@ export const ARMOR_LOCKED_STATS: Record<number, [number, number]> = {
 
 export const STAT_NAMES: Record<number, string> = {
   [StatType.AttackDamage]: "Weapon Damage",
-  [StatType.AttackSpeed]: "Attack Speed",
+  [StatType.AttackSpeed]: "Fire Rate",
   [StatType.Health]: "Health",
   [StatType.HealthRegen]: "Health Regen",
   [StatType.ManaRegen]: "Mana Regen",
@@ -392,7 +392,7 @@ export const STAT_TITLES: Record<number, string> = {
 
 export const STAT_DESCRIPTIONS: Record<number, string> = {
   [StatType.AttackDamage]: "Increases Weapon Damage by {value}",
-  [StatType.AttackSpeed]: "Increases Attack Speed by {value}",
+  [StatType.AttackSpeed]: "Increases Fire Rate by {value}",
   [StatType.Health]: "Increases Health by {value}",
   [StatType.HealthRegen]: "Increases Health Regen by {value}",
   [StatType.ManaRegen]: "Increases Mana Regen by {value}",
@@ -723,13 +723,14 @@ export function getScaledWeaponStats(
   projectileSpeed: number;
   projectileSize: number;
 } {
+  // Fire rate percentage: roll 0 = 90%, roll 50 = 100%, roll 100 = 110%
+  const fireRatePercent = 0.90 + 0.20 * (fireRateRoll / 100);
   if (isUT && utBaseStats) {
-    // UT weapons use their own base stats with UT quality roll
+    // UT weapons use their own base stats with UT quality roll for damage
     const dmgQuality = getLockedQualityMultiplier(0, damageRoll, true);
-    const frQuality = getLockedQualityMultiplier(0, fireRateRoll, true);
     return {
       damage: Math.round(utBaseStats.baseDamage * dmgQuality),
-      shootCooldown: Math.round(utBaseStats.baseCooldown / frQuality),
+      shootCooldown: Math.round(utBaseStats.baseCooldown / fireRatePercent),
       range: utBaseStats.baseRange,
       projectileSpeed: utBaseStats.baseProjSpeed,
       projectileSize: utBaseStats.baseProjSize,
@@ -741,10 +742,9 @@ export function getScaledWeaponStats(
   }
   const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
   const dmgQuality = getLockedQualityMultiplier(itemTier, damageRoll);
-  const frQuality = getLockedQualityMultiplier(itemTier, fireRateRoll);
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
-    shootCooldown: Math.round(template.baseCooldown / mult / frQuality),
+    shootCooldown: Math.round(template.baseCooldown / fireRatePercent),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
     projectileSpeed: Math.round(template.baseProjSpeed * (0.85 + 0.15 * mult)),
     projectileSize: Math.round(template.baseProjSize * (0.85 + 0.15 * mult)),

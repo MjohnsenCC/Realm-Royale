@@ -108,10 +108,23 @@ export class BootScene extends Phaser.Scene {
     this.load.image("deco-torch_small", "assets/sprites/decorations/torch_small.png");
     this.load.image("deco-torch_tall", "assets/sprites/decorations/torch_tall.png");
 
-    // Item sprites (12x12 pixel art) — one sprite per subtype, used for all tiers
+    // Death gravestone sprite
+    this.load.image("deco-gravestone", "assets/sprites/decorations/scenery_gravestone.png");
+
+    // Item sprites (12x12 pixel art) — generic fallbacks
     this.load.image("item-sword", "assets/sprites/items/sword.png");
     this.load.image("item-bow", "assets/sprites/items/bow.png");
     this.load.image("item-wand", "assets/sprites/items/wand.png");
+
+    // Per-tier weapon sprites (8x8 pixel art)
+    const weaponTypes: [string, string][] = [["sword", "swords"], ["bow", "bows"], ["wand", "wands"]];
+    for (const [type, folder] of weaponTypes) {
+      for (let t = 1; t <= 12; t++) {
+        this.load.image(`item-${type}-t${t}`, `assets/sprites/items/weapons/${folder}/${folder}_t${t}.png`);
+      }
+    }
+    // UT sword sprite
+    this.load.image("item-ut-sword", "assets/sprites/items/weapons/swords/ut_sword.png");
     this.load.image("item-quiver", "assets/sprites/items/quiver.png");
     this.load.image("item-helm", "assets/sprites/items/helm.png");
     this.load.image("item-relic", "assets/sprites/items/relic.png");
@@ -175,6 +188,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-btn-hover", "assets/sprites/UI/buttons/ui-btn-hover.png");
     this.load.image("ui-btn-pressed", "assets/sprites/UI/buttons/ui-btn-pressed.png");
     this.load.image("ui-btn-close", "assets/sprites/UI/buttons/ui-btn-close.png");
+    this.load.image("ui-btn-statpanel", "assets/sprites/UI/buttons/ui-btn-statpanel.png");
 
     // UI sprites — minimap icons (3×3)
     this.load.image("ui-icon-player", "assets/sprites/UI/icons/ui-icon-player.png");
@@ -182,6 +196,12 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-icon-portal", "assets/sprites/UI/icons/ui-icon-portal.png");
     this.load.image("ui-icon-chest", "assets/sprites/UI/icons/ui-icon-chest.png");
     this.load.image("ui-icon-bag", "assets/sprites/UI/icons/ui-icon-bag.png");
+
+    // UI sprites — minimap button icons (12×12)
+    this.load.image("ui-icon-zoom-in", "assets/sprites/UI/icons/ui-icon-zoom-in.png");
+    this.load.image("ui-icon-zoom-out", "assets/sprites/UI/icons/ui-icon-zoom-out.png");
+    this.load.image("ui-icon-fullscreen-enter", "assets/sprites/UI/icons/ui-icon-fullscreen-enter.png");
+    this.load.image("ui-icon-fullscreen-exit", "assets/sprites/UI/icons/ui-icon-fullscreen-exit.png");
 
     // UI sprites — misc
     this.load.image("ui-minimap-frame", "assets/sprites/UI/misc/ui-minimap-frame.png");

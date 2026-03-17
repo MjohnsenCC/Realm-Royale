@@ -133,9 +133,9 @@ export class HUD {
   private minimapBiomeCachedZone: string = "";
   private minimapDots: Phaser.GameObjects.Graphics;
   private minimapZoom: number;
-  private minimapZoomInBtn!: Phaser.GameObjects.Text;
-  private minimapZoomOutBtn!: Phaser.GameObjects.Text;
-  private fullscreenBtn!: Phaser.GameObjects.Text;
+  private minimapZoomInBtn!: Phaser.GameObjects.Image;
+  private minimapZoomOutBtn!: Phaser.GameObjects.Image;
+  private fullscreenBtn!: Phaser.GameObjects.Image;
   private exploredTiles: Uint8Array | null = null;
   private exploredDungeonZone: string = "";
 
@@ -146,9 +146,8 @@ export class HUD {
   dragManager: DragManager;
 
   // Stats button
-  private statsButton: Phaser.GameObjects.NineSlice;
+  private statsButton: Phaser.GameObjects.Image;
   private statsButtonZone: Phaser.GameObjects.Zone;
-  private statsButtonText: Phaser.GameObjects.Text;
   private onStatsButtonClick: (() => void) | null = null;
 
   // Section origins (stored for bar drawing)
@@ -286,7 +285,7 @@ export class HUD {
       .setVisible(false);
 
     // --- Player count (inside minimap, bottom-left) ---
-    const mmPad = Math.round(17 * S);
+    const mmPad = Math.round(25 * S);
     const btnPadInit = Math.round(8 * S);
     this.playerCountText = scene.add
       .text(screenW - mmPad - this.mmWidth + btnPadInit, mmPad + this.mmHeight - btnPadInit, `Players: 0/${MAX_PLAYERS}`, {
@@ -302,7 +301,7 @@ export class HUD {
 
     // --- Minimap (top-right) ---
     const MC = UI_MINIMAP_CORNER;
-    const mmPad0 = Math.round(17 * S);
+    const mmPad0 = Math.round(25 * S);
     this.minimapBg = scene.add.nineslice(
       screenW - mmPad0 - this.mmWidth, mmPad0, "ui-minimap-frame", undefined,
       this.mmWidth, this.mmHeight, MC, MC, MC, MC
@@ -314,34 +313,22 @@ export class HUD {
     const savedZoom = parseFloat(localStorage.getItem("minimapZoom") ?? "1");
     this.minimapZoom = isFinite(savedZoom) && savedZoom >= 0.5 ? savedZoom : 1;
 
-    const mmPadInit = Math.round(17 * S);
-    const mmRight = screenW - mmPadInit;
-    const mmTop = mmPadInit;
-    const btnFontSize = `${Math.round(8 * S)}px`;
-
+    const mmPadInit = Math.round(25 * S);
+    const btnIconSize = Math.round(25 * S);
     const btnPad = Math.round(8 * S);
+    const btnGapX = Math.round(4 * S);
 
     this.minimapZoomInBtn = scene.add
-      .text(0, 0, "[+]", {
-        fontSize: btnFontSize,
-        color: "#aaaaaa",
-        fontFamily: "'Press Start 2P', monospace",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
+      .image(0, 0, "ui-icon-zoom-in")
+      .setDisplaySize(btnIconSize, btnIconSize)
       .setOrigin(1, 1)
       .setScrollFactor(0)
       .setDepth(102)
       .setInteractive({ useHandCursor: true });
 
     this.minimapZoomOutBtn = scene.add
-      .text(0, 0, "[-]", {
-        fontSize: btnFontSize,
-        color: "#aaaaaa",
-        fontFamily: "'Press Start 2P', monospace",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
+      .image(0, 0, "ui-icon-zoom-out")
+      .setDisplaySize(btnIconSize, btnIconSize)
       .setOrigin(1, 1)
       .setScrollFactor(0)
       .setDepth(102)
@@ -355,15 +342,15 @@ export class HUD {
       initMmY + this.mmHeight - btnPad
     );
     this.minimapZoomInBtn.setPosition(
-      this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(8 * S),
+      this.minimapZoomOutBtn.x - btnIconSize - btnGapX,
       initMmY + this.mmHeight - btnPad
     );
 
     this.minimapZoomInBtn.on("pointerover", () =>
-      this.minimapZoomInBtn.setColor("#44ffaa")
+      this.minimapZoomInBtn.setTint(0x44ffaa)
     );
     this.minimapZoomInBtn.on("pointerout", () =>
-      this.minimapZoomInBtn.setColor("#aaaaaa")
+      this.minimapZoomInBtn.clearTint()
     );
     this.minimapZoomInBtn.on("pointerdown", () => {
       this.minimapZoom = Math.min(this.minimapZoom * 2, 16);
@@ -372,10 +359,10 @@ export class HUD {
     });
 
     this.minimapZoomOutBtn.on("pointerover", () =>
-      this.minimapZoomOutBtn.setColor("#44ffaa")
+      this.minimapZoomOutBtn.setTint(0x44ffaa)
     );
     this.minimapZoomOutBtn.on("pointerout", () =>
-      this.minimapZoomOutBtn.setColor("#aaaaaa")
+      this.minimapZoomOutBtn.clearTint()
     );
     this.minimapZoomOutBtn.on("pointerdown", () => {
       this.minimapZoom = Math.max(this.minimapZoom / 2, 1);
@@ -385,13 +372,8 @@ export class HUD {
 
     // Fullscreen toggle button (below minimap)
     this.fullscreenBtn = scene.add
-      .text(0, 0, "[ ]", {
-        fontSize: btnFontSize,
-        color: "#aaaaaa",
-        fontFamily: "'Press Start 2P', monospace",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
+      .image(0, 0, "ui-icon-fullscreen-enter")
+      .setDisplaySize(btnIconSize, btnIconSize)
       .setOrigin(1, 0)
       .setScrollFactor(0)
       .setDepth(102)
@@ -399,14 +381,14 @@ export class HUD {
 
     this.fullscreenBtn.setPosition(
       initMmX + this.mmWidth,
-      initMmY + this.mmHeight + Math.round(8 * S)
+      initMmY + this.mmHeight + Math.round(4 * S)
     );
 
     this.fullscreenBtn.on("pointerover", () =>
-      this.fullscreenBtn.setColor("#44ffaa")
+      this.fullscreenBtn.setTint(0x44ffaa)
     );
     this.fullscreenBtn.on("pointerout", () =>
-      this.fullscreenBtn.setColor("#aaaaaa")
+      this.fullscreenBtn.clearTint()
     );
     this.fullscreenBtn.on("pointerdown", () => {
       if (this.scene.scale.isFullscreen) {
@@ -417,10 +399,10 @@ export class HUD {
     });
 
     this.scene.scale.on("enterfullscreen", () => {
-      this.fullscreenBtn.setText("[■]");
+      this.fullscreenBtn.setTexture("ui-icon-fullscreen-exit");
     });
     this.scene.scale.on("leavefullscreen", () => {
-      this.fullscreenBtn.setText("[ ]");
+      this.fullscreenBtn.setTexture("ui-icon-fullscreen-enter");
     });
 
     // Regenerate item textures at the actual HUD slot size so they display
@@ -470,23 +452,11 @@ export class HUD {
     const statsBtnW = this.statsBtnSize;
     const statsBtnX = this.eqX + Math.round((this.eqW - this.statsBtnSize) / 2);
 
-    const SBC = UI_BTN_CORNER;
-    this.statsButton = scene.add.nineslice(
-      statsBtnX, statsBtnY, "ui-btn-default", undefined,
-      statsBtnW, statsBtnH, SBC, SBC, SBC, SBC
-    ).setOrigin(0, 0).setScrollFactor(0).setDepth(101);
-
-    this.statsButtonText = scene.add
-      .text(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "P", {
-        fontSize: `${Math.max(8, Math.round(this.statsBtnSize * 0.4))}px`,
-        color: "#aaaaaa",
-        fontFamily: "'Press Start 2P', monospace",
-        stroke: "#000000",
-        strokeThickness: 2,
-      })
-      .setOrigin(0.5, 0.5)
+    this.statsButton = scene.add
+      .image(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "ui-btn-statpanel")
+      .setDisplaySize(statsBtnW, statsBtnH)
       .setScrollFactor(0)
-      .setDepth(102);
+      .setDepth(101);
 
     this.statsButtonZone = scene.add
       .zone(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, statsBtnW, statsBtnH)
@@ -495,10 +465,10 @@ export class HUD {
       .setInteractive({ useHandCursor: true });
 
     this.statsButtonZone.on("pointerover", () => {
-      this.statsButtonText.setColor("#44ffaa");
+      this.statsButton.setTint(0x44ffaa);
     });
     this.statsButtonZone.on("pointerout", () => {
-      this.statsButtonText.setColor("#aaaaaa");
+      this.statsButton.clearTint();
     });
     this.statsButtonZone.on("pointerdown", () => {
       if (this.onStatsButtonClick) this.onStatsButtonClick();
@@ -579,18 +549,16 @@ export class HUD {
     const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnSize = this.statsBtnSize;
     const statsBtnX = this.eqX + Math.round((this.eqW - statsBtnSize) / 2);
-    this.statsButton.setPosition(statsBtnX, statsBtnY);
-    this.statsButton.setSize(statsBtnSize, statsBtnSize);
-    this.statsButtonText.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
-    this.statsButtonText.setFontSize(`${Math.max(8, Math.round(statsBtnSize * 0.4))}px`);
+    this.statsButton.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.statsButton.setDisplaySize(statsBtnSize, statsBtnSize);
     this.statsButtonZone.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
     this.statsButtonZone.setSize(statsBtnSize, statsBtnSize);
 
-    // Update minimap zoom button font sizes
-    const btnFontSize = `${Math.round(8 * S)}px`;
-    this.minimapZoomInBtn.setFontSize(btnFontSize);
-    this.minimapZoomOutBtn.setFontSize(btnFontSize);
-    this.fullscreenBtn.setFontSize(btnFontSize);
+    // Update minimap button icon sizes
+    const btnIconSize = Math.round(25 * S);
+    this.minimapZoomInBtn.setDisplaySize(btnIconSize, btnIconSize);
+    this.minimapZoomOutBtn.setDisplaySize(btnIconSize, btnIconSize);
+    this.fullscreenBtn.setDisplaySize(btnIconSize, btnIconSize);
 
     // FPS / Ping repositioning
     const perfFontSize = `${Math.round(6 * S)}px`;
@@ -1100,12 +1068,14 @@ export class HUD {
     // Reposition zoom buttons only when minimap position changes
     if (mmMoved) {
       const btnPad = Math.round(3 * this.S);
+      const btnGapX = Math.round(4 * this.S);
+      const btnIconSize = this.minimapZoomOutBtn.displayWidth;
       this.minimapZoomOutBtn.setPosition(
         mmX + this.mmWidth - btnPad,
         mmY + this.mmHeight - btnPad
       );
       this.minimapZoomInBtn.setPosition(
-        this.minimapZoomOutBtn.x - this.minimapZoomOutBtn.width - Math.round(2 * this.S),
+        this.minimapZoomOutBtn.x - btnIconSize - btnGapX,
         mmY + this.mmHeight - btnPad
       );
       this.fullscreenBtn.setPosition(
@@ -1393,14 +1363,14 @@ export class HUD {
       .setDepth(201);
 
     this.deathButton = this.scene.add
-      .text(width / 2, height / 2 + Math.round(30 * S), "[ Respawn ]", {
+      .text(width / 2, height / 2 + Math.round(25 * S), "[ Respawn ]", {
         fontSize: `${Math.round(12 * S)}px`,
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 2,
         backgroundColor: "#333333",
-        padding: { x: Math.round(17 * S), y: Math.round(8 * S) },
+        padding: { x: Math.round(25 * S), y: Math.round(8 * S) },
       })
       .setOrigin(0.5)
       .setScrollFactor(0)

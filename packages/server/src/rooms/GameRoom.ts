@@ -10,6 +10,7 @@ import { CombatSystem } from "../systems/CombatSystem";
 import { ShootingPatternSystem } from "../systems/ShootingPatternSystem";
 import { DungeonSystem } from "../systems/DungeonSystem";
 import { DungeonPortal } from "../schemas/DungeonPortal";
+import { Gravestone } from "../schemas/Gravestone";
 import { ItemInstance, schemaToItemData, itemDataToSchema, updateSchemaFromData, createEmptyItemSchema } from "../schemas/ItemInstance";
 import { generateId } from "../utils/idGenerator";
 import {
@@ -1823,6 +1824,21 @@ export class GameRoom extends Room<GameState> {
         );
         if (player && client) {
           client.send(ServerMessage.PlayerDied, {});
+
+          // Spawn a gravestone at the death location (cap at 200 to bound memory)
+          if (this.state.gravestones.size >= 200) {
+            let oldestId: string | null = null;
+            this.state.gravestones.forEach((_g, id) => {
+              if (!oldestId) oldestId = id;
+            });
+            if (oldestId) this.state.gravestones.delete(oldestId);
+          }
+          const grave = new Gravestone();
+          grave.id = generateId("grave");
+          grave.x = player.x;
+          grave.y = player.y;
+          grave.zone = player.zone;
+          this.state.gravestones.set(grave.id, grave);
         }
       } else if (event.type === "enemyKilled") {
         const zone = event.enemyZone ?? "hostile:1";

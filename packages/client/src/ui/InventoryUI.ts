@@ -50,7 +50,7 @@ export class InventoryUI {
 
   // Equipment
   private eqSlotGraphics: Phaser.GameObjects.Graphics;
-  private abilityCooldownGraphics: Phaser.GameObjects.Graphics;
+  private abilityCooldownImage: Phaser.GameObjects.Image;
   private eqItemTexts: Phaser.GameObjects.Text[] = [];
   private eqSlotZones: Phaser.GameObjects.Zone[] = [];
   private eqTierTexts: Phaser.GameObjects.Text[] = [];
@@ -112,7 +112,14 @@ export class InventoryUI {
 
     // --- Equipment slot graphics ---
     this.eqSlotGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101);
-    this.abilityCooldownGraphics = scene.add.graphics().setScrollFactor(0).setDepth(101.6);
+    const abilitySx = this.eqX + 1 * (this.slotSize + this.slotGap);
+    this.abilityCooldownImage = scene.add.image(abilitySx + this.slotSize / 2, this.eqY + this.slotSize / 2, "ui-slot-filled")
+      .setDisplaySize(this.slotSize, this.slotSize)
+      .setTint(0x000000)
+      .setAlpha(0.55)
+      .setScrollFactor(0)
+      .setDepth(101.6)
+      .setVisible(false);
 
     for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
       const sx = this.eqX + i * (this.slotSize + this.slotGap);
@@ -406,7 +413,7 @@ export class InventoryUI {
       if (hasItem) {
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
-        const spriteKey = getItemSpriteKey(category, subtype);
+        const spriteKey = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
         if (spriteKey) {
           const nativeSize = getItemOutlinedSize();
           this.itemImages[i]
@@ -475,7 +482,7 @@ export class InventoryUI {
       if (hasItem) {
         const category = getItemCategory(item.baseItemId);
         const subtype = getItemSubtype(item.baseItemId);
-        const spriteKey = getItemSpriteKey(category, subtype);
+        const spriteKey = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
         if (spriteKey) {
           this.eqItemImages[i]
             .setTexture(spriteKey)
@@ -570,19 +577,25 @@ export class InventoryUI {
    * @param progress 0 = just cast (full dark), 1 = ready (no overlay), negative = no overlay needed.
    */
   updateAbilityCooldown(progress: number): void {
-    this.abilityCooldownGraphics.clear();
-    if (progress < 0 || progress >= 1) return;
+    if (progress < 0 || progress >= 1) {
+      this.abilityCooldownImage.setVisible(false);
+      return;
+    }
 
     const ABILITY_SLOT = 1;
     const img = this.eqSlotBgImages[ABILITY_SLOT];
-    const topLeft = img.getTopLeft();
-    const w = img.displayWidth;
-    const h = img.displayHeight;
-    const darkHeight = Math.min(Math.floor(h * (1 - progress)), h);
-    if (darkHeight <= 0) return;
+    const texH = 40; // upscaled texture height (8 × PIXEL_SCALE)
+    const cropH = Math.min(Math.floor(texH * (1 - progress)), texH);
+    if (cropH <= 0) {
+      this.abilityCooldownImage.setVisible(false);
+      return;
+    }
 
-    this.abilityCooldownGraphics.fillStyle(0x000000, 0.55);
-    this.abilityCooldownGraphics.fillRect(topLeft.x, topLeft.y, w, darkHeight);
+    this.abilityCooldownImage
+      .setPosition(img.x, img.y)
+      .setDisplaySize(img.displayWidth, img.displayHeight)
+      .setCrop(0, 0, texH, cropH)
+      .setVisible(true);
   }
 
   // --- Drag-and-drop support ---
@@ -688,7 +701,7 @@ export class InventoryUI {
 
     this.drawSlots();
     this.drawEquipmentSlots();
-    this.abilityCooldownGraphics.clear();
+    this.abilityCooldownImage.setVisible(false);
     this.tooltip.relayout();
   }
 

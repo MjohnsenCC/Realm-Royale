@@ -12,7 +12,7 @@ import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
 import { OptionsUI } from "../ui/OptionsUI";
-import { generateEntityTextures, addOutlineToImageData } from "../ui/EntityTextures";
+import { generateEntityTextures, addOutlineToImageData, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
 import {
@@ -115,6 +115,7 @@ interface DecodedState {
   projectiles: MapSchemaInstance;
   lootBags: MapSchemaInstance;
   dungeonPortals: MapSchemaInstance;
+  gravestones: MapSchemaInstance;
 }
 
 /**
@@ -157,6 +158,7 @@ export class GameScene extends Phaser.Scene {
   private enemySnapshotCache = new Map<string, SnapshotBuffer>();
   private projectileSprites = new Map<string, ProjectileSprite>();
   private bagSprites = new Map<string, LootBagSprite>();
+  private gravestoneSprites = new Map<string, Phaser.GameObjects.Image>();
 
   private keys!: {
     W: Phaser.Input.Keyboard.Key;
@@ -302,6 +304,7 @@ export class GameScene extends Phaser.Scene {
     serverProjectileId?: string;
     collisionRadius: number;
     damage: number;
+    isCrit: boolean;
     piercing: boolean;
     hitEnemies: Set<string>;
   }> = [];
@@ -512,6 +515,11 @@ export class GameScene extends Phaser.Scene {
       // Clear stale bag sprites from previous zone
       this.bagSprites.forEach((sprite) => sprite.destroy());
       this.bagSprites.clear();
+      // Update gravestone visibility for new zone
+      this.gravestoneSprites.forEach((sprite, id) => {
+        const grave = this.decodedState.gravestones.get(id);
+        sprite.setVisible(grave ? (grave.zone as string) === data.zone : false);
+      });
       this.nearVaultChest = false;
       // Reset portal gem vault state when returning to nexus (e.g. Q key while portal active)
       if (data.zone === "nexus") {
@@ -612,6 +620,9 @@ export class GameScene extends Phaser.Scene {
     // Listen for dungeon portal state changes
     this.setupDungeonPortalListeners(state);
 
+    // Listen for gravestone state changes
+    this.setupGravestoneListeners(state);
+
     // Set room on inventory/loot bag/vault UIs so they can send messages
     this.hud.inventoryUI.setRoom(room);
     this.hud.lootBagUI.setRoom(room);
@@ -642,9 +653,11 @@ export class GameScene extends Phaser.Scene {
     room.onMessage(ServerMessage.VaultOpened, (data: { items: ItemInstanceData[] }) => {
       this.closeLeftPanels("vault");
       this.hud.vaultUI.show(data.items);
+      if (this.statsPanel.isVisible()) this.statsPanel.setSide("right");
     });
     room.onMessage(ServerMessage.VaultClosed, () => {
       this.hud.vaultUI.hide();
+      if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
     });
     room.onMessage(ServerMessage.VaultUpdated, (data: { items: ItemInstanceData[] }) => {
       this.hud.vaultUI.updateItems(data.items);
@@ -676,17 +689,10 @@ export class GameScene extends Phaser.Scene {
       this.destroyVaultPortalGem();
     });
 
-    // Listen for death notification — show death screen, hide player, wait for respawn
+    // Listen for death notification — show death screen, wait for respawn
+    // (sprite hiding & gravestone spawning handled by the alive listener in setupStateListeners)
     room.onMessage(ServerMessage.PlayerDied, () => {
       this.isDead = true;
-
-      // Hide local player sprite
-      const localSprite = this.playerSprites.get(this.network.getSessionId());
-      if (localSprite) {
-        localSprite.setVisible(false);
-      }
-
-      // Show death overlay with respawn button
       this.hud.showDeathScreen(() => {
         this.network.sendRespawn();
       });
@@ -1920,6 +1926,16 @@ export class GameScene extends Phaser.Scene {
           }
         }
       });
+
+      // Listen for alive changes — hide sprite on death, show on respawn
+      player.listen("alive", (isAlive: unknown) => {
+        const s = this.playerSprites.get(sessionId);
+        if (!isAlive) {
+          if (s) s.setVisible(false);
+        } else {
+          if (s) s.setVisible((player.zone as string) === this.localZone);
+        }
+      });
     });
 
     state.players.onRemove((_player, sessionId) => {
@@ -2034,6 +2050,7 @@ export class GameScene extends Phaser.Scene {
           serverProjectileId: id,
           collisionRadius: 0, // server handles hit detection
           damage: 0,
+          isCrit: false,
           piercing: false,
           hitEnemies: new Set(),
         });
@@ -2380,6 +2397,13 @@ export class GameScene extends Phaser.Scene {
                 const startAngle = aimAngle - spreadAngle / 2;
                 angle = startAngle + (spreadAngle / (projectileCount - 1)) * p;
               }
+              // Client-side crit prediction (same formula as server)
+              let predictedDmg = stats.damage;
+              let isCrit = false;
+              if (stats.critChance > 0 && Math.random() * 100 < stats.critChance) {
+                predictedDmg = Math.round(predictedDmg * (2 + stats.critMultiplier / 100));
+                isCrit = true;
+              }
               const projSprite = new ProjectileSprite(
                 this,
                 localSprite.displayX,
@@ -2400,7 +2424,8 @@ export class GameScene extends Phaser.Scene {
                 createdAt: now,
                 confirmed: false,
                 collisionRadius: stats.weaponProjSize,
-                damage: stats.damage,
+                damage: predictedDmg,
+                isCrit,
                 piercing: weaponPiercing,
                 hitEnemies: new Set(),
               });
@@ -2460,6 +2485,7 @@ export class GameScene extends Phaser.Scene {
                   confirmed: false,
                   collisionRadius: as.projectileSize,
                   damage: as.damage,
+                  isCrit: false,
                   piercing: as.piercing,
                   hitEnemies: new Set(),
                 });
@@ -2609,7 +2635,7 @@ export class GameScene extends Phaser.Scene {
         if (pp.hitEnemies.has(enemyId)) return;
         const enemyRadius = enemy.getRadius();
         if (circlesOverlap(pp.sprite.x, pp.sprite.y, pp.collisionRadius, enemy.x, enemy.y, enemyRadius + HITBOX_PADDING)) {
-          enemy.showPredictedDamage(pp.damage);
+          enemy.showPredictedDamage(pp.damage, pp.isCrit);
           pp.hitEnemies.add(enemyId);
           if (!pp.piercing) {
             hitSomething = true;
@@ -2787,6 +2813,14 @@ export class GameScene extends Phaser.Scene {
         }
       }
 
+      // Close vault UI if player walks away from chest
+      if (this.hud.vaultUI.isVisible()) {
+        if (!this.nearVaultChest) {
+          this.hud.vaultUI.hide();
+          if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+        }
+      }
+
       // Update loot bag if open (schema auto-syncs, so re-read items each frame)
       if (this.hud.lootBagUI.isVisible()) {
         const bagId = this.hud.lootBagUI.getBagId();
@@ -2804,6 +2838,8 @@ export class GameScene extends Phaser.Scene {
   private cleanup(): void {
     this.playerSprites.forEach((s) => s.destroy());
     this.playerSprites.clear();
+    this.gravestoneSprites.forEach((g) => g.destroy());
+    this.gravestoneSprites.clear();
     this.enemySprites.forEach((s) => s.destroy());
     this.enemySprites.clear();
     this.enemySnapshotCache.clear();
@@ -2884,6 +2920,29 @@ export class GameScene extends Phaser.Scene {
         ps.sprite.destroy();
         ps.label.destroy();
         this.dungeonPortalSprites.delete(id);
+      }
+    });
+  }
+
+  // --- Gravestone Methods ---
+
+  private setupGravestoneListeners(state: DecodedState): void {
+    state.gravestones.onAdd((grave, id) => {
+      const gx = grave.x as number;
+      const gy = grave.y as number;
+      const graveZone = grave.zone as string;
+      const sprite = this.add.image(gx, gy, "deco-gravestone");
+      sprite.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+      sprite.setDepth(-0.3);
+      sprite.setVisible(graveZone === this.localZone);
+      this.gravestoneSprites.set(id, sprite);
+    });
+
+    state.gravestones.onRemove((_grave, id) => {
+      const sprite = this.gravestoneSprites.get(id);
+      if (sprite) {
+        sprite.destroy();
+        this.gravestoneSprites.delete(id);
       }
     });
   }
@@ -3201,7 +3260,10 @@ export class GameScene extends Phaser.Scene {
   }
 
   private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {
-    if (except !== "vault" && this.hud.vaultUI.isVisible()) this.hud.vaultUI.hide();
+    if (except !== "vault" && this.hud.vaultUI.isVisible()) {
+      this.hud.vaultUI.hide();
+      if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+    }
     if (except !== "crafting" && this.craftingUI.isVisible()) {
       this.craftingUI.hide();
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
@@ -3212,7 +3274,7 @@ export class GameScene extends Phaser.Scene {
     if (this.statsPanel.isVisible()) {
       this.statsPanel.hide();
     } else {
-      if (this.craftingUI.isVisible()) {
+      if (this.craftingUI.isVisible() || this.hud.vaultUI.isVisible()) {
         this.statsPanel.setSide("right");
       } else {
         this.closeLeftPanels("stats");

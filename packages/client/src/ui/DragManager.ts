@@ -438,7 +438,7 @@ export class DragManager {
 
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
-    const spriteKey = getItemSpriteKey(category, subtype);
+    const spriteKey = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
 
     if (spriteKey) {
       const nativeSize = getItemOutlinedSize();

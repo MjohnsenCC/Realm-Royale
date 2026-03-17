@@ -83,6 +83,9 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
     upscaleAndOutline(scene, key);
   }
 
+  // Death gravestone sprite
+  upscaleAndOutline(scene, "deco-gravestone");
+
   // Loot bag sprites
   for (const key of ["bag-green", "bag-red", "bag-black", "bag-orange"]) {
     upscaleAndOutline(scene, key);

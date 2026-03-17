@@ -187,6 +187,12 @@ export class CombatSystem {
                   player.cachedWeaponRange = stats.weaponRange;
                   player.cachedWeaponProjSpeed = stats.weaponProjSpeed;
                   player.cachedWeaponProjSize = stats.weaponProjSize;
+                  player.cachedPhysDmgReduce = stats.physDmgReduce;
+                  player.cachedMagicDmgReduce = stats.magicDmgReduce;
+                  player.cachedAbilityDamageBonus = stats.abilityDamageBonus;
+                  player.cachedAbilityCooldownReduction = stats.abilityCooldownReduction;
+                  player.cachedCritChance = stats.critChance;
+                  player.cachedCritMult = stats.critMultiplier;
                   player.hp = Math.min(player.hp + (stats.maxHp - oldMaxHp), player.maxHp);
                 }
               }

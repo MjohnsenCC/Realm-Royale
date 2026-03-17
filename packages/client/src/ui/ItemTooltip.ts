@@ -308,7 +308,7 @@ export class ItemTooltip {
     this.clearAll();
 
     // Banner: sprite, name, tier badge
-    const spriteKey = getItemSpriteKey(category, subtype);
+    const spriteKey = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
     if (spriteKey && this.scene.textures.exists(spriteKey)) {
       setSpriteTexture1to1(this.itemSprite, spriteKey);
       this.itemSprite.setVisible(true);
@@ -380,15 +380,26 @@ export class ItemTooltip {
 
     if (category === ItemCategory.Weapon) {
       const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll, item.isUT, utWeaponBase);
+      // Sum open stat bonuses from this weapon's own open stats
+      let openDmgBonus = 0;
+      let openFireRateBonus = 0;
+      for (let i = 0; i < item.openStats.length; i += 3) {
+        const sType = item.openStats[i];
+        const sTier = item.openStats[i + 1];
+        const sRoll = item.openStats[i + 2];
+        if (sType === StatType.AttackDamage) openDmgBonus += getStatValue(sType, sTier, sRoll);
+        if (sType === StatType.AttackSpeed) openFireRateBonus += getStatValue(sType, sTier, sRoll);
+      }
+      const baseFireRate = Math.round(90 + 20 * (item.lockedStat2Roll / 100));
+      const fireRatePercent = baseFireRate + openFireRateBonus;
+      const dmg = ws.damage + openDmgBonus;
       if (shiftHeld) {
         const range = getScaledWeaponStatsRange(subtype, item.instanceTier, item.isUT, utWeaponBase);
-        lockedLines.push(`Damage: ${ws.damage}(${range.damageMin}-${range.damageMax})`);
-        const frMin = (1000 / range.shootCooldownMax).toFixed(1);
-        const frMax = (1000 / range.shootCooldownMin).toFixed(1);
-        lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`);
+        lockedLines.push(`Damage: ${dmg}(${range.damageMin + openDmgBonus}-${range.damageMax + openDmgBonus})`);
+        lockedLines.push(`Fire Rate: ${fireRatePercent}%(${90 + openFireRateBonus}%-${110 + openFireRateBonus}%)`);
       } else {
-        lockedLines.push(`Damage: ${ws.damage}`);
-        lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}/s`);
+        lockedLines.push(`Damage: ${dmg}`);
+        lockedLines.push(`Fire Rate: ${fireRatePercent}%`);
       }
     } else if (category === ItemCategory.Ability) {
       const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll, item.isUT, utAbilityBase);

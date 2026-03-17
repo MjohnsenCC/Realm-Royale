@@ -634,6 +634,12 @@ export class DungeonSystem {
         if (portal.zone === zone) portalsToRemove.push(id);
       });
       for (const id of portalsToRemove) state.dungeonPortals.delete(id);
+
+      const gravesToRemove: string[] = [];
+      state.gravestones.forEach((grave, id) => {
+        if (grave.zone === zone) gravesToRemove.push(id);
+      });
+      for (const id of gravesToRemove) state.gravestones.delete(id);
     }
   }
 }

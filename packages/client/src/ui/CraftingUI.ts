@@ -821,7 +821,7 @@ export class CraftingUI {
     // Item icon
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
-    const spriteKey = getItemSpriteKey(category, subtype);
+    const spriteKey = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
     if (spriteKey && this.itemImage) {
       const nativeSize = getItemOutlinedSize();
       this.itemImage
@@ -882,10 +882,21 @@ export class CraftingUI {
     if (category === ItemCategory.Weapon) {
       const ws = getScaledWeaponStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll);
       const wRange = getScaledWeaponStatsRange(subtype, item.instanceTier);
-      lockedLines.push(`Damage: ${ws.damage}(${wRange.damageMin}-${wRange.damageMax})`);
-      const frMin = (1000 / wRange.shootCooldownMax).toFixed(1);
-      const frMax = (1000 / wRange.shootCooldownMin).toFixed(1);
-      lockedLines.push(`Fire Rate: ${(1000 / ws.shootCooldown).toFixed(1)}(${frMin}-${frMax})/s`);
+      // Sum open stat bonuses from this weapon's own open stats
+      let openDmgBonus = 0;
+      let openFireRateBonus = 0;
+      for (let i = 0; i < item.openStats.length; i += 3) {
+        const sType = item.openStats[i];
+        const sTier = item.openStats[i + 1];
+        const sRoll = item.openStats[i + 2];
+        if (sType === StatType.AttackDamage) openDmgBonus += getStatValue(sType, sTier, sRoll);
+        if (sType === StatType.AttackSpeed) openFireRateBonus += getStatValue(sType, sTier, sRoll);
+      }
+      const baseFireRate = Math.round(90 + 20 * (item.lockedStat2Roll / 100));
+      const fireRatePercent = baseFireRate + openFireRateBonus;
+      const dmg = ws.damage + openDmgBonus;
+      lockedLines.push(`Damage: ${dmg}(${wRange.damageMin + openDmgBonus}-${wRange.damageMax + openDmgBonus})`);
+      lockedLines.push(`Fire Rate: ${fireRatePercent}%(${90 + openFireRateBonus}%-${110 + openFireRateBonus}%)`);
     } else if (category === ItemCategory.Ability) {
       const as = getScaledAbilityStats(subtype, item.instanceTier, item.lockedStat1Roll, item.lockedStat2Roll);
       const aRange = getScaledAbilityStatsRange(subtype, item.instanceTier);

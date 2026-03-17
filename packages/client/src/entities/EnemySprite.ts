@@ -6,6 +6,7 @@ import { getEnemySpriteKey, getEnemyDisplaySize } from "../ui/EntityTextures";
 interface DamageText {
   text: Phaser.GameObjects.Text;
   elapsed: number;
+  startX: number;
   startY: number;
 }
 
@@ -97,19 +98,20 @@ export class EnemySprite {
     return this.radius;
   }
 
-  showPredictedDamage(damage: number): void {
-    const startY = -this.radius - 10;
-    const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(damage)}`, {
+  showPredictedDamage(damage: number, isCrit: boolean = false): void {
+    const startX = (Math.random() - 0.5) * 20;
+    const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
+    const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(damage)}`, {
       fontFamily: "'Press Start 2P', monospace",
-      fontSize: "12px",
+      fontSize: isCrit ? "16px" : "12px",
       fontStyle: "bold",
-      color: "#ff0000",
+      color: isCrit ? "#ffff00" : "#ff0000",
       stroke: "#000000",
-      strokeThickness: 1,
+      strokeThickness: isCrit ? 2 : 1,
     });
     text.setOrigin(0.5, 1);
     text.setDepth(1000);
-    this.damageTexts.push({ text, elapsed: 0, startY });
+    this.damageTexts.push({ text, elapsed: 0, startX, startY });
     this.pendingPredictedDamage += damage;
     this.pendingPredictedDamageAge = 0;
   }
@@ -126,8 +128,9 @@ export class EnemySprite {
         this.pendingPredictedDamageAge = 0;
 
         if (remainder > 1) {
-          const startY = -this.radius - 10;
-          const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(remainder)}`, {
+          const startX = (Math.random() - 0.5) * 20;
+          const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
+          const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(remainder)}`, {
             fontFamily: "'Press Start 2P', monospace",
             fontSize: "12px",
             fontStyle: "bold",
@@ -137,12 +140,13 @@ export class EnemySprite {
           });
           text.setOrigin(0.5, 1);
           text.setDepth(1000);
-          this.damageTexts.push({ text, elapsed: 0, startY });
+          this.damageTexts.push({ text, elapsed: 0, startX, startY });
         }
       } else {
         // No prediction pending — show normally
-        const startY = -this.radius - 10;
-        const text = this.scene.add.text(this.x, this.y + startY, `-${Math.round(serverDamage)}`, {
+        const startX = (Math.random() - 0.5) * 20;
+        const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
+        const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(serverDamage)}`, {
           fontFamily: "'Press Start 2P', monospace",
           fontSize: "12px",
           fontStyle: "bold",
@@ -152,7 +156,7 @@ export class EnemySprite {
         });
         text.setOrigin(0.5, 1);
         text.setDepth(1000);
-        this.damageTexts.push({ text, elapsed: 0, startY });
+        this.damageTexts.push({ text, elapsed: 0, startX, startY });
       }
     }
     this.lastHp = hp;
@@ -178,7 +182,7 @@ export class EnemySprite {
       dt.elapsed += delta;
       const progress = Math.min(dt.elapsed / DAMAGE_TEXT_DURATION, 1);
       dt.text.setPosition(
-        this.x,
+        this.x + dt.startX,
         this.y + dt.startY - DAMAGE_TEXT_FLOAT * progress
       );
       dt.text.setAlpha(1 - progress);
