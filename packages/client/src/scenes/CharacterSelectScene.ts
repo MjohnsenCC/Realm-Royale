@@ -219,9 +219,17 @@ export class CharacterSelectScene extends Phaser.Scene {
   }
 
   private async loadCharacters() {
-    this.statusText.setText("Loading characters...");
+    this.statusText.setText("Loading...");
     try {
       const auth = AuthManager.getInstance();
+
+      // Check if account name is set; redirect to setup if not
+      const accountName = await auth.fetchAccountName();
+      if (!accountName) {
+        this.scene.start("AccountSetupScene");
+        return;
+      }
+
       this.characters = await auth.fetchCharacters();
       this.statusText.setText("");
       this.renderCurrentCard();

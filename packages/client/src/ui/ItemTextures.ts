@@ -61,6 +61,14 @@ const CONSUMABLE_KEYS = [
 ];
 for (let i = 0; i < CONSUMABLE_KEYS.length; i++) ITEM_SHEET_POSITIONS[CONSUMABLE_KEYS[i]] = [i, 10];
 
+// Generic fallback keys → t1 sprite (used when no tier is specified)
+ITEM_SHEET_POSITIONS["item-sword"] = [0, 0];
+ITEM_SHEET_POSITIONS["item-bow"] = [0, 1];
+ITEM_SHEET_POSITIONS["item-wand"] = [0, 2];
+ITEM_SHEET_POSITIONS["item-heavy-armor"] = [0, 3];
+ITEM_SHEET_POSITIONS["item-light-armor"] = [0, 4];
+ITEM_SHEET_POSITIONS["item-robe"] = [0, 5];
+
 /**
  * Ratio of item sprite display size to slot size.
  * 0.85 = 85% fill, leaving ~7.5% padding on each side.
@@ -110,7 +118,7 @@ const ITEM_SPRITE_MAP: Record<string, string> = {
   "1-2": "item-relic",
   "2-0": "item-heavy-armor",
   "2-1": "item-light-armor",
-  "2-2": "item-mantle",
+  "2-2": "item-robe",
   // Consumables
   "4-2": "item-portal-gem",
   // Crafting orbs
@@ -215,7 +223,9 @@ function getAllKeys(): string[] {
 export function generateItemTextures(scene: Phaser.Scene, slotSize?: number): void {
   const S = getUIScale();
   const effectiveSlot = slotSize ?? Math.max(16, Math.round(36 * S));
-  currentOutlinedSize = Math.max(8, Math.round(effectiveSlot * ITEM_FILL_RATIO));
+  const newSize = Math.max(8, Math.round(effectiveSlot * ITEM_FILL_RATIO));
+  if (newSize === currentOutlinedSize && originalSources.size > 0) return;
+  currentOutlinedSize = newSize;
 
   for (const key of getAllKeys()) {
     upscaleAndOutlineItem(scene, key);
@@ -268,7 +278,7 @@ function upscaleAndOutlineItem(scene: Phaser.Scene, key: string): void {
   const canvas = document.createElement("canvas");
   canvas.width = size;
   canvas.height = size;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
 
   // Nearest-neighbor upscale: draw source at offset (1,1) filling the art area
   ctx.imageSmoothingEnabled = false;

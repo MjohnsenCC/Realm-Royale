@@ -96,4 +96,24 @@ export class AuthManager {
     });
     if (!res.ok) throw new Error("Failed to delete character");
   }
+
+  async fetchAccountName(): Promise<string | null> {
+    const res = await this.authFetch("/api/account/name");
+    if (!res.ok) throw new Error("Failed to fetch account name");
+    const data = await res.json();
+    return data.accountName;
+  }
+
+  async setAccountName(name: string): Promise<string> {
+    const res = await this.authFetch("/api/account/name", {
+      method: "PUT",
+      body: JSON.stringify({ name }),
+    });
+    if (!res.ok) {
+      const data = await res.json();
+      throw new Error(data.error || "Failed to set account name");
+    }
+    const data = await res.json();
+    return data.accountName;
+  }
 }

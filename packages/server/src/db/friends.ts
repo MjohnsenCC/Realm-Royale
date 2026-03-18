@@ -1,38 +1,45 @@
 import { getSupabase } from "./supabase";
 
+export interface FriendRecord {
+  accountId: string;
+  accountName: string;
+}
+
 /**
- * Get the friend list (character names) for an account.
+ * Get the friend list (account IDs + names) for an account.
  */
-export async function getAccountFriends(accountId: string): Promise<string[]> {
+export async function getAccountFriends(accountId: string): Promise<FriendRecord[]> {
   const supabase = getSupabase();
 
   const { data, error } = await supabase
     .from("friends")
-    .select("friend_name")
+    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name)")
     .eq("account_id", accountId);
 
   if (error || !data) {
     return [];
   }
 
-  return data.map((row: { friend_name: string }) => row.friend_name);
+  return data.map((row: any) => ({
+    accountId: row.friend_account_id as string,
+    accountName: (row.accounts?.account_name as string) ?? "",
+  }));
 }
 
 /**
- * Add a friend by character name.
+ * Add a friend by account ID.
  */
 export async function addAccountFriend(
   accountId: string,
-  friendName: string,
+  friendAccountId: string,
 ): Promise<void> {
   const supabase = getSupabase();
 
-  // Upsert to avoid duplicates
   const { error } = await supabase
     .from("friends")
     .upsert(
-      { account_id: accountId, friend_name: friendName },
-      { onConflict: "account_id,friend_name" },
+      { account_id: accountId, friend_account_id: friendAccountId },
+      { onConflict: "account_id,friend_account_id" },
     );
 
   if (error) {
@@ -41,11 +48,11 @@ export async function addAccountFriend(
 }
 
 /**
- * Remove a friend by character name.
+ * Remove a friend by account ID.
  */
 export async function removeAccountFriend(
   accountId: string,
-  friendName: string,
+  friendAccountId: string,
 ): Promise<void> {
   const supabase = getSupabase();
 
@@ -53,7 +60,7 @@ export async function removeAccountFriend(
     .from("friends")
     .delete()
     .eq("account_id", accountId)
-    .eq("friend_name", friendName);
+    .eq("friend_account_id", friendAccountId);
 
   if (error) {
     throw new Error(`Failed to remove friend for account ${accountId}: ${error.message}`);

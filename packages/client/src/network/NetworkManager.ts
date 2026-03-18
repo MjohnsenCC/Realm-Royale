@@ -92,12 +92,20 @@ export class NetworkManager {
     this.room?.send(ClientMessage.ChatMessage, { text, channel });
   }
 
+  sendGetFriendsList(): void {
+    this.room?.send(ClientMessage.GetFriendsList);
+  }
+
   sendAddFriend(name: string): void {
     this.room?.send(ClientMessage.AddFriend, { name });
   }
 
-  sendRemoveFriend(name: string): void {
-    this.room?.send(ClientMessage.RemoveFriend, { name });
+  sendRemoveFriend(accountId: string): void {
+    this.room?.send(ClientMessage.RemoveFriend, { accountId });
+  }
+
+  sendRefreshAccountName(): void {
+    this.room?.send(ClientMessage.RefreshAccountName);
   }
 
   getRoom(): Colyseus.Room | null {

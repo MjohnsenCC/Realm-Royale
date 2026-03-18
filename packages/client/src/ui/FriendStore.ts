@@ -1,15 +1,26 @@
 import { NetworkManager } from "../network/NetworkManager";
 
+export interface FriendEntry {
+  accountId: string;
+  accountName: string;
+  online: boolean;
+  characterName?: string;
+  characterClass?: number;
+  level?: number;
+}
+
 // In-memory cache populated from server on join
-let friendsCache: string[] = [];
+let friendsCache: FriendEntry[] = [];
+let friendAccountIds = new Set<string>();
 let authenticated = false;
 
 /**
  * Initialize the friend store with data from the server.
  * Called when the server sends FriendsList on join.
  */
-export function initFriendsFromServer(friends: string[]): void {
+export function initFriendsFromServer(friends: FriendEntry[]): void {
   friendsCache = [...friends];
+  friendAccountIds = new Set(friends.map((f) => f.accountId));
   authenticated = true;
 }
 
@@ -18,6 +29,7 @@ export function initFriendsFromServer(friends: string[]): void {
  */
 export function initFriendsDisabled(): void {
   friendsCache = [];
+  friendAccountIds.clear();
   authenticated = false;
 }
 
@@ -25,40 +37,46 @@ export function isAuthenticated(): boolean {
   return authenticated;
 }
 
-export function getFriends(): string[] {
+export function getFriends(): FriendEntry[] {
   return friendsCache;
 }
 
-export function addFriend(name: string): void {
+export function addFriend(characterName: string): void {
   if (!authenticated) return;
-  if (friendsCache.includes(name)) return;
-  NetworkManager.getInstance().sendAddFriend(name);
+  NetworkManager.getInstance().sendAddFriend(characterName);
   // Don't update cache yet — wait for server confirmation via onFriendAdded
 }
 
-export function removeFriend(name: string): void {
+export function removeFriend(accountId: string): void {
   if (!authenticated) return;
-  if (!friendsCache.includes(name)) return;
-  NetworkManager.getInstance().sendRemoveFriend(name);
+  if (!friendAccountIds.has(accountId)) return;
+  NetworkManager.getInstance().sendRemoveFriend(accountId);
   // Don't update cache yet — wait for server confirmation via onFriendRemoved
 }
 
-export function isFriend(name: string): boolean {
-  return friendsCache.includes(name);
+export function isFriendByAccountName(accountName: string): boolean {
+  if (!accountName) return false;
+  return friendsCache.some((f) => f.accountName === accountName);
 }
 
 /**
  * Called when server confirms a friend was added.
  */
-export function onFriendAdded(name: string): void {
-  if (!friendsCache.includes(name)) {
-    friendsCache.push(name);
+export function onFriendAdded(entry: { accountId: string; accountName: string }): void {
+  if (!friendAccountIds.has(entry.accountId)) {
+    friendsCache.push({
+      accountId: entry.accountId,
+      accountName: entry.accountName,
+      online: true,
+    });
+    friendAccountIds.add(entry.accountId);
   }
 }
 
 /**
  * Called when server confirms a friend was removed.
  */
-export function onFriendRemoved(name: string): void {
-  friendsCache = friendsCache.filter((f) => f !== name);
+export function onFriendRemoved(accountId: string): void {
+  friendsCache = friendsCache.filter((f) => f.accountId !== accountId);
+  friendAccountIds.delete(accountId);
 }

@@ -3,6 +3,7 @@ import { BootScene } from "./scenes/BootScene";
 import { MenuScene } from "./scenes/MenuScene";
 import { GuestSetupScene } from "./scenes/GuestSetupScene";
 import { CharacterSelectScene } from "./scenes/CharacterSelectScene";
+import { AccountSetupScene } from "./scenes/AccountSetupScene";
 import { GameScene } from "./scenes/GameScene";
 import { AuthManager } from "./auth/AuthManager";
 
@@ -17,7 +18,7 @@ const config: Phaser.Types.Core.GameConfig = {
   backgroundColor: "#1a1a2e",
   parent: "game-container",
   dom: { createContainer: true },
-  scene: [BootScene, MenuScene, GuestSetupScene, CharacterSelectScene, GameScene],
+  scene: [BootScene, MenuScene, GuestSetupScene, AccountSetupScene, CharacterSelectScene, GameScene],
   render: {
     roundPixels: true,
     pixelArt: true,

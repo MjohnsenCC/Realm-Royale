@@ -6,6 +6,7 @@ export interface AccountRecord {
   google_id: string;
   email: string;
   display_name: string;
+  account_name: string | null;
 }
 
 export async function findOrCreateAccount(
@@ -18,7 +19,7 @@ export async function findOrCreateAccount(
   // Try to find existing account
   const { data: existing } = await supabase
     .from("accounts")
-    .select("id, google_id, email, display_name")
+    .select("id, google_id, email, display_name, account_name")
     .eq("google_id", googleId)
     .single();
 
@@ -29,14 +30,14 @@ export async function findOrCreateAccount(
       .update({ email, display_name: displayName, updated_at: new Date().toISOString() })
       .eq("id", existing.id);
 
-    return { ...existing, email, display_name: displayName };
+    return { ...existing, email, display_name: displayName, account_name: existing.account_name };
   }
 
   // Create new account
   const { data: created, error } = await supabase
     .from("accounts")
     .insert({ google_id: googleId, email, display_name: displayName })
-    .select("id, google_id, email, display_name")
+    .select("id, google_id, email, display_name, account_name")
     .single();
 
   if (error || !created) {
@@ -44,6 +45,40 @@ export async function findOrCreateAccount(
   }
 
   return created;
+}
+
+export async function getAccountName(
+  accountId: string
+): Promise<string | null> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("account_name")
+    .eq("id", accountId)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return data.account_name as string | null;
+}
+
+export async function setAccountName(
+  accountId: string,
+  name: string
+): Promise<void> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({ account_name: name, updated_at: new Date().toISOString() })
+    .eq("id", accountId);
+
+  if (error) {
+    throw new Error(`Failed to set account name: ${error.message}`);
+  }
 }
 
 export async function getAccountVault(

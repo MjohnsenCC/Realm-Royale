@@ -115,7 +115,7 @@ import {
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
-import { getAccountVault, saveAccountVault } from "../db/accounts";
+import { getAccountVault, saveAccountVault, getAccountName } from "../db/accounts";
 import { getAccountFriends, addAccountFriend, removeAccountFriend } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
@@ -175,6 +175,7 @@ export class GameRoom extends Room<GameState> {
   private nexusMap: DungeonMapData = generateNexusMap();
   private tickCount = 0;
   private filterFlip = false;
+  private accountToSession = new Map<string, string>();
   private globalTick = 0;
   private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -1111,39 +1112,85 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
-    // Add friend
+    // Get friends list (client requests after handlers are ready)
+    this.onMessage(ClientMessage.GetFriendsList, async (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.accountId) return;
+      try {
+        const friendRecords = await getAccountFriends(player.accountId);
+        const friends = friendRecords.map((fr) => {
+          const sessionId = this.accountToSession.get(fr.accountId);
+          const onlinePlayer = sessionId ? this.state.players.get(sessionId) : undefined;
+          return {
+            accountId: fr.accountId,
+            accountName: fr.accountName,
+            online: !!onlinePlayer,
+            characterName: onlinePlayer?.name,
+            characterClass: onlinePlayer?.characterClass,
+            level: onlinePlayer?.level,
+          };
+        });
+        client.send(ServerMessage.FriendsList, { friends });
+      } catch (err) {
+        console.error("Failed to load friends:", err);
+        client.send(ServerMessage.FriendsList, { friends: [] });
+      }
+    });
+
+    // Add friend (client sends character name; server resolves to account)
     this.onMessage(
       ClientMessage.AddFriend,
       async (client, data: { name: string }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.accountId) return;
         const name = typeof data.name === "string" ? data.name.trim() : "";
-        if (name.length === 0 || name === player.name) return;
+        if (name.length === 0) return;
+
+        // Find the target player in the room by character name
+        let targetAccountId = "";
+        let targetAccountName = "";
+        this.state.players.forEach((p) => {
+          if (p.name === name && p.accountId) {
+            targetAccountId = p.accountId;
+            targetAccountName = p.accountName;
+          }
+        });
+
+        if (!targetAccountId || targetAccountId === player.accountId) return;
+
         try {
-          await addAccountFriend(player.accountId, name);
-          client.send(ServerMessage.FriendAdded, { name });
+          await addAccountFriend(player.accountId, targetAccountId);
+          client.send(ServerMessage.FriendAdded, { accountId: targetAccountId, accountName: targetAccountName });
         } catch (err) {
           console.error("Failed to add friend:", err);
         }
       },
     );
 
-    // Remove friend
+    // Remove friend (client sends account ID)
     this.onMessage(
       ClientMessage.RemoveFriend,
-      async (client, data: { name: string }) => {
+      async (client, data: { accountId: string }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.accountId) return;
-        const name = typeof data.name === "string" ? data.name.trim() : "";
-        if (name.length === 0) return;
+        const friendAccountId = typeof data.accountId === "string" ? data.accountId.trim() : "";
+        if (friendAccountId.length === 0) return;
         try {
-          await removeAccountFriend(player.accountId, name);
-          client.send(ServerMessage.FriendRemoved, { name });
+          await removeAccountFriend(player.accountId, friendAccountId);
+          client.send(ServerMessage.FriendRemoved, { accountId: friendAccountId });
         } catch (err) {
           console.error("Failed to remove friend:", err);
         }
       },
     );
+
+    // Refresh account name (after changing via REST API)
+    this.onMessage(ClientMessage.RefreshAccountName, async (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.accountId) return;
+      const acctName = await getAccountName(player.accountId);
+      player.accountName = acctName ?? "";
+    });
 
     // Ping/pong for latency measurement
     this.onMessage(ClientMessage.Ping, (client, data: { t: number }) => {
@@ -1184,6 +1231,11 @@ export class GameRoom extends Room<GameState> {
       player.accountId = payload.accountId;
       player.characterId = character.id;
       player.name = character.name;
+
+      // Load account name
+      const acctName = await getAccountName(payload.accountId);
+      player.accountName = acctName ?? "";
+      this.accountToSession.set(payload.accountId, client.sessionId);
       player.characterClass = character.characterClass;
       player.level = character.level;
       player.xp = character.xp;
@@ -1240,21 +1292,15 @@ export class GameRoom extends Room<GameState> {
     this.state.playerCount = this.state.players.size;
     console.log(`${client.sessionId} joined as "${player.name}" (${player.characterId ? "auth" : "guest"})`);
 
-    // Send friends list for authenticated players
-    if (player.accountId) {
-      getAccountFriends(player.accountId)
-        .then((friends) => {
-          client.send(ServerMessage.FriendsList, { friends });
-        })
-        .catch((err) => {
-          console.error("Failed to load friends:", err);
-          client.send(ServerMessage.FriendsList, { friends: [] });
-        });
-    }
   }
 
   async onLeave(client: Client, _consented: boolean) {
     const player = this.state.players.get(client.sessionId);
+
+    // Remove account-to-session tracking
+    if (player?.accountId) {
+      this.accountToSession.delete(player.accountId);
+    }
 
     // Save authenticated player's character before removing
     if (player?.characterId) {

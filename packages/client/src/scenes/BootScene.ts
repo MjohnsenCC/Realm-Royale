@@ -159,6 +159,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-btn-statpanel", "assets/sprites/UI/buttons/ui-btn-statpanel.png");
     this.load.image("ui-btn-social", "assets/sprites/UI/buttons/ui-btn-social.png");
     this.load.image("ui-btn-addfriend", "assets/sprites/UI/buttons/ui-btn-addfriend.png");
+    this.load.image("ui-btn-removefriend", "assets/sprites/UI/buttons/ui-btn-removefriend.png");
     this.load.image("ui-btn-dm", "assets/sprites/UI/buttons/ui-btn-dm.png");
 
     // UI sprites — minimap icons (3×3)

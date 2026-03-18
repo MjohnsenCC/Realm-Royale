@@ -124,6 +124,7 @@ export class PlayerTooltip {
         const key = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
         if (key && this.scene.textures.exists(key)) {
           img.setTexture(key);
+          img.setDisplaySize(slotSize - 4, slotSize - 4);
           img.setVisible(true);
         } else {
           img.setVisible(false);
@@ -178,7 +179,9 @@ export class PlayerTooltip {
       this.equipBorders[i].setPosition(slotX + slotSize / 2, slotsY + slotSize / 2);
       this.equipBorders[i].setSize(slotSize, slotSize);
       this.equipSlots[i].setPosition(slotX + slotSize / 2, slotsY + slotSize / 2);
-      this.equipSlots[i].setDisplaySize(slotSize - 4, slotSize - 4);
+      if (this.equipSlots[i].texture.key !== "__DEFAULT") {
+        this.equipSlots[i].setDisplaySize(slotSize - 4, slotSize - 4);
+      }
     }
 
     this.container.setVisible(false);

@@ -9,11 +9,14 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
-import { isFriend } from "./FriendStore";
+import { isFriendByAccountName } from "./FriendStore";
+import { getPlayerSpriteKey } from "./EntityTextures";
 
 export interface NearbyPlayerInfo {
   sessionId: string;
   name: string;
+  accountName: string;
+  accountId: string;
   level: number;
   characterClass: number;
   distance: number;
@@ -26,9 +29,9 @@ const MAX_ROWS = 30;
 
 interface RowObjects {
   bg: Phaser.GameObjects.Rectangle;
+  charSprite: Phaser.GameObjects.Image;
   nameText: Phaser.GameObjects.Text;
   levelText: Phaser.GameObjects.Text;
-  distText: Phaser.GameObjects.Text;
   dmBtn: Phaser.GameObjects.Image;
   dmZone: Phaser.GameObjects.Zone;
   friendBtn: Phaser.GameObjects.Image;
@@ -72,8 +75,11 @@ export class SocialPanel {
   private lineH!: number;
   private scrollBarWidth!: number;
   private tabY!: number;
+  private tabGap!: number;
   private rowStartY!: number;
   private btnSize!: number;
+  private spriteSize!: number;
+  private rowStride!: number;
 
   // Scroll state
   private scrollY = 0;
@@ -154,9 +160,8 @@ export class SocialPanel {
 
     // Tabs
     const tabBaseY = this.tabY;
-    const tabGap = Math.round(20 * S);
     this.nearbyTab = scene.add
-      .text(centerX - tabGap, tabBaseY, "NEARBY", {
+      .text(centerX - this.tabGap, tabBaseY, "NEARBY", {
         fontSize: tabFontSize,
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -167,7 +172,7 @@ export class SocialPanel {
     this.contentContainer.add(this.nearbyTab);
 
     this.friendsTab = scene.add
-      .text(centerX + tabGap, tabBaseY, "FRIENDS", {
+      .text(centerX + this.tabGap, tabBaseY, "FRIENDS", {
         fontSize: tabFontSize,
         color: "#888888",
         fontFamily: "'Press Start 2P', monospace",
@@ -191,15 +196,25 @@ export class SocialPanel {
     const smallFontSize = `${Math.round(5 * S)}px`;
 
     for (let i = 0; i < MAX_ROWS; i++) {
-      const rowY = this.rowStartY + i * this.lineH;
+      const rowY = this.rowStartY + i * this.rowStride;
       const bgColor = i % 2 === 0 ? 0x222233 : 0x1a1a2a;
       const rowW = contentW;
 
-      const bg = scene.add.rectangle(rowW / 2, rowY + this.lineH / 2, rowW, this.lineH, bgColor, 0.5)
+      const bgW = rowW - this.pad;
+      const bg = scene.add.rectangle(this.pad + bgW / 2, rowY + this.lineH / 2, bgW, this.lineH, bgColor, 0.5)
         .setOrigin(0.5, 0.5);
       this.contentContainer.add(bg);
 
-      const nameText = scene.add.text(this.pad + this.btnSize * 2 + Math.round(8 * S), rowY + Math.round(2 * S), "", {
+      // Character sprite (leftmost, with padding)
+      const spriteX = this.pad + this.spriteSize / 2;
+      const spriteCenterY = rowY + this.lineH / 2;
+      const charSprite = scene.add.image(spriteX, spriteCenterY, "sprite-player-archer")
+        .setDisplaySize(this.spriteSize, this.spriteSize);
+      this.contentContainer.add(charSprite);
+
+      // Name text (after sprite)
+      const textX = this.pad + this.spriteSize + Math.round(6 * S);
+      const nameText = scene.add.text(textX, rowY + Math.round(4 * S), "", {
         fontSize: nameFontSize,
         color: "#66cc66",
         fontFamily: "'Press Start 2P', monospace",
@@ -208,7 +223,7 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(nameText);
 
-      const levelText = scene.add.text(this.pad + this.btnSize * 2 + Math.round(8 * S), rowY + Math.round(2 * S) + Math.round(10 * S), "", {
+      const levelText = scene.add.text(textX, rowY + Math.round(4 * S) + Math.round(12 * S), "", {
         fontSize: smallFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -217,18 +232,8 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(levelText);
 
-      const distText = scene.add.text(rowW - this.pad - this.scrollBarWidth, rowY + Math.round(2 * S), "", {
-        fontSize: smallFontSize,
-        color: "#666666",
-        fontFamily: "'Press Start 2P', monospace",
-        stroke: "#000000",
-        strokeThickness: 2,
-      }).setOrigin(1, 0);
-      this.contentContainer.add(distText);
-
-      // DM button
-      const dmBtnX = this.pad;
-      const dmBtnCenterX = dmBtnX + this.btnSize / 2;
+      // DM button (right side, second from right)
+      const dmBtnCenterX = rowW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
       const dmBtnCenterY = rowY + this.lineH / 2;
       const dmBtn = scene.add.image(dmBtnCenterX, dmBtnCenterY, "ui-btn-dm")
         .setDisplaySize(this.btnSize, this.btnSize);
@@ -244,9 +249,8 @@ export class SocialPanel {
         if (info && this.onDM) this.onDM(info.name);
       });
 
-      // Friend button
-      const friendBtnX = this.pad + this.btnSize + Math.round(2 * S);
-      const friendBtnCenterX = friendBtnX + this.btnSize / 2;
+      // Friend button (rightmost)
+      const friendBtnCenterX = rowW - this.pad - this.btnSize / 2;
       const friendBtn = scene.add.image(friendBtnCenterX, dmBtnCenterY, "ui-btn-addfriend")
         .setDisplaySize(this.btnSize, this.btnSize);
       this.contentContainer.add(friendBtn);
@@ -257,10 +261,11 @@ export class SocialPanel {
       friendZone.on("pointerout", () => {
         const info = this.getVisiblePlayers()[rowIdx];
         if (info && info.isFriend) {
-          friendBtn.setTint(0xff6666);
+          friendBtn.setTexture("ui-btn-removefriend");
         } else {
-          friendBtn.clearTint();
+          friendBtn.setTexture("ui-btn-addfriend");
         }
+        friendBtn.clearTint();
       });
       friendZone.on("pointerdown", () => {
         const info = this.getVisiblePlayers()[rowIdx];
@@ -282,7 +287,7 @@ export class SocialPanel {
         if (info && this.onHover) this.onHover(info, pointer.x, pointer.y);
       });
 
-      this.rows.push({ bg, nameText, levelText, distText, dmBtn, dmZone, friendBtn, friendZone, hoverZone });
+      this.rows.push({ bg, charSprite, nameText, levelText, dmBtn, dmZone, friendBtn, friendZone, hoverZone });
     }
 
     // Start hidden
@@ -373,32 +378,38 @@ export class SocialPanel {
     const smallFontSize = `${Math.round(5 * S)}px`;
     const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
     const centerX = contentW / 2;
-    const tabGap = Math.round(20 * S);
 
     this.titleText.setPosition(centerX, this.pad).setFontSize(titleFontSize);
     this.hintText.setPosition(centerX, this.pad + Math.round(14 * S)).setFontSize(hintFontSize);
-    this.nearbyTab.setPosition(centerX - tabGap, this.tabY).setFontSize(tabFontSize);
-    this.friendsTab.setPosition(centerX + tabGap, this.tabY).setFontSize(tabFontSize);
+    this.nearbyTab.setPosition(centerX - this.tabGap, this.tabY).setFontSize(tabFontSize);
+    this.friendsTab.setPosition(centerX + this.tabGap, this.tabY).setFontSize(tabFontSize);
 
     // Update rows layout
     for (let i = 0; i < MAX_ROWS; i++) {
       const row = this.rows[i];
-      const rowY = this.rowStartY + i * this.lineH;
+      const rowY = this.rowStartY + i * this.rowStride;
       const rowW = contentW;
 
-      row.bg.setPosition(rowW / 2, rowY + this.lineH / 2);
-      row.bg.setSize(rowW, this.lineH);
+      const bgW = rowW - this.pad;
+      row.bg.setPosition(this.pad + bgW / 2, rowY + this.lineH / 2);
+      row.bg.setSize(bgW, this.lineH);
 
-      const textX = this.pad + this.btnSize * 2 + Math.round(8 * S);
-      row.nameText.setPosition(textX, rowY + Math.round(2 * S)).setFontSize(nameFontSize);
-      row.levelText.setPosition(textX, rowY + Math.round(2 * S) + Math.round(10 * S)).setFontSize(smallFontSize);
-      row.distText.setPosition(rowW - this.pad - this.scrollBarWidth, rowY + Math.round(2 * S)).setFontSize(smallFontSize);
+      // Character sprite
+      const spriteX = this.pad + this.spriteSize / 2;
+      const spriteCenterY = rowY + this.lineH / 2;
+      row.charSprite.setPosition(spriteX, spriteCenterY).setDisplaySize(this.spriteSize, this.spriteSize);
 
-      const dmBtnCenterX = this.pad + this.btnSize / 2;
+      // Text after sprite
+      const textX = this.pad + this.spriteSize + Math.round(6 * S);
+      row.nameText.setPosition(textX, rowY + Math.round(4 * S)).setFontSize(nameFontSize);
+      row.levelText.setPosition(textX, rowY + Math.round(4 * S) + Math.round(12 * S)).setFontSize(smallFontSize);
+
+      // Buttons on right side
+      const dmBtnCenterX = rowW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
       const dmBtnCenterY = rowY + this.lineH / 2;
       row.dmBtn.setPosition(dmBtnCenterX, dmBtnCenterY).setDisplaySize(this.btnSize, this.btnSize);
 
-      const friendBtnCenterX = this.pad + this.btnSize + Math.round(2 * S) + this.btnSize / 2;
+      const friendBtnCenterX = rowW - this.pad - this.btnSize / 2;
       row.friendBtn.setPosition(friendBtnCenterX, dmBtnCenterY).setDisplaySize(this.btnSize, this.btnSize);
     }
 
@@ -424,9 +435,12 @@ export class SocialPanel {
     const screenH = getScreenHeight();
 
     this.pad = Math.round(12 * S);
-    this.lineH = Math.round(22 * S);
+    this.lineH = Math.round(30 * S);
     this.scrollBarWidth = Math.round(8 * S);
-    this.btnSize = Math.round(14 * S);
+    this.btnSize = Math.round(18 * S);
+    this.spriteSize = this.lineH - Math.round(6 * S);
+    this.tabGap = Math.round(40 * S);
+    this.rowStride = this.lineH + Math.round(4 * S);
 
     this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.28));
 
@@ -440,7 +454,7 @@ export class SocialPanel {
     this.py = panelMargin;
     this.viewHeight = screenH - panelMargin * 2;
 
-    this.contentHeight = this.rowStartY + MAX_ROWS * this.lineH + this.pad;
+    this.contentHeight = this.rowStartY + MAX_ROWS * this.rowStride + this.pad;
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
   }
 
@@ -470,7 +484,25 @@ export class SocialPanel {
       if (i < visible.length) {
         const info = visible[i];
         row.bg.setVisible(true);
-        row.nameText.setText(info.name).setVisible(true);
+
+        // Character sprite
+        if (info.online) {
+          row.charSprite.setTexture(getPlayerSpriteKey(info.characterClass));
+          row.charSprite.setVisible(true);
+        } else {
+          row.charSprite.setVisible(false);
+        }
+
+        // Display name: "AccountName (CharName)" for friends tab, just char name for nearby
+        let displayName = info.name;
+        if (this.activeTab === "friends" && info.accountName) {
+          displayName = info.online && info.name
+            ? `${info.accountName} (${info.name})`
+            : info.accountName;
+        } else if (info.accountName && this.activeTab === "nearby") {
+          displayName = `${info.accountName} (${info.name})`;
+        }
+        row.nameText.setText(displayName).setVisible(true);
 
         if (info.online) {
           row.nameText.setColor("#66cc66");
@@ -484,13 +516,6 @@ export class SocialPanel {
           row.levelText.setText("Offline").setVisible(true);
         }
 
-        if (this.activeTab === "nearby") {
-          const dist = Math.round(info.distance);
-          row.distText.setText(`${dist}`).setVisible(true);
-        } else {
-          row.distText.setVisible(false);
-        }
-
         // DM button only for online players
         row.dmBtn.setVisible(info.online);
         row.dmZone.setVisible(info.online);
@@ -499,17 +524,18 @@ export class SocialPanel {
         row.friendZone.setVisible(true);
         row.hoverZone.setVisible(info.online);
 
-        // Tint friend button if already a friend
+        // Use dedicated remove friend texture instead of tinting
         if (info.isFriend) {
-          row.friendBtn.setTint(0xff6666);
+          row.friendBtn.setTexture("ui-btn-removefriend");
         } else {
-          row.friendBtn.clearTint();
+          row.friendBtn.setTexture("ui-btn-addfriend");
         }
+        row.friendBtn.clearTint();
       } else {
         row.bg.setVisible(false);
+        row.charSprite.setVisible(false);
         row.nameText.setVisible(false);
         row.levelText.setVisible(false);
-        row.distText.setVisible(false);
         row.dmBtn.setVisible(false);
         row.dmZone.setVisible(false);
         row.friendBtn.setVisible(false);
@@ -520,7 +546,7 @@ export class SocialPanel {
 
     // Update content height based on actual visible count
     const visibleCount = Math.min(visible.length, MAX_ROWS);
-    this.contentHeight = this.rowStartY + visibleCount * this.lineH + this.pad;
+    this.contentHeight = this.rowStartY + visibleCount * this.rowStride + this.pad;
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
     if (this.scrollY > this.maxScrollY) this.scrollY = this.maxScrollY;
   }
@@ -560,23 +586,24 @@ export class SocialPanel {
     const S = this.S;
     const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
     const centerX = contentW / 2;
-    const tabGap = Math.round(20 * S);
 
     // Tab zones (screen space)
-    this.nearbyTabZone.setPosition(this.px + centerX - tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
-    this.friendsTabZone.setPosition(this.px + centerX + tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
+    this.nearbyTabZone.setPosition(this.px + centerX - this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
+    this.friendsTabZone.setPosition(this.px + centerX + this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
 
     // Row zones (screen space)
     for (let i = 0; i < MAX_ROWS; i++) {
       const row = this.rows[i];
-      const rowY = this.rowStartY + i * this.lineH;
+      const rowY = this.rowStartY + i * this.rowStride;
       const screenRowY = this.py + rowY + this.lineH / 2 - this.scrollY;
 
-      const dmBtnCenterX = this.px + this.pad + this.btnSize / 2;
+      // DM button zone (right side, second from right)
+      const dmBtnCenterX = this.px + contentW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
       row.dmZone.setPosition(dmBtnCenterX, screenRowY);
       row.dmZone.setSize(this.btnSize, this.btnSize);
 
-      const friendBtnCenterX = this.px + this.pad + this.btnSize + Math.round(2 * S) + this.btnSize / 2;
+      // Friend button zone (rightmost)
+      const friendBtnCenterX = this.px + contentW - this.pad - this.btnSize / 2;
       row.friendZone.setPosition(friendBtnCenterX, screenRowY);
       row.friendZone.setSize(this.btnSize, this.btnSize);
 

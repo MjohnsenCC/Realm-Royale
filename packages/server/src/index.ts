@@ -12,7 +12,7 @@ import {
   getGoogleUserInfo,
 } from "./auth/google";
 import { createSessionToken, validateSessionToken } from "./auth/session";
-import { findOrCreateAccount } from "./db/accounts";
+import { findOrCreateAccount, getAccountName, setAccountName } from "./db/accounts";
 import {
   getCharactersByAccount,
   createCharacter,
@@ -21,6 +21,8 @@ import {
 import {
   CHARACTER_NAME_MAX_LENGTH,
   CHARACTER_NAME_MIN_LENGTH,
+  ACCOUNT_NAME_MAX_LENGTH,
+  ACCOUNT_NAME_MIN_LENGTH,
   CharacterClass,
 } from "@rotmg-lite/shared";
 
@@ -148,6 +150,52 @@ app.delete(
     }
   }
 );
+
+// --- Account API Routes ---
+
+app.get("/api/account/name", authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const accountName = await getAccountName(req.accountId!);
+    res.json({ accountName });
+  } catch (err) {
+    console.error("Fetch account name error:", err);
+    res.status(500).json({ error: "Failed to fetch account name" });
+  }
+});
+
+app.put("/api/account/name", authMiddleware, async (req: AuthRequest, res) => {
+  try {
+    const { name } = req.body;
+    if (typeof name !== "string") {
+      res.status(400).json({ error: "Name is required" });
+      return;
+    }
+    const trimmed = name.trim();
+    if (
+      trimmed.length < ACCOUNT_NAME_MIN_LENGTH ||
+      trimmed.length > ACCOUNT_NAME_MAX_LENGTH
+    ) {
+      res.status(400).json({
+        error: `Name must be ${ACCOUNT_NAME_MIN_LENGTH}-${ACCOUNT_NAME_MAX_LENGTH} characters`,
+      });
+      return;
+    }
+    if (!/^[a-zA-Z0-9_]+$/.test(trimmed)) {
+      res.status(400).json({ error: "Name can only contain letters, numbers, and underscores" });
+      return;
+    }
+    await setAccountName(req.accountId!, trimmed);
+    res.json({ accountName: trimmed });
+  } catch (err) {
+    const message = err instanceof Error ? err.message : "Failed to set account name";
+    if (message.includes("unique") || message.includes("duplicate")) {
+      res.status(409).json({ error: "Name is already taken" });
+    } else {
+      console.error("Set account name error:", err);
+      res.status(500).json({ error: message });
+    }
+  }
+});
 
 // --- Static file serving ---
 

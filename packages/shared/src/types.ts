@@ -521,6 +521,8 @@ export const ClientMessage = {
   Ping: "ping",
   AddFriend: "addFriend",
   RemoveFriend: "removeFriend",
+  GetFriendsList: "getFriendsList",
+  RefreshAccountName: "refreshAccountName",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 

@@ -14,7 +14,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
-import { getItemSpriteKey, getItemOutlinedSize, generateItemTextures } from "./ItemTextures";
+import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
@@ -658,7 +658,6 @@ export class InventoryUI {
   relayout(config: InventoryUIConfig): void {
     this.S = getUIScale();
     const S = this.S;
-    generateItemTextures(this.scene, config.slotSize);
     this.slotSize = config.slotSize;
     this.slotGap = config.slotGap;
 

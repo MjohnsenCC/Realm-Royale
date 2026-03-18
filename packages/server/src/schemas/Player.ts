@@ -15,6 +15,7 @@ import { ItemInstance, createEmptyItemSchema } from "./ItemInstance";
 export class Player extends Schema {
   @type("string") id: string = "";
   @type("string") name: string = "";
+  @type("string") accountName: string = "";
   @type("uint8") characterClass: number = 0;
   @type("number") x: number = 0;
   @type("number") y: number = 0;

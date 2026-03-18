@@ -10,7 +10,7 @@ import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { SocialPanel, NearbyPlayerInfo } from "../ui/SocialPanel";
 import { PlayerTooltip } from "../ui/PlayerTooltip";
-import { isFriend, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved } from "../ui/FriendStore";
+import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, type FriendEntry } from "../ui/FriendStore";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
@@ -391,30 +391,36 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
-    // Register friend message listeners immediately (server sends FriendsList on join)
-    room.onMessage(ServerMessage.FriendsList, (data: { friends: string[] }) => {
+    // Reset friends state then register handlers and request list from server
+    initFriendsDisabled();
+
+    room.onMessage(ServerMessage.FriendsList, (data: { friends: FriendEntry[] }) => {
       initFriendsFromServer(data.friends);
     });
-    room.onMessage(ServerMessage.FriendAdded, (data: { name: string }) => {
-      onFriendAdded(data.name);
+    room.onMessage(ServerMessage.FriendAdded, (data: { accountId: string; accountName: string }) => {
+      onFriendAdded(data);
       if (this.chatUI) {
-        this.chatUI.addMessage({ playerName: "", text: `${data.name} added to friends list.`, channel: "global" });
+        const displayName = data.accountName || "Friend";
+        this.chatUI.addMessage({ playerName: "", text: `${displayName} added to friends list.`, channel: "global" });
       }
       if (this.socialPanel?.isVisible()) {
         const d = this.gatherSocialData();
         this.socialPanel.populate(d.nearby, d.friends);
       }
     });
-    room.onMessage(ServerMessage.FriendRemoved, (data: { name: string }) => {
-      onFriendRemoved(data.name);
+    room.onMessage(ServerMessage.FriendRemoved, (data: { accountId: string }) => {
+      onFriendRemoved(data.accountId);
       if (this.chatUI) {
-        this.chatUI.addMessage({ playerName: "", text: `${data.name} removed from friends list.`, channel: "global" });
+        this.chatUI.addMessage({ playerName: "", text: `Friend removed from friends list.`, channel: "global" });
       }
       if (this.socialPanel?.isVisible()) {
         const d = this.gatherSocialData();
         this.socialPanel.populate(d.nearby, d.friends);
       }
     });
+
+    // Request friends list from server (handlers are now registered)
+    this.network.sendGetFriendsList();
 
     // Pre-render all entity shapes into reusable textures (batched draw calls)
     generateEntityTextures(this);
@@ -529,8 +535,7 @@ export class GameScene extends Phaser.Scene {
     this.statsPanel = new StatsPanel(this);
     this.hud.setStatsButtonCallback(() => this.toggleStatsPanel());
 
-    // Initialize friends as disabled; server will send FriendsList for authenticated players
-    initFriendsDisabled();
+
 
     // Create social panel
     this.socialPanel = new SocialPanel(this);
@@ -543,8 +548,14 @@ export class GameScene extends Phaser.Scene {
       },
       (name: string) => {
         if (!isFriendsAuthenticated()) return;
-        if (isFriend(name)) {
-          removeFriend(name);
+        // name here is used differently depending on context:
+        // For adding: it's the character name (server resolves to account)
+        // For removing: we need to find the accountId from the visible players
+        const visiblePlayers = this.gatherSocialData();
+        const allPlayers = [...visiblePlayers.nearby, ...visiblePlayers.friends];
+        const target = allPlayers.find((p) => p.name === name);
+        if (target && target.isFriend && target.accountId) {
+          removeFriend(target.accountId);
         } else {
           addFriend(name);
         }
@@ -571,6 +582,9 @@ export class GameScene extends Phaser.Scene {
       },
       onOptions: () => {
         this.escapeMenuUI.hide();
+        // Get local player's account name for the options panel
+        const localPlayer = this.decodedState?.players?.get(this.network.getSessionId());
+        const localAccountName = (localPlayer?.accountName as string) || "";
         this.optionsUI.show({
           onClose: () => {
             this.escapeMenuUI.show();
@@ -578,7 +592,7 @@ export class GameScene extends Phaser.Scene {
           onToggleChanged: () => {
             // HUD picks up changes from localStorage on next update tick
           },
-        });
+        }, localAccountName);
       },
       onExitToCharacterSelect: () => {
         this.escapeMenuUI.hide();
@@ -3414,9 +3428,12 @@ export class GameScene extends Phaser.Scene {
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
       if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
     }
-    if (except !== "social" && this.socialPanel.isVisible()) {
+    if (except !== "social" && except !== "vault" && except !== "crafting" && this.socialPanel.isVisible()) {
       this.socialPanel.hide();
       this.playerTooltip.hide();
+    }
+    if (except !== "stats" && except !== "vault" && except !== "crafting" && this.statsPanel.isVisible()) {
+      this.statsPanel.hide();
     }
   }
 
@@ -3458,14 +3475,15 @@ export class GameScene extends Phaser.Scene {
     const state = this.decodedState;
     const nearby: NearbyPlayerInfo[] = [];
 
-    // Build a map of online players by name for friend lookup
-    const onlineByName = new Map<string, { schema: any; sid: string; sprite: any }>();
+    // Build a map of online players by accountName for friend lookup
+    const onlineByAccountName = new Map<string, { schema: any; sid: string; sprite: any }>();
 
     state.players.forEach((playerSchema: any, sid: string) => {
       if (sid === sessionId) return;
       const sprite = this.playerSprites.get(sid);
       const name = playerSchema.name as string;
-      if (name) onlineByName.set(name, { schema: playerSchema, sid, sprite });
+      const accountName = (playerSchema.accountName as string) || "";
+      if (accountName) onlineByAccountName.set(accountName, { schema: playerSchema, sid, sprite });
 
       // Nearby: only same zone
       if (!sprite || sprite.zone !== this.localZone) return;
@@ -3478,11 +3496,13 @@ export class GameScene extends Phaser.Scene {
       nearby.push({
         sessionId: sid,
         name,
+        accountName,
+        accountId: "",
         level: (playerSchema.level as number) ?? 1,
         characterClass: (playerSchema.characterClass as number) ?? 0,
         distance,
         equipment,
-        isFriend: isFriend(name),
+        isFriend: isFriendByAccountName(accountName),
         online: true,
       });
     });
@@ -3490,19 +3510,21 @@ export class GameScene extends Phaser.Scene {
     nearby.sort((a, b) => a.distance - b.distance);
 
     // Build friends list: all friends, online first then offline
-    const friendNames = getFriends();
+    const friendEntries = getFriends();
     const onlineFriends: NearbyPlayerInfo[] = [];
     const offlineFriends: NearbyPlayerInfo[] = [];
 
-    for (const friendName of friendNames) {
-      const online = onlineByName.get(friendName);
+    for (const friend of friendEntries) {
+      const online = onlineByAccountName.get(friend.accountName);
       if (online && online.sprite) {
         const dx = online.sprite.x - localSprite.x;
         const dy = online.sprite.y - localSprite.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         onlineFriends.push({
           sessionId: online.sid,
-          name: friendName,
+          name: (online.schema.name as string) || "",
+          accountName: friend.accountName,
+          accountId: friend.accountId,
           level: (online.schema.level as number) ?? 1,
           characterClass: (online.schema.characterClass as number) ?? 0,
           distance,
@@ -3513,7 +3535,9 @@ export class GameScene extends Phaser.Scene {
       } else {
         offlineFriends.push({
           sessionId: "",
-          name: friendName,
+          name: "",
+          accountName: friend.accountName,
+          accountId: friend.accountId,
           level: 0,
           characterClass: 0,
           distance: 0,
