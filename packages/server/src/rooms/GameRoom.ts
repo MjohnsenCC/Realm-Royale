@@ -177,6 +177,10 @@ export class GameRoom extends Room<GameState> {
     // Load realm map data for hostile zone
     this.loadRealmMap();
 
+    // Pre-initialize all realms so they persist regardless of player presence
+    const realmCount = getNexusPortalPositions().wildPortals.length;
+    this.spawnSystem.initializeRealms(realmCount);
+
     // Listen for player input messages — queue for processing in gameLoop
     this.onMessage(ClientMessage.Input, (client, input: PlayerInput) => {
       const player = this.state.players.get(client.sessionId);
@@ -1202,11 +1206,11 @@ export class GameRoom extends Room<GameState> {
     console.log(`${client.sessionId} left`);
 
     if (this.state.players.size === 0) {
-      this.state.enemies.clear();
+      // Clear transient entities but keep realm state intact.
+      // Enemies will naturally despawn via chunk deactivation (no players nearby).
       this.state.projectiles.clear();
       this.state.lootBags.clear();
       this.state.dungeonPortals.clear();
-      this.spawnSystem.reset();
     }
   }
 

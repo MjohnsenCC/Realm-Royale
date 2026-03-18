@@ -113,23 +113,21 @@ function getRespawnDelay(zone: number): number {
 export class BiomeSpawnSystem {
   private realms = new Map<string, RealmState>();
 
+  /** Pre-create realm states so they persist regardless of player presence. */
+  initializeRealms(realmCount: number): void {
+    for (let i = 1; i <= realmCount; i++) {
+      const zone = `hostile:${i}`;
+      if (!this.realms.has(zone)) {
+        this.realms.set(zone, this.createRealmState(zone));
+      }
+    }
+  }
+
   update(deltaTime: number, state: GameState): void {
-    // Find which realms have players
-    const activeRealmZones = new Set<string>();
-    state.players.forEach((p) => {
-      if (p.alive && isHostileZone(p.zone)) {
-        activeRealmZones.add(p.zone);
-      }
-    });
-
-    if (activeRealmZones.size === 0) return;
-
-    for (const realmZone of activeRealmZones) {
-      let realm = this.realms.get(realmZone);
-      if (!realm) {
-        realm = this.createRealmState(realmZone);
-        this.realms.set(realmZone, realm);
-      }
+    // Update every realm, not just those with players.
+    // Chunk activation/deactivation still depends on player proximity,
+    // so empty realms simply have no active chunks (low cost).
+    for (const [, realm] of this.realms) {
       this.updateRealm(realm, deltaTime, state);
     }
   }
@@ -345,8 +343,6 @@ export class BiomeSpawnSystem {
         playerPositions.push({ x: p.x, y: p.y });
       }
     });
-
-    if (playerPositions.length === 0) return;
 
     const map = getRealmMap();
     if (!map) return;
