@@ -1,0 +1,97 @@
+diff --git a/node_modules/@colyseus/schema/build/cjs/index.js b/node_modules/@colyseus/schema/build/cjs/index.js
+index 4381c8f..bd3f406 100644
+--- a/node_modules/@colyseus/schema/build/cjs/index.js
++++ b/node_modules/@colyseus/schema/build/cjs/index.js
+@@ -2924,18 +2924,18 @@ var Schema = /** @class */ (function () {
+                 // Deleting fields: encode the operation + field index
+                 //
+                 if (change.op === exports.OPERATION.DELETE) {
+-                    //
+-                    // DELETE operations also need to go through filtering.
+-                    //
+-                    // TODO: cache the previous value so we can access the value (primitive or `refId`)
+-                    // (check against `$filterState.refIds`)
+-                    //
+                     if (isSchema) {
+                         uint8$1(filteredBytes, change.op | fieldIndex);
+                     }
+                     else {
++                        // Only send DELETE to clients that previously received this entry.
++                        // Without this guard, DELETEs leak to all clients regardless of filterChildren.
++                        if (!containerIndexes.has(fieldIndex)) {
++                            continue;
++                        }
+                         uint8$1(filteredBytes, change.op);
+                         number$1(filteredBytes, fieldIndex);
++                        containerIndexes.delete(fieldIndex);
+                     }
+                     continue;
+                 }
+@@ -3018,7 +3018,6 @@ var Schema = /** @class */ (function () {
+                 else if (value['$changes'] && !isSchema) {
+                     //
+                     // TODO:
+-                    // - track ADD/REPLACE/DELETE instances on `$filterState`
+                     // - do NOT always encode dynamicIndex for MapSchema.
+                     //   (If client already has that key, only the first index is necessary.)
+                     //
+@@ -3032,6 +3031,9 @@ var Schema = /** @class */ (function () {
+                         string$1(filteredBytes, dynamicIndex);
+                     }
+                     number$1(filteredBytes, value['$changes'].refId);
++                    // Track that this client has received this entry via TOUCH→ADD,
++                    // so DELETE operations are correctly forwarded later.
++                    containerIndexes.add(fieldIndex);
+                 }
+             }
+         };
+diff --git a/node_modules/@colyseus/schema/src/Schema.ts b/node_modules/@colyseus/schema/src/Schema.ts
+index 6602953..a471f62 100644
+--- a/node_modules/@colyseus/schema/src/Schema.ts
++++ b/node_modules/@colyseus/schema/src/Schema.ts
+@@ -741,19 +741,19 @@ export abstract class Schema {
+                 // Deleting fields: encode the operation + field index
+                 //
+                 if (change.op === OPERATION.DELETE) {
+-                    //
+-                    // DELETE operations also need to go through filtering.
+-                    //
+-                    // TODO: cache the previous value so we can access the value (primitive or `refId`)
+-                    // (check against `$filterState.refIds`)
+-                    //
+-
+                     if (isSchema) {
+                         encode.uint8(filteredBytes, change.op | fieldIndex);
+ 
+                     } else {
++                        // Only send DELETE to clients that previously received this entry.
++                        // Without this guard, DELETEs leak to all clients regardless of filterChildren,
++                        // causing cross-realm entity corruption in filtered MapSchema collections.
++                        if (!containerIndexes.has(fieldIndex)) {
++                            continue;
++                        }
+                         encode.uint8(filteredBytes, change.op);
+                         encode.number(filteredBytes, fieldIndex);
++                        containerIndexes.delete(fieldIndex);
+ 
+                     }
+                     continue;
+@@ -850,7 +850,6 @@ export abstract class Schema {
+                 } else if (value['$changes'] && !isSchema) {
+                     //
+                     // TODO:
+-                    // - track ADD/REPLACE/DELETE instances on `$filterState`
+                     // - do NOT always encode dynamicIndex for MapSchema.
+                     //   (If client already has that key, only the first index is necessary.)
+                     //
+@@ -867,6 +866,10 @@ export abstract class Schema {
+                     }
+ 
+                     encode.number(filteredBytes, value['$changes'].refId);
++
++                    // Track that this client has received this entry via TOUCH→ADD,
++                    // so DELETE operations are correctly forwarded later.
++                    containerIndexes.add(fieldIndex);
+                 }
+ 
+             };
