@@ -36,46 +36,23 @@ export class BootScene extends Phaser.Scene {
       this.load.image(`proj-enemy-${i}`, `assets/sprites/projectiles/enemy_projectile_${i}.png`);
     }
 
-    // Tile sprites (8x8 pixel art) — biome ground tiles with variants
-    const tiles: [string, string][] = [
-      ["tile-ocean", "ocean"],
-      ["tile-shallowwater", "ShallowWater"],
-      ["tile-beach", "Beach"],
-      ["tile-beach-1", "Beach_1"],
-      ["tile-marsh", "Marsh"],
-      ["tile-marsh-1", "Marsh_1"],
-      ["tile-desert", "Desert"],
-      ["tile-desert-1", "Desert_1"],
-      ["tile-dryplains", "DryPlains"],
-      ["tile-dryplains-1", "DryPlains_1"],
-      ["tile-grassland", "Grassland"],
-      ["tile-grassland-1", "Grassland_1"],
-      ["tile-forest", "Forest"],
-      ["tile-forest-1", "Forest_1"],
-      ["tile-jungle", "Jungle"],
-      ["tile-jungle-1", "Jungle_1"],
-      ["tile-tundra", "Tundra"],
-      ["tile-tundra-1", "Tundra_1"],
-      ["tile-highland", "Highland"],
-      ["tile-highland-1", "Highland_1"],
-      ["tile-savanna", "Savanna"],
-      ["tile-savanna-1", "Savanna_1"],
-      ["tile-mountainbase", "MountainBase"],
-      ["tile-mountainbase-1", "MountainBase_1"],
-      ["tile-mountainpeak", "MountainPeak"],
-      ["tile-mountainpeak-1", "MountainPeak_1"],
-      ["tile-volcanicridge", "VolcanicRidge"],
-      ["tile-volcanicridge-1", "VolcanicRidge_1"],
-      ["tile-lake", "Lake"],
-      // Zone-specific floor tiles (nexus uses tileset spritesheet below)
-      ["tile-nexus", "Nexus"], // kept as fallback
-      ["tile-vault", "Vault"],
-      ["tile-infernalpit", "InfernalPit"],
-      ["tile-voidsanctum", "VoidSanctum"],
-    ];
-    for (const [key, file] of tiles) {
-      this.load.image(key, `assets/sprites/tiles/${file}.png`);
-    }
+    // Tile spritesheet (8x8 pixel art) — all biome ground tiles in a single sheet
+    // Layout: 15 columns × 7 rows, 8px spacing between tiles
+    // Rows 0-1: Tier 1 (The Wild) base + variant
+    // Rows 2-3: Tier 2 (The Ruins) base + variant
+    // Rows 4-5: Tier 3 (Devine Hell) base + variant
+    // Row 6: River, River variant, Road, Road variant
+    this.load.spritesheet("tile-spreadsheet", "assets/sprites/tiles/tile-spreadsheet.png", {
+      frameWidth: 8,
+      frameHeight: 8,
+      spacing: 8,
+    });
+
+    // Zone-specific floor tiles
+    this.load.image("tile-nexus", "assets/sprites/tiles/Nexus.png");
+    this.load.image("tile-vault", "assets/sprites/tiles/Vault.png");
+    this.load.image("tile-infernalpit", "assets/sprites/tiles/InfernalPit.png");
+    this.load.image("tile-voidsanctum", "assets/sprites/tiles/VoidSanctum.png");
 
     // Tileset spritesheets (multi-tile, loaded from Tiled exports)
     this.load.image("tileset-nexus", "assets/sprites/tiles/NexusTileset.png");
@@ -111,58 +88,28 @@ export class BootScene extends Phaser.Scene {
     // Death gravestone sprite
     this.load.image("deco-gravestone", "assets/sprites/decorations/scenery_gravestone.png");
 
-    // Item sprites (12x12 pixel art) — generic fallbacks
+    // Item sprites (12x12 pixel art) — generic fallbacks (not in spreadsheet)
     this.load.image("item-sword", "assets/sprites/items/sword.png");
     this.load.image("item-bow", "assets/sprites/items/bow.png");
     this.load.image("item-wand", "assets/sprites/items/wand.png");
-
-    // Per-tier weapon sprites (8x8 pixel art)
-    const weaponTypes: [string, string][] = [["sword", "swords"], ["bow", "bows"], ["wand", "wands"]];
-    for (const [type, folder] of weaponTypes) {
-      for (let t = 1; t <= 12; t++) {
-        this.load.image(`item-${type}-t${t}`, `assets/sprites/items/weapons/${folder}/${folder}_t${t}.png`);
-      }
-    }
-    // UT sword sprite
-    this.load.image("item-ut-sword", "assets/sprites/items/weapons/swords/ut_sword.png");
-
-    // Per-tier armor sprites (8x8 pixel art)
-    const armorTypes: [string, string, string][] = [
-      ["heavy-armor", "heavy-armor", "heavy-armors"],
-      ["light-armor", "light-armor", "light-armors"],
-      ["robe", "robe", "robes"],
-    ];
-    for (const [key, folder, file] of armorTypes) {
-      for (let t = 1; t <= 12; t++) {
-        this.load.image(`item-${key}-t${t}`, `assets/sprites/items/armors/${folder}/${file}_t${t}.png`);
-      }
-    }
-
-    // Per-tier ring sprites (8x8 pixel art)
-    for (let t = 1; t <= 12; t++) {
-      this.load.image(`item-ring-t${t}`, `assets/sprites/items/rings/rings_t${t}.png`);
-    }
-
-    this.load.image("item-quiver", "assets/sprites/items/quiver.png");
-    this.load.image("item-helm", "assets/sprites/items/helm.png");
-    this.load.image("item-relic", "assets/sprites/items/relic.png");
     this.load.image("item-heavy-armor", "assets/sprites/items/heavy_armor.png");
     this.load.image("item-light-armor", "assets/sprites/items/light_armor.png");
     this.load.image("item-mantle", "assets/sprites/items/mantle.png");
-    this.load.image("item-ring", "assets/sprites/items/ring.png");
 
-    // Consumable & crafting orb sprites
-    this.load.image("item-portal-gem", "assets/sprites/items/consumables/portal_gem.png");
-    this.load.image("item-blank-orb", "assets/sprites/items/consumables/blank_orb.png");
-    this.load.image("item-ember-orb", "assets/sprites/items/consumables/ember_orb.png");
-    this.load.image("item-shard-orb", "assets/sprites/items/consumables/shard_orb.png");
-    this.load.image("item-chaos-orb", "assets/sprites/items/consumables/chaos_orb.png");
-    this.load.image("item-flux-orb", "assets/sprites/items/consumables/flux_orb.png");
-    this.load.image("item-void-orb", "assets/sprites/items/consumables/void_orb.png");
-    this.load.image("item-prism-orb", "assets/sprites/items/consumables/prism_orb.png");
-    this.load.image("item-forge-orb", "assets/sprites/items/consumables/forge_orb.png");
-    this.load.image("item-calibrate-orb", "assets/sprites/items/consumables/calibrate_orb.png");
-    this.load.image("item-divine-orb", "assets/sprites/items/consumables/divine_forge_orb.png");
+    // Item spritesheet (8x8 pixel art) — all tiered items + consumables
+    // Layout: 13 columns × 11 rows, 8px spacing between tiles
+    // Row 0: Swords t1-t12, UT sword
+    // Row 1: Bows t1-t12
+    // Row 2: Wands t1-t12
+    // Row 3: Heavy armor t1-t12
+    // Row 4: Light armor t1-t12
+    // Row 5: Robes t1-t12
+    // Row 6: Rings t1-t12
+    // Row 7: Quivers
+    // Row 8: Helms
+    // Row 9: Relics
+    // Row 10: Consumables (portal gem, blank orb, ember, shard, chaos, flux, void, prism, forge, calibrate, divine)
+    this.load.image("items-spreadsheet", "assets/sprites/items/items-spreadsheet.png");
 
     // UI icons — per-tier stat icons for open stats
     for (let t = 1; t <= 6; t++) {
@@ -171,7 +118,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ut-stat-icon", "assets/sprites/UI/stat_icons/ut_stat_icon_0.png");
 
     // Portal sprites
-    this.load.image("portal-the-wild", "assets/sprites/decorations/portals/the_wild_portal.png");
+    this.load.image("portal-the-wild", "assets/sprites/decorations/portals/realm/the-wild_portal.png");
+    this.load.image("portal-the-ruins", "assets/sprites/decorations/portals/realm/the-ruin_portal.png");
+    this.load.image("portal-devine-hell", "assets/sprites/decorations/portals/realm/devine-hell_portal.png");
     this.load.image("portal-infernal-pit", "assets/sprites/decorations/portals/infernal_pit_portal.png");
     this.load.image("portal-void-sanctum", "assets/sprites/decorations/portals/void_sanctum_portal.png");
     this.load.image("portal-vault", "assets/sprites/decorations/portals/vault_portal.png");
@@ -208,6 +157,9 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-btn-pressed", "assets/sprites/UI/buttons/ui-btn-pressed.png");
     this.load.image("ui-btn-close", "assets/sprites/UI/buttons/ui-btn-close.png");
     this.load.image("ui-btn-statpanel", "assets/sprites/UI/buttons/ui-btn-statpanel.png");
+    this.load.image("ui-btn-social", "assets/sprites/UI/buttons/ui-btn-social.png");
+    this.load.image("ui-btn-addfriend", "assets/sprites/UI/buttons/ui-btn-addfriend.png");
+    this.load.image("ui-btn-dm", "assets/sprites/UI/buttons/ui-btn-dm.png");
 
     // UI sprites — minimap icons (3×3)
     this.load.image("ui-icon-player", "assets/sprites/UI/icons/ui-icon-player.png");

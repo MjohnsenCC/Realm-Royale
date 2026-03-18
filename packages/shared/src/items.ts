@@ -1285,136 +1285,306 @@ export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
 
 /** Per-enemy loot tables. Every enemy has its own entry. */
 export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
-  // ===== SHORE (Tier 1) — no drops =====
+  // =====================================================================
+  // REALM TIER 1: THE WILD (T1-T4 drops)
+  // =====================================================================
+
+  // ===== SHORE (T1) — no drops =====
   [EnemyType.HermitCrab]: { entries: [] },
   [EnemyType.Frog]: { entries: [] },
   [EnemyType.Sandpiper]: { entries: [] },
   [EnemyType.Jellyfish]: { entries: [] },
   [EnemyType.CoconutCrab]: { entries: [] },
 
-  // ===== LOWLANDS (Tier 2) — 12.5% tier 2-3 equipment + consumables =====
+  // ===== LOWLANDS (T1) — T1-2 equipment =====
   [EnemyType.Wolf]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.Rattlesnake]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BogLurker]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SwampToad]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.ThornBush]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DesertScorpion]: {
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BriarBeast]: {
+    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BriarImp]: {
+    entries: [makeEquipmentTierGroup(0.04, 1, 2), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // ===== MIDLANDS (T1) — T2-3 equipment =====
+  [EnemyType.ForestGuardian]: {
     entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
   },
-  [EnemyType.BriarBeast]: { // Pack leader — full drops
+  [EnemyType.DustDevil]: {
     entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
   },
-  [EnemyType.BriarImp]: { // Pack minion — reduced drops
+  [EnemyType.JungleStalker]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.StoneGolem]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.VenomSpitter]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SandWraith]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BroodMother]: {
+    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.Broodling]: {
     entries: [makeEquipmentTierGroup(0.04, 2, 3), ...MINION_CONSUMABLE_ENTRIES],
   },
 
-  // ===== MIDLANDS (Tier 3) — 12.5% tier 4-5 equipment + consumables =====
-  [EnemyType.ForestGuardian]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.DustDevil]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.JungleStalker]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.StoneGolem]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.VenomSpitter]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.SandWraith]: {
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.BroodMother]: { // Pack leader — full drops
-    entries: [makeEquipmentTierGroup(0.125, 4, 5), ...CONSUMABLE_ENTRIES],
-  },
-  [EnemyType.Broodling]: { // Pack minion — reduced drops
-    entries: [makeEquipmentTierGroup(0.04, 4, 5), ...MINION_CONSUMABLE_ENTRIES],
-  },
-
-  // ===== HIGHLANDS (Tier 4) — 12.5% tier 6-7 equipment + consumables =====
+  // ===== HIGHLANDS (T1) — T3-4 equipment =====
   [EnemyType.FrostWarden]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.CliffDrake]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.StormElemental]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.IceWraith]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.ThunderHawk]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.MountainTroll]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
-  [EnemyType.FrostMatriarch]: { // Pack leader — full drops
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  [EnemyType.FrostMatriarch]: {
+    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
   },
-  [EnemyType.FrostSprite]: { // Pack minion — reduced drops
-    entries: [makeEquipmentTierGroup(0.04, 6, 7), ...MINION_CONSUMABLE_ENTRIES],
+  [EnemyType.FrostSprite]: {
+    entries: [makeEquipmentTierGroup(0.04, 3, 4), ...MINION_CONSUMABLE_ENTRIES],
   },
 
-  // ===== GODLANDS (Tier 5) — 7.5% tier 8-9 equipment, 3.75% orb + consumables =====
+  // ===== GODLANDS (T1) — T3-4 equipment + orbs =====
   [EnemyType.FallenSeraph]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.VoidWalker]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.AncientTitan]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.AbyssalEye]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.ChaosSpawn]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.DoomPriest]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 3, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
 
-  // ===== DUNGEON: The Infernal Pit — Godlands-level drops =====
+  // =====================================================================
+  // REALM TIER 2: THE RUINS (T5-T8 drops)
+  // =====================================================================
+
+  // Shore (T2 realm) — no drops
+  [EnemyType.RuinCrawler]: { entries: [] },
+  [EnemyType.AshScarab]: { entries: [] },
+  [EnemyType.DustWraith]: { entries: [] },
+
+  // Lowlands (T2 realm) — T5-6
+  [EnemyType.CursedArcher]: {
+    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.RuinedGolem]: {
+    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BlightedVine]: {
+    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.PlagueBrood]: {
+    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.PlagueRat]: {
+    entries: [makeEquipmentTierGroup(0.04, 5, 6), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Midlands (T2 realm) — T6-7
+  [EnemyType.TombGuard]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SandPhantom]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.CursedObelisk]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.CursedMatron]: {
+    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.CursedSpawn]: {
+    entries: [makeEquipmentTierGroup(0.04, 6, 7), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Highlands (T2 realm) — T7-8
+  [EnemyType.ObsidianSentinel]: {
+    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.StormCaller]: {
+    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.AshDrake]: {
+    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.AshMatriarch]: {
+    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.AshSprite]: {
+    entries: [makeEquipmentTierGroup(0.04, 7, 8), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Godlands (T2 realm) — T7-8 + orbs
+  [EnemyType.RuinLord]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 7, 8),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.VoidHerald]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 7, 8),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.ForgottenTitan]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 7, 8),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+
+  // =====================================================================
+  // REALM TIER 3: DEVINE HELL (T9-T12 drops)
+  // =====================================================================
+
+  // Shore (T3 realm) — no drops
+  [EnemyType.HellCrab]: { entries: [] },
+  [EnemyType.MagmaSlug]: { entries: [] },
+  [EnemyType.EmberWisp]: { entries: [] },
+
+  // Lowlands (T3 realm) — T9-10
+  [EnemyType.DemonHound]: {
+    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.HellfireImp]: {
+    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.BrimstoneGolem]: {
+    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DemonBroodmother]: {
+    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DemonWhelp]: {
+    entries: [makeEquipmentTierGroup(0.04, 9, 10), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Midlands (T3 realm) — T10-11
+  [EnemyType.InfernalKnight]: {
+    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.LavaWyrm]: {
+    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SoulReaper]: {
+    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.SoulHarvester]: {
+    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.LostSoul]: {
+    entries: [makeEquipmentTierGroup(0.04, 10, 11), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Highlands (T3 realm) — T11-12
+  [EnemyType.AbyssalLord]: {
+    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.HellfireDrake]: {
+    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DoomSentinel]: {
+    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DoomMatriarch]: {
+    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.DoomSprite]: {
+    entries: [makeEquipmentTierGroup(0.04, 11, 12), ...MINION_CONSUMABLE_ENTRIES],
+  },
+
+  // Godlands (T3 realm) — T11-12 + orbs
+  [EnemyType.ArchDemon]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 11, 12),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.VoidEmperor]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 11, 12),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+  [EnemyType.WorldEnder]: {
+    entries: [
+      makeEquipmentTierGroup(0.075, 11, 12),
+      { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
+      ...CONSUMABLE_ENTRIES,
+    ],
+  },
+
+  // ===== DUNGEON: The Infernal Pit — Godlands-level drops (unchanged) =====
   [EnemyType.InfernalHound]: {
     entries: [
       makeEquipmentTierGroup(0.075, 8, 9),

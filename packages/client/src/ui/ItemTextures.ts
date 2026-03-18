@@ -9,6 +9,59 @@ const ITEM_SOURCE_SIZE = 12;
 const originalSources = new Map<string, HTMLImageElement | HTMLCanvasElement>();
 
 /**
+ * Maps item sprite keys to [col, row] positions in items-spreadsheet.png.
+ * Spreadsheet layout: 13 columns × 11 rows, 8px tiles with 8px spacing (stride = 16px).
+ */
+const ITEM_SHEET_POSITIONS: Record<string, [number, number]> = {};
+
+// Row 0: Swords t1-t12 + UT sword
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-sword-t${t}`] = [t - 1, 0];
+ITEM_SHEET_POSITIONS["item-ut-sword"] = [12, 0];
+
+// Row 1: Bows t1-t12
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-bow-t${t}`] = [t - 1, 1];
+
+// Row 2: Wands t1-t12
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-wand-t${t}`] = [t - 1, 2];
+
+// Row 3: Heavy armor t1-t12
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-heavy-armor-t${t}`] = [t - 1, 3];
+
+// Row 4: Light armor t1-t12
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-light-armor-t${t}`] = [t - 1, 4];
+
+// Row 5: Robes t1-t12
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-robe-t${t}`] = [t - 1, 5];
+
+// Row 6: Rings t1-t12 + UT
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-ring-t${t}`] = [t - 1, 6];
+ITEM_SHEET_POSITIONS["item-ut-ring"] = [12, 6];
+ITEM_SHEET_POSITIONS["item-ring"] = [0, 6]; // fallback → t1
+
+// Row 7: Quivers t1-t12 + UT
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-quiver-t${t}`] = [t - 1, 7];
+ITEM_SHEET_POSITIONS["item-ut-quiver"] = [12, 7];
+ITEM_SHEET_POSITIONS["item-quiver"] = [0, 7]; // fallback → t1
+
+// Row 8: Helms t1-t12 + UT
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-helm-t${t}`] = [t - 1, 8];
+ITEM_SHEET_POSITIONS["item-ut-helm"] = [12, 8];
+ITEM_SHEET_POSITIONS["item-helm"] = [0, 8]; // fallback → t1
+
+// Row 9: Relics t1-t12 + UT
+for (let t = 1; t <= 12; t++) ITEM_SHEET_POSITIONS[`item-relic-t${t}`] = [t - 1, 9];
+ITEM_SHEET_POSITIONS["item-ut-relic"] = [12, 9];
+ITEM_SHEET_POSITIONS["item-relic"] = [0, 9]; // fallback → t1
+
+// Row 10: Consumables
+const CONSUMABLE_KEYS = [
+  "item-portal-gem", "item-blank-orb", "item-ember-orb", "item-shard-orb",
+  "item-chaos-orb", "item-flux-orb", "item-void-orb", "item-prism-orb",
+  "item-forge-orb", "item-calibrate-orb", "item-divine-orb",
+];
+for (let i = 0; i < CONSUMABLE_KEYS.length; i++) ITEM_SHEET_POSITIONS[CONSUMABLE_KEYS[i]] = [i, 10];
+
+/**
  * Ratio of item sprite display size to slot size.
  * 0.85 = 85% fill, leaving ~7.5% padding on each side.
  */
@@ -38,6 +91,13 @@ const ARMOR_SUBTYPE_NAMES: Record<number, string> = {
   0: "heavy-armor",  // ArmorSubtype.Heavy
   1: "light-armor",  // ArmorSubtype.Light
   2: "robe",         // ArmorSubtype.Mantle
+};
+
+/** Maps ability subtype index to name for per-tier sprite keys. */
+const ABILITY_SUBTYPE_NAMES: Record<number, string> = {
+  0: "quiver",  // AbilitySubtype.Quiver
+  1: "helm",    // AbilitySubtype.Helm
+  2: "relic",   // AbilitySubtype.Relic
 };
 
 /** Maps "category-subtype" to the loaded sprite texture key. */
@@ -87,6 +147,16 @@ export function getItemSpriteKey(
     return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
   }
 
+  // Abilities: per-tier sprites
+  if (category === ItemCategory.Ability) {
+    const abilityName = ABILITY_SUBTYPE_NAMES[subtype];
+    if (abilityName) {
+      if (isUT) return `item-ut-${abilityName}`;
+      if (tier && tier >= 1 && tier <= 12) return `item-${abilityName}-t${tier}`;
+    }
+    return ITEM_SPRITE_MAP[`${category}-${subtype}`] ?? null;
+  }
+
   // Armors: per-tier sprites
   if (category === ItemCategory.Armor) {
     const armorName = ARMOR_SUBTYPE_NAMES[subtype];
@@ -96,6 +166,7 @@ export function getItemSpriteKey(
 
   // Rings: per-tier sprites
   if (category === ItemCategory.Ring) {
+    if (isUT) return "item-ut-ring";
     if (tier && tier >= 1 && tier <= 12) return `item-ring-t${tier}`;
     return "item-ring";
   }
@@ -112,12 +183,18 @@ function getAllKeys(): string[] {
     for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
     keys.add(`item-ut-${name}`);
   }
+  // Per-tier ability keys
+  for (const name of Object.values(ABILITY_SUBTYPE_NAMES)) {
+    for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
+    keys.add(`item-ut-${name}`);
+  }
   // Per-tier armor keys
   for (const name of Object.values(ARMOR_SUBTYPE_NAMES)) {
     for (let t = 1; t <= 12; t++) keys.add(`item-${name}-t${t}`);
   }
   // Per-tier ring keys
   for (let t = 1; t <= 12; t++) keys.add(`item-ring-t${t}`);
+  keys.add("item-ut-ring");
   return Array.from(keys);
 }
 
@@ -148,13 +225,41 @@ export function generateItemTextures(scene: Phaser.Scene, slotSize?: number): vo
 function upscaleAndOutlineItem(scene: Phaser.Scene, key: string): void {
   // Use original source (first call stores it, subsequent calls reuse it)
   let src: HTMLImageElement | HTMLCanvasElement;
+  let srcX = 0, srcY = 0, srcW = 0, srcH = 0;
+  let useRegion = false;
+
   if (originalSources.has(key)) {
     src = originalSources.get(key)!;
   } else {
-    const tex = scene.textures.get(key);
-    if (!tex || tex.key === "__MISSING") return;
-    src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-    originalSources.set(key, src);
+    const sheetPos = ITEM_SHEET_POSITIONS[key];
+    if (sheetPos) {
+      // Extract from items-spreadsheet.png
+      const sheetTex = scene.textures.get("items-spreadsheet");
+      if (!sheetTex || sheetTex.key === "__MISSING") return;
+      src = sheetTex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const SPRITE_SIZE = 8;
+      const SPRITE_STRIDE = 16; // 8px tile + 8px spacing
+      srcX = sheetPos[0] * SPRITE_STRIDE;
+      srcY = sheetPos[1] * SPRITE_STRIDE;
+      srcW = SPRITE_SIZE;
+      srcH = SPRITE_SIZE;
+      useRegion = true;
+      // Cache an extracted 8x8 canvas as the original source for regeneration
+      const extractCanvas = document.createElement("canvas");
+      extractCanvas.width = SPRITE_SIZE;
+      extractCanvas.height = SPRITE_SIZE;
+      const ectx = extractCanvas.getContext("2d")!;
+      ectx.drawImage(src, srcX, srcY, SPRITE_SIZE, SPRITE_SIZE, 0, 0, SPRITE_SIZE, SPRITE_SIZE);
+      originalSources.set(key, extractCanvas);
+      src = extractCanvas;
+      useRegion = false;
+    } else {
+      // Individual texture (fallback sprites)
+      const tex = scene.textures.get(key);
+      if (!tex || tex.key === "__MISSING") return;
+      src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      originalSources.set(key, src);
+    }
   }
 
   const size = currentOutlinedSize;
@@ -167,7 +272,11 @@ function upscaleAndOutlineItem(scene: Phaser.Scene, key: string): void {
 
   // Nearest-neighbor upscale: draw source at offset (1,1) filling the art area
   ctx.imageSmoothingEnabled = false;
-  ctx.drawImage(src, 1, 1, artSize, artSize);
+  if (useRegion) {
+    ctx.drawImage(src, srcX, srcY, srcW, srcH, 1, 1, artSize, artSize);
+  } else {
+    ctx.drawImage(src, 1, 1, artSize, artSize);
+  }
 
   addOutlineToImageData(ctx, size, size);
 

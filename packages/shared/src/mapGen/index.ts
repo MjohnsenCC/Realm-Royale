@@ -3,7 +3,7 @@
  * Runs the full 8-stage pipeline and produces a RealmMapData.
  */
 
-import { RealmBiome } from "../types";
+import { RealmBiome, RealmTier } from "../types";
 import { HOSTILE_TILES, HOSTILE_TILE_SIZE } from "../constants";
 import type { RealmMapData, SpawnAnchor } from "../realmMap";
 import { buildDecorationCollision } from "../realmMap";
@@ -15,7 +15,7 @@ import { assignLandWater } from "./islandShape";
 import { assignElevation } from "./elevation";
 import { generateRivers } from "./rivers";
 import { assignMoisture } from "./moisture";
-import { assignBiomes } from "./biomes";
+import { assignBiomes, assignBiomesForTier } from "./biomes";
 import { rasterize } from "./rasterizer";
 import { placeDecorations } from "./decorations";
 import { placeSetpieces } from "./setpieces";
@@ -68,19 +68,26 @@ export function generateRealmMap(
   console.log("[MapGen] Stage 6: Calculating moisture...");
   assignMoisture(polygons, corners, config);
 
-  // Stage 7: Biomes
-  console.log("[MapGen] Stage 7: Assigning biomes...");
-  const polygonBiomes = assignBiomes(polygons);
+  // Stage 7: Biomes (all 3 tiers)
+  console.log("[MapGen] Stage 7: Assigning biomes for all realm tiers...");
+  const polygonBiomesTier1 = assignBiomesForTier(polygons, RealmTier.Wild);
+  const polygonBiomesTier2 = assignBiomesForTier(polygons, RealmTier.Ruins);
+  const polygonBiomesTier3 = assignBiomesForTier(polygons, RealmTier.DevineHell);
 
-  // Stage 8: Rasterize
+  // Stage 8: Rasterize (tier 1 is the primary rasterization)
   console.log("[MapGen] Stage 8: Rasterizing to tile grid...");
   const rasterized = rasterize(
     polygons,
     corners,
     edges,
-    polygonBiomes,
+    polygonBiomesTier1,
     config.mapSize
   );
+
+  // Rasterize tier 2 and 3 biomes (only need biome arrays)
+  console.log("[MapGen] Rasterizing tier 2/3 biome layers...");
+  const rasterizedTier2 = rasterize(polygons, corners, edges, polygonBiomesTier2, config.mapSize);
+  const rasterizedTier3 = rasterize(polygons, corners, edges, polygonBiomesTier3, config.mapSize);
 
   // Place setpieces
   console.log("[MapGen] Placing setpieces...");
@@ -113,7 +120,7 @@ export function generateRealmMap(
   console.log(`[MapGen]   Placed ${decorations.length} decorations`);
 
   // Find spawn points (beach polygons suitable for player spawning)
-  const spawnPoints = findSpawnPoints(polygons, polygonBiomes);
+  const spawnPoints = findSpawnPoints(polygons, polygonBiomesTier1);
   console.log(`[MapGen]   Found ${spawnPoints.length} spawn points`);
 
   console.log("[MapGen] Map generation complete!");
@@ -125,6 +132,7 @@ export function generateRealmMap(
     height: config.mapSize,
     tileSize: HOSTILE_TILE_SIZE,
     biomes: rasterized.biomes,
+    biomesByTier: [rasterized.biomes, rasterizedTier2.biomes, rasterizedTier3.biomes],
     elevation: rasterized.elevation,
     moisture: rasterized.moisture,
     difficulty: rasterized.difficulty,
@@ -152,7 +160,7 @@ function findSpawnPoints(
     (p) =>
       p.isCoast &&
       !p.isWater &&
-      polygonBiomes[p.index] === RealmBiome.Beach
+      polygonBiomes[p.index] === RealmBiome.WildShore
   );
 
   // Sort by distance to center (prefer centrally-located beaches)

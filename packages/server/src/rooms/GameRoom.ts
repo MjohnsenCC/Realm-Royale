@@ -108,17 +108,24 @@ import {
   CLASS_EQUIPMENT_MAP,
   getItemTier,
   getTierColor,
+  ENEMY_SYNC_RADIUS,
+  REALM_TIER_CONFIG,
+  getPlayerLevel,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
 import { getAccountVault, saveAccountVault } from "../db/accounts";
+import { getAccountFriends, addAccountFriend, removeAccountFriend } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
 
 // How often (in ticks) to force-touch enemy positions for filterChildren re-evaluation.
 const FILTER_REFRESH_INTERVAL = 2; // every 2 ticks (100ms at 20Hz)
+
+// Only nudge enemies within this radius of any player (matches sync radius).
+const NUDGE_RADIUS_SQ = ENEMY_SYNC_RADIUS * ENEMY_SYNC_RADIUS;
 
 /** Recalculate all player stats from level + equipment. */
 function recalcPlayerStats(player: Player): void {
@@ -233,11 +240,24 @@ export class GameRoom extends Room<GameState> {
       if (player.zone === "nexus") {
         const nexusPositions = getNexusPortalPositions();
         const realmPortals = nexusPositions.wildPortals.map((p, i) => ({
-          x: p.x, y: p.y, realmId: String(i + 1),
+          x: p.x, y: p.y, realmId: String(i + 1), tier: i + 1,
         }));
         for (const rp of realmPortals) {
           const dist = distanceBetween(player.x, player.y, rp.x, rp.y);
           if (dist < PORTAL_RADIUS + PLAYER_RADIUS) {
+            // Level gating
+            const tierConfig = REALM_TIER_CONFIG[rp.tier];
+            if (tierConfig) {
+              const playerLevel = getPlayerLevel(player.xp);
+              if (playerLevel < tierConfig.requiredLevel) {
+                client.send(ServerMessage.ChatMessage, {
+                  channel: "local" as ChatChannel,
+                  sender: "",
+                  message: `You need level ${tierConfig.requiredLevel} to enter ${tierConfig.name}. You are level ${playerLevel}.`,
+                });
+                return;
+              }
+            }
             player.invulnerable = true;
             player.invulnerableSince = Date.now();
             player.zone = `hostile:${rp.realmId}`;
@@ -1091,6 +1111,40 @@ export class GameRoom extends Room<GameState> {
       }
     );
 
+    // Add friend
+    this.onMessage(
+      ClientMessage.AddFriend,
+      async (client, data: { name: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.accountId) return;
+        const name = typeof data.name === "string" ? data.name.trim() : "";
+        if (name.length === 0 || name === player.name) return;
+        try {
+          await addAccountFriend(player.accountId, name);
+          client.send(ServerMessage.FriendAdded, { name });
+        } catch (err) {
+          console.error("Failed to add friend:", err);
+        }
+      },
+    );
+
+    // Remove friend
+    this.onMessage(
+      ClientMessage.RemoveFriend,
+      async (client, data: { name: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.accountId) return;
+        const name = typeof data.name === "string" ? data.name.trim() : "";
+        if (name.length === 0) return;
+        try {
+          await removeAccountFriend(player.accountId, name);
+          client.send(ServerMessage.FriendRemoved, { name });
+        } catch (err) {
+          console.error("Failed to remove friend:", err);
+        }
+      },
+    );
+
     // Ping/pong for latency measurement
     this.onMessage(ClientMessage.Ping, (client, data: { t: number }) => {
       client.send(ServerMessage.Pong, { t: data.t });
@@ -1185,6 +1239,18 @@ export class GameRoom extends Room<GameState> {
     this.state.players.set(client.sessionId, player);
     this.state.playerCount = this.state.players.size;
     console.log(`${client.sessionId} joined as "${player.name}" (${player.characterId ? "auth" : "guest"})`);
+
+    // Send friends list for authenticated players
+    if (player.accountId) {
+      getAccountFriends(player.accountId)
+        .then((friends) => {
+          client.send(ServerMessage.FriendsList, { friends });
+        })
+        .catch((err) => {
+          console.error("Failed to load friends:", err);
+          client.send(ServerMessage.FriendsList, { friends: [] });
+        });
+    }
   }
 
   async onLeave(client: Client, _consented: boolean) {
@@ -2101,12 +2167,19 @@ export class GameRoom extends Room<GameState> {
       this.tickCount = 0;
       this.filterFlip = !this.filterFlip;
       const nudge = this.filterFlip ? 0.001 : -0.001;
+      // Only nudge enemies near a player — with persistent chunks there are
+      // thousands of enemies but only nearby ones need filterChildren updates.
       this.state.enemies.forEach((enemy) => {
-        // Only nudge enemies that haven't moved recently — actively moving
-        // enemies already trigger onChange naturally from AI position updates
-        if (this.globalTick - enemy.lastMovedTick >= FILTER_REFRESH_INTERVAL) {
-          enemy.x += nudge;
-        }
+        if (this.globalTick - enemy.lastMovedTick < FILTER_REFRESH_INTERVAL) return;
+        let near = false;
+        this.state.players.forEach((p) => {
+          if (near) return;
+          if (!p.alive || p.zone !== enemy.zone) return;
+          const dx = p.x - enemy.x;
+          const dy = p.y - enemy.y;
+          if (dx * dx + dy * dy <= NUDGE_RADIUS_SQ) near = true;
+        });
+        if (near) enemy.x += nudge;
       });
       this.state.lootBags.forEach((bag) => {
         bag.x += nudge;

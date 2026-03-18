@@ -98,7 +98,7 @@ export function getNexusPortalPositions(): {
   const center = { x: (loadNexus().tiled.width / 2) * TILE_SIZE, y: (loadNexus().tiled.height / 2) * TILE_SIZE };
 
   return {
-    wildPortals: wildPortals.length >= 2 ? wildPortals : [center, center],
+    wildPortals: wildPortals.length >= 3 ? wildPortals : wildPortals.length >= 2 ? [...wildPortals, center] : [center, center, center],
     vaultPortal: vaultObj ? { x: vaultObj.x, y: vaultObj.y } : center,
     infernalPitPortal: infernalObj ? { x: infernalObj.x, y: infernalObj.y } : center,
     voidSanctumPortal: voidObj ? { x: voidObj.x, y: voidObj.y } : center,

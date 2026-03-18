@@ -13,7 +13,9 @@ import {
   getRealmMap,
   isPackLeader,
   getPackDef,
-  isHostileZone,
+  getRealmTierFromZone,
+  RealmTier,
+  isWaterBiome,
 } from "@rotmg-lite/shared";
 import type { RealmMapData } from "@rotmg-lite/shared";
 
@@ -21,10 +23,6 @@ import type { RealmMapData } from "@rotmg-lite/shared";
 const CHUNK_SIZE = 100; // 100x100 tile chunks
 const CHUNK_COUNT = Math.ceil(HOSTILE_TILES / CHUNK_SIZE); // 21 chunks per axis
 const CHUNK_PX = CHUNK_SIZE * HOSTILE_TILE_SIZE; // 4000px per chunk
-
-// Lazy activation: only populate chunks within this range of a player
-const ACTIVATION_RANGE = 2500; // px
-const DEACTIVATION_RANGE = 4000; // px -- despawn enemies beyond this
 
 // Off-screen spawn minimum distance (must exceed half-diagonal of largest expected viewport)
 const MIN_SPAWN_DISTANCE = 1000; // 25 tiles — safe for 1920x1080+ monitors
@@ -52,6 +50,7 @@ interface ChunkRespawnEntry {
 // Per-realm mutable state
 interface RealmState {
   realmZone: string; // e.g. "hostile:1"
+  realmTier: number; // RealmTier value (1, 2, or 3)
   chunks: ChunkData[][];
   activeChunks: Set<string>;
   respawnQueue: ChunkRespawnEntry[];
@@ -124,9 +123,6 @@ export class BiomeSpawnSystem {
   }
 
   update(deltaTime: number, state: GameState): void {
-    // Update every realm, not just those with players.
-    // Chunk activation/deactivation still depends on player proximity,
-    // so empty realms simply have no active chunks (low cost).
     for (const [, realm] of this.realms) {
       this.updateRealm(realm, deltaTime, state);
     }
@@ -135,6 +131,7 @@ export class BiomeSpawnSystem {
   private createRealmState(realmZone: string): RealmState {
     return {
       realmZone,
+      realmTier: getRealmTierFromZone(realmZone),
       chunks: [],
       activeChunks: new Set(),
       respawnQueue: [],
@@ -144,16 +141,14 @@ export class BiomeSpawnSystem {
   }
 
   private updateRealm(realm: RealmState, deltaTime: number, state: GameState): void {
-    // Initial chunk index build
+    // Build chunk index + populate all chunks once on first update
     if (!realm.initialized) {
       this.buildChunkIndex(realm);
+      this.activateAllChunks(realm, state);
       realm.initialized = true;
     }
 
-    // Lazy chunk activation/deactivation
-    this.updateChunkActivation(realm, state);
-
-    // Process respawn queue
+    // Process respawn queue (enemies respawn on timers after being killed)
     for (let i = realm.respawnQueue.length - 1; i >= 0; i--) {
       realm.respawnQueue[i].timer -= deltaTime;
       if (realm.respawnQueue[i].timer <= 0) {
@@ -227,11 +222,14 @@ export class BiomeSpawnSystem {
     const map = getRealmMap();
     if (!map) return;
 
+    // Use the biome array for this realm's tier
+    const biomeArray = map.biomesByTier?.[realm.realmTier - 1] ?? map.biomes;
+
     realm.chunks = [];
     for (let cy = 0; cy < CHUNK_COUNT; cy++) {
       realm.chunks[cy] = [];
       for (let cx = 0; cx < CHUNK_COUNT; cx++) {
-        realm.chunks[cy][cx] = this.buildSingleChunk(cx, cy, map);
+        realm.chunks[cy][cx] = this.buildSingleChunk(cx, cy, map, biomeArray);
       }
     }
   }
@@ -239,7 +237,8 @@ export class BiomeSpawnSystem {
   private buildSingleChunk(
     cx: number,
     cy: number,
-    map: RealmMapData
+    map: RealmMapData,
+    biomeArray: Uint8Array
   ): ChunkData {
     const startTX = cx * CHUNK_SIZE;
     const startTY = cy * CHUNK_SIZE;
@@ -254,9 +253,9 @@ export class BiomeSpawnSystem {
     for (let ty = startTY; ty < endTY; ty++) {
       for (let tx = startTX; tx < endTX; tx++) {
         const idx = ty * map.width + tx;
-        const biome = map.biomes[idx];
+        const biome = biomeArray[idx];
         // Skip water tiles
-        if (biome === 0 || biome === 1 || biome === 15) continue;
+        if (isWaterBiome(biome)) continue;
 
         const dz = map.difficulty[idx];
         zoneCounts.set(dz, (zoneCounts.get(dz) ?? 0) + 1);
@@ -334,149 +333,27 @@ export class BiomeSpawnSystem {
     return false;
   }
 
-  // --- Lazy chunk activation ---
+  // --- Persistent chunk activation ---
 
-  private updateChunkActivation(realm: RealmState, state: GameState): void {
-    const playerPositions: { x: number; y: number }[] = [];
-    state.players.forEach((p) => {
-      if (p.alive && p.zone === realm.realmZone) {
-        playerPositions.push({ x: p.x, y: p.y });
-      }
-    });
-
+  /** Activate and populate every chunk in the realm at once. Chunks are never deactivated. */
+  private activateAllChunks(realm: RealmState, state: GameState): void {
     const map = getRealmMap();
     if (!map) return;
 
-    // Determine which chunks should be active
-    const shouldBeActive = new Set<string>();
-    for (const pos of playerPositions) {
-      const centerCX = Math.floor(pos.x / CHUNK_PX);
-      const centerCY = Math.floor(pos.y / CHUNK_PX);
-      // Check surrounding chunks within activation range
-      const chunkRadius = Math.ceil(ACTIVATION_RANGE / CHUNK_PX) + 1;
-      for (
-        let dy = -chunkRadius;
-        dy <= chunkRadius;
-        dy++
-      ) {
-        for (
-          let dx = -chunkRadius;
-          dx <= chunkRadius;
-          dx++
-        ) {
-          const cx = centerCX + dx;
-          const cy = centerCY + dy;
-          if (
-            cx < 0 ||
-            cx >= CHUNK_COUNT ||
-            cy < 0 ||
-            cy >= CHUNK_COUNT
-          )
-            continue;
+    for (let cy = 0; cy < CHUNK_COUNT; cy++) {
+      for (let cx = 0; cx < CHUNK_COUNT; cx++) {
+        const key = `${cx},${cy}`;
+        if (realm.activeChunks.has(key)) continue;
 
-          // Check actual distance from chunk center to nearest player
-          const chunkCenterX = (cx + 0.5) * CHUNK_PX;
-          const chunkCenterY = (cy + 0.5) * CHUNK_PX;
-          let nearEnough = false;
-          for (const p of playerPositions) {
-            if (
-              distanceBetween(chunkCenterX, chunkCenterY, p.x, p.y) <
-              ACTIVATION_RANGE
-            ) {
-              nearEnough = true;
-              break;
-            }
-          }
-          if (nearEnough) {
-            shouldBeActive.add(`${cx},${cy}`);
-          }
-        }
+        realm.activeChunks.add(key);
+        const chunk = realm.chunks[cy]?.[cx];
+        if (!chunk || chunk.targetDensity === 0 || chunk.spawnPositionCount === 0)
+          continue;
+
+        // No players yet at realm init — spawn all enemies immediately (no off-screen filter)
+        this.populateChunk(realm, chunk, state, map, []);
       }
     }
-
-    // Activate new chunks
-    for (const key of shouldBeActive) {
-      if (!realm.activeChunks.has(key)) {
-        this.activateChunk(realm, key, state, map);
-      }
-    }
-
-    // Deactivate distant chunks
-    for (const key of realm.activeChunks) {
-      const [cxs, cys] = key.split(",");
-      const cx = parseInt(cxs);
-      const cy = parseInt(cys);
-      const chunkCenterX = (cx + 0.5) * CHUNK_PX;
-      const chunkCenterY = (cy + 0.5) * CHUNK_PX;
-
-      let anyNear = false;
-      for (const p of playerPositions) {
-        if (
-          distanceBetween(chunkCenterX, chunkCenterY, p.x, p.y) <
-          DEACTIVATION_RANGE
-        ) {
-          anyNear = true;
-          break;
-        }
-      }
-
-      if (!anyNear) {
-        this.deactivateChunk(realm, key, state);
-      }
-    }
-  }
-
-  private activateChunk(
-    realm: RealmState,
-    key: string,
-    state: GameState,
-    map: RealmMapData
-  ): void {
-    realm.activeChunks.add(key);
-    const [cxs, cys] = key.split(",");
-    const cx = parseInt(cxs);
-    const cy = parseInt(cys);
-    const chunk = realm.chunks[cy]?.[cx];
-    if (!chunk || chunk.targetDensity === 0 || chunk.spawnPositionCount === 0)
-      return;
-
-    // Collect player positions to filter out on-screen spawns
-    const playerPositions: { x: number; y: number }[] = [];
-    state.players.forEach((p) => {
-      if (p.alive && p.zone === realm.realmZone) {
-        playerPositions.push({ x: p.x, y: p.y });
-      }
-    });
-
-    this.populateChunk(realm, chunk, state, map, playerPositions);
-  }
-
-  private deactivateChunk(realm: RealmState, key: string, state: GameState): void {
-    realm.activeChunks.delete(key);
-
-    // Remove respawn entries for this chunk
-    const [cxs, cys] = key.split(",");
-    const cx = parseInt(cxs);
-    const cy = parseInt(cys);
-    realm.respawnQueue = realm.respawnQueue.filter(
-      (e) => e.chunkX !== cx || e.chunkY !== cy
-    );
-
-    // Despawn enemies in this chunk
-    const toRemove: string[] = [];
-    for (const [enemyId, chunkKey] of realm.enemyChunkMap) {
-      if (chunkKey === key) {
-        toRemove.push(enemyId);
-      }
-    }
-    for (const enemyId of toRemove) {
-      state.enemies.delete(enemyId);
-      realm.enemyChunkMap.delete(enemyId);
-    }
-
-    // Reset chunk count
-    const chunk = realm.chunks[cy]?.[cx];
-    if (chunk) chunk.currentCount = 0;
   }
 
   // --- Grid-jitter population ---
@@ -518,11 +395,12 @@ export class BiomeSpawnSystem {
         if (tx < 0 || tx >= HOSTILE_TILES || ty < 0 || ty >= HOSTILE_TILES)
           continue;
 
-        // Check tile is walkable (not water)
+        // Check tile is walkable (not water) — use tier-specific biome array
         const txi = Math.floor(tx);
         const tyi = Math.floor(ty);
-        const biome = map.biomes[tyi * map.width + txi];
-        if (biome === 0 || biome === 1 || biome === 15) continue;
+        const tierBiomes = map.biomesByTier?.[realm.realmTier - 1] ?? map.biomes;
+        const biome = tierBiomes[tyi * map.width + txi];
+        if (isWaterBiome(biome)) continue;
 
         const px = tx * HOSTILE_TILE_SIZE + HOSTILE_TILE_SIZE / 2;
         const py = ty * HOSTILE_TILE_SIZE + HOSTILE_TILE_SIZE / 2;
@@ -601,7 +479,8 @@ export class BiomeSpawnSystem {
     const tx = Math.floor(x / HOSTILE_TILE_SIZE);
     const ty = Math.floor(y / HOSTILE_TILE_SIZE);
     if (tx < 0 || tx >= HOSTILE_TILES || ty < 0 || ty >= HOSTILE_TILES) return;
-    const biome = map.biomes[ty * map.width + tx];
+    const tierBiomes = map.biomesByTier?.[realm.realmTier - 1] ?? map.biomes;
+    const biome = tierBiomes[ty * map.width + tx];
     const zone = map.difficulty[ty * map.width + tx];
 
     // Get candidates with biome transition blending
@@ -611,7 +490,8 @@ export class BiomeSpawnSystem {
       zone,
       biome,
       chunk,
-      map
+      map,
+      realm.realmTier
     );
     if (candidates.length === 0) return;
 
@@ -766,9 +646,10 @@ export class BiomeSpawnSystem {
     zone: number,
     biome: number,
     chunk: ChunkData,
-    map: RealmMapData
+    map: RealmMapData,
+    realmTier: number = RealmTier.Wild
   ): number[] {
-    let candidates = getEnemyTypesForBiomeAndZone(biome, zone);
+    let candidates = getEnemyTypesForBiomeAndZone(biome, zone, realmTier);
 
     // Check nearby tiles for different zones (transition blending, 25-tile radius)
     const blendRadius = 25;
@@ -785,14 +666,16 @@ export class BiomeSpawnSystem {
       const nearbyIdx = cy * map.width + cx;
       const nearbyZone = map.difficulty[nearbyIdx];
       if (nearbyZone !== zone) {
-        const nearbyBiome = map.biomes[nearbyIdx];
-        if (nearbyBiome === 0 || nearbyBiome === 1 || nearbyBiome === 15)
+        const tierBiomes = map.biomesByTier?.[realmTier - 1] ?? map.biomes;
+        const nearbyBiome = tierBiomes[nearbyIdx];
+        if (isWaterBiome(nearbyBiome))
           continue;
         // 33% chance to blend in neighboring zone enemies
         if (Math.random() < 0.33) {
           const nearbyCandidates = getEnemyTypesForBiomeAndZone(
             nearbyBiome,
-            nearbyZone
+            nearbyZone,
+            realmTier
           );
           candidates = [...candidates, ...nearbyCandidates];
         }

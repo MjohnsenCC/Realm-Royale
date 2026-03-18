@@ -8,6 +8,9 @@ import { LootBagSprite } from "../entities/LootBagSprite";
 import { HUD } from "../ui/HUD";
 import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
+import { SocialPanel, NearbyPlayerInfo } from "../ui/SocialPanel";
+import { PlayerTooltip } from "../ui/PlayerTooltip";
+import { isFriend, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved } from "../ui/FriendStore";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
@@ -41,7 +44,6 @@ import {
   getItemSubtype,
   getScaledAbilityStats,
   DUNGEON_VISUALS,
-  REALM_BIOME_VISUALS,
   isHostileZone,
   isVaultZone,
   getZoneInstance,
@@ -81,6 +83,11 @@ import {
   ABILITY_TEMPLATES,
   getItemTier,
   getTierColor,
+  REALM_TIER_CONFIG,
+  getRealmTierFromZone,
+  setActiveRealmTier,
+  getActiveRealmTier,
+  isWaterBiome,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -119,28 +126,74 @@ interface DecodedState {
 }
 
 /**
- * Tileset sprite keys: 36 slots (18 tile types × 2 variants).
- * Index = oldBiomeIndex * 2 + variant (0 or 1).
+ * Tileset frame indices into tile-spreadsheet.png (47 tile types × 2 variants = 94 slots).
+ * Index = tileType * 2 + variant (0 or 1).
+ * tileType 0-44 = biome IDs, 45 = river, 46 = road.
+ *
+ * Spritesheet layout (15 cols × 7 rows, 8px spacing):
+ *   Row 0 (frames 0-14):  Tier 1 base
+ *   Row 1 (frames 15-29): Tier 1 variant
+ *   Row 2 (frames 30-44): Tier 2 base
+ *   Row 3 (frames 45-59): Tier 2 variant
+ *   Row 4 (frames 60-74): Tier 3 base
+ *   Row 5 (frames 75-89): Tier 3 variant
+ *   Row 6 (frames 90-93): River base, River variant, Road base, Road variant
  */
-const TILE_SPRITE_KEYS: string[] = [
-  /* 0  Ocean       */ "tile-ocean",        "tile-ocean",
-  /* 1  ShallowWater*/ "tile-shallowwater", "tile-shallowwater",
-  /* 2  Beach       */ "tile-beach",        "tile-beach-1",
-  /* 3  Marsh       */ "tile-marsh",        "tile-marsh-1",
-  /* 4  Desert      */ "tile-desert",       "tile-desert-1",
-  /* 5  DryPlains   */ "tile-dryplains",    "tile-dryplains-1",
-  /* 6  Grassland   */ "tile-grassland",    "tile-grassland-1",
-  /* 7  Forest      */ "tile-forest",       "tile-forest-1",
-  /* 8  Jungle      */ "tile-jungle",       "tile-jungle-1",
-  /* 9  Shrubland   */ "tile-savanna",      "tile-savanna-1",
-  /* 10 Taiga       */ "tile-forest",       "tile-forest-1",
-  /* 11 DesertCliffs*/ "tile-highland",     "tile-highland-1",
-  /* 12 Tundra      */ "tile-tundra",       "tile-tundra-1",
-  /* 13 Scorched    */ "tile-volcanicridge", "tile-volcanicridge-1",
-  /* 14 Snow        */ "tile-mountainpeak", "tile-mountainpeak-1",
-  /* 15 Lake        */ "tile-lake",         "tile-lake",
-  /* 16 River       */ "tile-shallowwater", "tile-shallowwater",
-  /* 17 Road        */ "tile-dryplains",    "tile-dryplains-1",
+const TILE_SPRITE_FRAMES: number[] = [
+  // ===== TIER 1: THE WILD (biomes 0-14) =====
+  /* 0  WildOcean     */  0,  0,   // no variant
+  /* 1  WildShallows  */  1,  1,   // no variant
+  /* 2  WildShore     */  2, 17,
+  /* 3  WildMeadow    */  3, 18,
+  /* 4  WildMarsh     */  4, 19,
+  /* 5  WildPlains    */  5, 20,
+  /* 6  WildForest    */  6, 21,
+  /* 7  WildJungle    */  7, 22,
+  /* 8  WildDesert    */  8, 23,
+  /* 9  WildTaiga     */  9, 24,
+  /* 10 WildCliffs    */ 10, 25,
+  /* 11 WildShrubland */ 11, 26,
+  /* 12 WildTundra    */ 12, 27,
+  /* 13 WildPeaks     */ 13, 28,
+  /* 14 WildVolcanic  */ 14, 29,
+
+  // ===== TIER 2: THE RUINS (biomes 15-29) =====
+  /* 15 RuinsOcean    */ 30, 30,   // no variant
+  /* 16 RuinsShallows */ 31, 31,   // no variant
+  /* 17 RuinsShore    */ 32, 47,
+  /* 18 RuinsDustlands*/ 33, 48,
+  /* 19 RuinsBog      */ 34, 49,
+  /* 20 RuinsBarrens  */ 35, 50,
+  /* 21 RuinsCatacombs*/ 36, 51,
+  /* 22 RuinsWasteland*/ 37, 52,
+  /* 23 RuinsDesolation*/38, 53,
+  /* 24 RuinsObsidian */ 39, 54,
+  /* 25 RuinsFrostfall*/ 40, 55,
+  /* 26 RuinsAshlands */ 41, 56,
+  /* 27 RuinsShadowlands*/42, 57,
+  /* 28 RuinsDarkSpire*/ 43, 58,
+  /* 29 RuinsVoidEdge */ 44, 59,
+
+  // ===== TIER 3: DEVINE HELL (biomes 30-44) =====
+  /* 30 HellOcean     */ 60, 60,   // no variant
+  /* 31 HellLava      */ 61, 61,   // no variant
+  /* 32 HellScorch    */ 62, 77,
+  /* 33 HellBrimstone */ 63, 78,
+  /* 34 HellCinder    */ 64, 79,
+  /* 35 HellEmberfield*/ 65, 80,
+  /* 36 HellInferno   */ 66, 81,
+  /* 37 HellDemonforge*/ 67, 82,
+  /* 38 HellBloodmire */ 68, 83,
+  /* 39 HellAbyssal   */ 69, 84,
+  /* 40 HellDoomspire */ 70, 85,
+  /* 41 HellSoulfire  */ 71, 86,
+  /* 42 HellVoidmaw   */ 72, 87,
+  /* 43 HellChaosrift */ 73, 88,
+  /* 44 HellAnnihilation*/74, 89,
+
+  // ===== Special tile types (45-46) =====
+  /* 45 River         */ 90, 91,
+  /* 46 Road          */ 92, 93,
 ];
 
 /** Deterministic 0-or-1 hash for tile variant selection. */
@@ -173,6 +226,7 @@ export class GameScene extends Phaser.Scene {
     SHIFT: Phaser.Input.Keyboard.Key;
     U: Phaser.Input.Keyboard.Key;
     P: Phaser.Input.Keyboard.Key;
+    O: Phaser.Input.Keyboard.Key;
     T: Phaser.Input.Keyboard.Key;
     ENTER: Phaser.Input.Keyboard.Key;
     ESC: Phaser.Input.Keyboard.Key;
@@ -211,6 +265,8 @@ export class GameScene extends Phaser.Scene {
   private dungeonTooltip!: DungeonTooltip;
   private craftingUI!: CraftingUI;
   private statsPanel!: StatsPanel;
+  private socialPanel!: SocialPanel;
+  private playerTooltip!: PlayerTooltip;
   private chatUI!: ChatUI;
   private escapeMenuUI!: EscapeMenuUI;
   private optionsUI!: OptionsUI;
@@ -335,6 +391,31 @@ export class GameScene extends Phaser.Scene {
       return;
     }
 
+    // Register friend message listeners immediately (server sends FriendsList on join)
+    room.onMessage(ServerMessage.FriendsList, (data: { friends: string[] }) => {
+      initFriendsFromServer(data.friends);
+    });
+    room.onMessage(ServerMessage.FriendAdded, (data: { name: string }) => {
+      onFriendAdded(data.name);
+      if (this.chatUI) {
+        this.chatUI.addMessage({ playerName: "", text: `${data.name} added to friends list.`, channel: "global" });
+      }
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends);
+      }
+    });
+    room.onMessage(ServerMessage.FriendRemoved, (data: { name: string }) => {
+      onFriendRemoved(data.name);
+      if (this.chatUI) {
+        this.chatUI.addMessage({ playerName: "", text: `${data.name} removed from friends list.`, channel: "global" });
+      }
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends);
+      }
+    });
+
     // Pre-render all entity shapes into reusable textures (batched draw calls)
     generateEntityTextures(this);
 
@@ -421,6 +502,7 @@ export class GameScene extends Phaser.Scene {
         SHIFT: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.SHIFT),
         U: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.U),
         P: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.P),
+        O: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.O),
         T: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.T),
         ENTER: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ENTER),
         ESC: this.input.keyboard.addKey(Phaser.Input.Keyboard.KeyCodes.ESC),
@@ -446,6 +528,37 @@ export class GameScene extends Phaser.Scene {
     // Create stats panel
     this.statsPanel = new StatsPanel(this);
     this.hud.setStatsButtonCallback(() => this.toggleStatsPanel());
+
+    // Initialize friends as disabled; server will send FriendsList for authenticated players
+    initFriendsDisabled();
+
+    // Create social panel
+    this.socialPanel = new SocialPanel(this);
+    this.playerTooltip = new PlayerTooltip(this);
+    this.socialPanel.setCallbacks(
+      (name: string) => {
+        this.socialPanel.hide();
+        this.playerTooltip.hide();
+        this.chatUI.openInputWithText(`/dm ${name} `);
+      },
+      (name: string) => {
+        if (!isFriendsAuthenticated()) return;
+        if (isFriend(name)) {
+          removeFriend(name);
+        } else {
+          addFriend(name);
+        }
+        // Panel will refresh when server confirms via FriendAdded/FriendRemoved
+      },
+      (info: NearbyPlayerInfo | null, screenX: number, screenY: number) => {
+        if (info) {
+          this.playerTooltip.show(info, screenX, screenY);
+        } else {
+          this.playerTooltip.hide();
+        }
+      },
+    );
+    this.hud.setSocialButtonCallback(() => this.toggleSocialPanel());
 
     // Create chat UI
     this.chatUI = new ChatUI(this);
@@ -507,6 +620,10 @@ export class GameScene extends Phaser.Scene {
     // Listen for zone change
     room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string; dungeonSeed?: number }) => {
       this.localZone = data.zone;
+      // Set active biome layer based on realm tier
+      if (isHostileZone(data.zone)) {
+        setActiveRealmTier(getRealmTierFromZone(data.zone));
+      }
       this.pendingInputs = [];
       this.isDead = false;
       this.hud.hideDeathScreen();
@@ -654,10 +771,12 @@ export class GameScene extends Phaser.Scene {
       this.closeLeftPanels("vault");
       this.hud.vaultUI.show(data.items);
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("right");
+      if (this.socialPanel.isVisible()) this.socialPanel.setSide("right");
     });
     room.onMessage(ServerMessage.VaultClosed, () => {
       this.hud.vaultUI.hide();
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+      if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
     });
     room.onMessage(ServerMessage.VaultUpdated, (data: { items: ItemInstanceData[] }) => {
       this.hud.vaultUI.updateItems(data.items);
@@ -786,8 +905,9 @@ export class GameScene extends Phaser.Scene {
       return { name: "Vault", color: "#ddaa55" };
     }
     if (isHostileZone(zone)) {
-      const inst = getZoneInstance(zone) || "1";
-      return { name: `Realm ${inst}`, color: "#e94560" };
+      const tier = getRealmTierFromZone(zone);
+      const config = REALM_TIER_CONFIG[tier];
+      return { name: config?.name ?? "The Wild", color: config?.color ?? "#e94560" };
     }
     return { name: "Nexus", color: "#44aa66" };
   }
@@ -1086,10 +1206,10 @@ export class GameScene extends Phaser.Scene {
     }
 
     const ts = HOSTILE_TILE_SIZE; // 40px per tile (matches TILE_SIZE)
-    const numTiles = TILE_SPRITE_KEYS.length; // 36 (18 tile types × 2 variants)
-    const RIVER_TILE = 16;
+    const numTiles = TILE_SPRITE_FRAMES.length; // 94 (47 tile types × 2 variants)
+    const RIVER_TILE = 45;
 
-    // Generate tileset texture: blit loaded 8×8 sprites scaled to 40×40 into a strip.
+    // Generate tileset texture: read frames from the spritesheet and scale to 40×40 strip.
     // Each tile is extruded by 1px on all sides (edge pixels duplicated) to prevent
     // sub-pixel seams when the camera has fractional scroll positions.
     const EXTRUDE = 1;
@@ -1101,34 +1221,35 @@ export class GameScene extends Phaser.Scene {
       canvas.height = ts + EXTRUDE * 2;
       const ctx = canvas.getContext("2d")!;
       ctx.imageSmoothingEnabled = false; // nearest-neighbor for crisp pixel art
+
+      // Source spritesheet: 15 cols × 7 rows, 8px tiles with 8px spacing
+      const spreadsheet = this.textures.get("tile-spreadsheet");
+      const srcImage = spreadsheet.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+      const SPRITE_SIZE = 8;
+      const SPRITE_STRIDE = 16; // 8px tile + 8px spacing
+      const SHEET_COLS = 15;
+
       for (let i = 0; i < numTiles; i++) {
         const dx = EXTRUDE + i * cellSize; // tile content x (inside extrusion border)
         const dy = EXTRUDE;
 
-        const spriteKey = TILE_SPRITE_KEYS[i];
-        const tex = this.textures.get(spriteKey);
-        if (tex && tex.key !== "__MISSING") {
-          const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-          // Draw the tile content
-          ctx.drawImage(src, 0, 0, src.width, src.height, dx, dy, ts, ts);
-          // Extrude edges: duplicate 1px borders to fill the extrusion margin
-          // Top edge
-          ctx.drawImage(canvas, dx, dy, ts, 1, dx, dy - 1, ts, 1);
-          // Bottom edge
-          ctx.drawImage(canvas, dx, dy + ts - 1, ts, 1, dx, dy + ts, ts, 1);
-          // Left edge (including corners)
-          ctx.drawImage(canvas, dx, dy - 1, 1, ts + 2, dx - 1, dy - 1, 1, ts + 2);
-          // Right edge (including corners)
-          ctx.drawImage(canvas, dx + ts - 1, dy - 1, 1, ts + 2, dx + ts, dy - 1, 1, ts + 2);
-        } else {
-          // Fallback: solid color for missing sprites (fills entire cell incl. extrusion)
-          const biomeIdx = Math.floor(i / 2);
-          const visual = REALM_BIOME_VISUALS[biomeIdx];
-          ctx.fillStyle = visual
-            ? `#${visual.groundFill.toString(16).padStart(6, "0")}`
-            : "#ff00ff";
-          ctx.fillRect(dx - EXTRUDE, dy - EXTRUDE, cellSize, cellSize);
-        }
+        const frameIdx = TILE_SPRITE_FRAMES[i];
+        const col = frameIdx % SHEET_COLS;
+        const row = Math.floor(frameIdx / SHEET_COLS);
+        const srcX = col * SPRITE_STRIDE;
+        const srcY = row * SPRITE_STRIDE;
+
+        // Draw the tile content (scale 8×8 → 40×40)
+        ctx.drawImage(srcImage, srcX, srcY, SPRITE_SIZE, SPRITE_SIZE, dx, dy, ts, ts);
+        // Extrude edges: duplicate 1px borders to fill the extrusion margin
+        // Top edge
+        ctx.drawImage(canvas, dx, dy, ts, 1, dx, dy - 1, ts, 1);
+        // Bottom edge
+        ctx.drawImage(canvas, dx, dy + ts - 1, ts, 1, dx, dy + ts, ts, 1);
+        // Left edge (including corners)
+        ctx.drawImage(canvas, dx, dy - 1, 1, ts + 2, dx - 1, dy - 1, 1, ts + 2);
+        // Right edge (including corners)
+        ctx.drawImage(canvas, dx + ts - 1, dy - 1, 1, ts + 2, dx + ts, dy - 1, 1, ts + 2);
       }
       this.textures.addCanvas(tilesetKey, canvas);
     }
@@ -1270,8 +1391,8 @@ export class GameScene extends Phaser.Scene {
   } | null {
     const CS = GameScene.CHUNK_SIZE;
     const ts = HOSTILE_TILE_SIZE;
-    const RIVER_TILE = 16;
-    const ROAD_TILE = 17;
+    const RIVER_TILE = 45;
+    const ROAD_TILE = 46;
 
     const startX = cx * CS;
     const startY = cy * CS;
@@ -1282,15 +1403,16 @@ export class GameScene extends Phaser.Scene {
     const worldX = startX * ts;
     const worldY = startY * ts;
 
-    // --- Biome tile data ---
+    // --- Biome tile data (use active realm tier's biome array) ---
+    const activeBiomes = mapData.biomesByTier?.[getActiveRealmTier() - 1] ?? mapData.biomes;
     const tileData: number[][] = [];
     for (let y = 0; y < chunkH; y++) {
       const row: number[] = [];
       const mapY = startY + y;
       for (let x = 0; x < chunkW; x++) {
         const idx = mapY * mapData.width + (startX + x);
-        let tile = mapData.biomes[idx];
-        if (mapData.rivers[idx] > 0 && tile !== 0 && tile !== 1 && tile !== 15) {
+        let tile = activeBiomes[idx];
+        if (mapData.rivers[idx] > 0 && !isWaterBiome(tile)) {
           tile = RIVER_TILE;
         }
         if (mapData.roads[idx] > 0) {
@@ -1740,23 +1862,48 @@ export class GameScene extends Phaser.Scene {
     if (this.localZone !== "nexus") return;
 
     const nexusPositions = getNexusPortalPositions();
-    const portals = nexusPositions.wildPortals.map((p, i) => ({
-      x: p.x, y: p.y, label: `The Wild ${i + 1}`,
-    }));
+    const REALM_PORTAL_SPRITES: Record<number, string> = {
+      1: "portal-the-wild",
+      2: "portal-the-ruins",
+      3: "portal-devine-hell",
+    };
+
+    const portals = nexusPositions.wildPortals.map((p, i) => {
+      const tier = i + 1;
+      const config = REALM_TIER_CONFIG[tier];
+      return {
+        x: p.x, y: p.y,
+        label: config?.name ?? `Realm ${tier}`,
+        levelReq: config?.requiredLevel ?? 1,
+        color: config?.color ?? "#aa66ff",
+        spriteKey: REALM_PORTAL_SPRITES[tier] ?? "portal-the-wild",
+      };
+    });
 
     for (const p of portals) {
-      const img = this.add.image(p.x, p.y, "portal-the-wild").setDepth(-0.3);
+      const img = this.add.image(p.x, p.y, p.spriteKey).setDepth(-0.3);
       this.realmPortalImages.push(img);
 
-      // Label
-      const lbl = this.add.text(p.x, p.y - PORTAL_RADIUS - 6, p.label, {
+      // Realm name label (offset from top of 16x16 sprite: 16*5/2 + 2 = 42px half-height)
+      const spriteHalfH = 42;
+      const lbl = this.add.text(p.x, p.y - spriteHalfH - 12, p.label, {
         fontSize: "9px",
-        color: "#aa66ff",
+        color: p.color,
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 1,
       }).setOrigin(0.5).setDepth(-0.2);
       this.realmPortalLabels.push(lbl);
+
+      // Level requirement label
+      const lvlLbl = this.add.text(p.x, p.y - spriteHalfH - 1, `Lvl ${p.levelReq}+`, {
+        fontSize: "7px",
+        color: "#aaaaaa",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 1,
+      }).setOrigin(0.5).setDepth(-0.2);
+      this.realmPortalLabels.push(lvlLbl);
     }
 
     // Vault portal sprite
@@ -2256,6 +2403,9 @@ export class GameScene extends Phaser.Scene {
         // P key — toggle stats panel
         if (Phaser.Input.Keyboard.JustDown(this.keys.P)) {
           this.toggleStatsPanel();
+        }
+        if (Phaser.Input.Keyboard.JustDown(this.keys.O)) {
+          this.toggleSocialPanel();
         }
       }
 
@@ -2798,6 +2948,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.nearCraftingTable) {
           this.craftingUI.hide();
           if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+          if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
         }
       }
 
@@ -2806,6 +2957,7 @@ export class GameScene extends Phaser.Scene {
         if (!this.nearVaultChest) {
           this.hud.vaultUI.hide();
           if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+          if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
         }
       }
 
@@ -3185,6 +3337,7 @@ export class GameScene extends Phaser.Scene {
       this.craftingUI.hide();
       this.craftingTablePending = false;
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+      if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
       return;
     }
 
@@ -3212,6 +3365,7 @@ export class GameScene extends Phaser.Scene {
     this.craftingUI.show(orbCounts);
 
     if (this.statsPanel.isVisible()) this.statsPanel.setSide("right");
+    if (this.socialPanel.isVisible()) this.socialPanel.setSide("right");
   }
 
   /** Compute combined orb counts from inventory (synced schema) + vault (server-sent). */
@@ -3240,6 +3394,8 @@ export class GameScene extends Phaser.Scene {
   private relayoutUI(): void {
     this.hud.relayout();
     this.statsPanel.relayout();
+    this.socialPanel.relayout();
+    this.playerTooltip.relayout();
     this.craftingUI.relayout();
     this.dungeonTooltip.relayout();
     this.chatUI.relayout();
@@ -3247,14 +3403,20 @@ export class GameScene extends Phaser.Scene {
     this.optionsUI.relayout();
   }
 
-  private closeLeftPanels(except?: "stats" | "vault" | "crafting"): void {
+  private closeLeftPanels(except?: "stats" | "vault" | "crafting" | "social"): void {
     if (except !== "vault" && this.hud.vaultUI.isVisible()) {
       this.hud.vaultUI.hide();
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+      if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
     }
     if (except !== "crafting" && this.craftingUI.isVisible()) {
       this.craftingUI.hide();
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
+      if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
+    }
+    if (except !== "social" && this.socialPanel.isVisible()) {
+      this.socialPanel.hide();
+      this.playerTooltip.hide();
     }
   }
 
@@ -3270,6 +3432,102 @@ export class GameScene extends Phaser.Scene {
       }
       this.statsPanel.show();
     }
+  }
+
+  private toggleSocialPanel(): void {
+    if (this.socialPanel.isVisible()) {
+      this.socialPanel.hide();
+      this.playerTooltip.hide();
+    } else {
+      if (this.craftingUI.isVisible() || this.hud.vaultUI.isVisible()) {
+        this.socialPanel.setSide("right");
+      } else {
+        this.closeLeftPanels("social");
+        this.socialPanel.setSide("left");
+      }
+      { const d = this.gatherSocialData(); this.socialPanel.populate(d.nearby, d.friends); }
+      this.socialPanel.show();
+    }
+  }
+
+  private gatherSocialData(): { nearby: NearbyPlayerInfo[]; friends: NearbyPlayerInfo[] } {
+    const sessionId = this.network.getSessionId();
+    const localSprite = this.playerSprites.get(sessionId);
+    if (!localSprite) return { nearby: [], friends: [] };
+
+    const state = this.decodedState;
+    const nearby: NearbyPlayerInfo[] = [];
+
+    // Build a map of online players by name for friend lookup
+    const onlineByName = new Map<string, { schema: any; sid: string; sprite: any }>();
+
+    state.players.forEach((playerSchema: any, sid: string) => {
+      if (sid === sessionId) return;
+      const sprite = this.playerSprites.get(sid);
+      const name = playerSchema.name as string;
+      if (name) onlineByName.set(name, { schema: playerSchema, sid, sprite });
+
+      // Nearby: only same zone
+      if (!sprite || sprite.zone !== this.localZone) return;
+
+      const dx = sprite.x - localSprite.x;
+      const dy = sprite.y - localSprite.y;
+      const distance = Math.sqrt(dx * dx + dy * dy);
+      const equipment = readEquipmentData(playerSchema);
+
+      nearby.push({
+        sessionId: sid,
+        name,
+        level: (playerSchema.level as number) ?? 1,
+        characterClass: (playerSchema.characterClass as number) ?? 0,
+        distance,
+        equipment,
+        isFriend: isFriend(name),
+        online: true,
+      });
+    });
+
+    nearby.sort((a, b) => a.distance - b.distance);
+
+    // Build friends list: all friends, online first then offline
+    const friendNames = getFriends();
+    const onlineFriends: NearbyPlayerInfo[] = [];
+    const offlineFriends: NearbyPlayerInfo[] = [];
+
+    for (const friendName of friendNames) {
+      const online = onlineByName.get(friendName);
+      if (online && online.sprite) {
+        const dx = online.sprite.x - localSprite.x;
+        const dy = online.sprite.y - localSprite.y;
+        const distance = Math.sqrt(dx * dx + dy * dy);
+        onlineFriends.push({
+          sessionId: online.sid,
+          name: friendName,
+          level: (online.schema.level as number) ?? 1,
+          characterClass: (online.schema.characterClass as number) ?? 0,
+          distance,
+          equipment: readEquipmentData(online.schema),
+          isFriend: true,
+          online: true,
+        });
+      } else {
+        offlineFriends.push({
+          sessionId: "",
+          name: friendName,
+          level: 0,
+          characterClass: 0,
+          distance: 0,
+          equipment: [],
+          isFriend: true,
+          online: false,
+        });
+      }
+    }
+
+    // Online friends first, then offline
+    const friends = [...onlineFriends, ...offlineFriends];
+
+    return { nearby, friends };
   }
 
   private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {

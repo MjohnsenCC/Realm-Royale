@@ -113,7 +113,7 @@ export const DUNGEON_PORTAL_INTERACT_RADIUS = 50;
 // Dungeon portal drop chances (per kill)
 export const INFERNAL_PORTAL_CHANCE = 0.02; // legacy — no longer used
 export const VOID_PORTAL_CHANCE = 0.015; // legacy — no longer used
-export const DUNGEON_DROP_CHANCE = 0.30; // 30% for specific Godlands enemies
+
 
 // Vault (personal storage instance)
 export const VAULT_COLS = 7;

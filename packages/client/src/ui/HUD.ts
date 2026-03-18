@@ -34,6 +34,8 @@ import {
   getVaultPositions,
   PortalType,
   isBossEnemy,
+  getRealmTierFromZone,
+  REALM_TIER_CONFIG,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 
@@ -149,6 +151,11 @@ export class HUD {
   private statsButton: Phaser.GameObjects.Image;
   private statsButtonZone: Phaser.GameObjects.Zone;
   private onStatsButtonClick: (() => void) | null = null;
+
+  // Social button
+  private socialButton!: Phaser.GameObjects.Image;
+  private socialButtonZone!: Phaser.GameObjects.Zone;
+  private onSocialButtonClick: (() => void) | null = null;
 
   // Section origins (stored for bar drawing)
   private barsX!: number;
@@ -446,11 +453,15 @@ export class HUD {
     this.drawManaBar(100, 100);
     this.drawLvlBar(0, 1);
 
-    // --- Stats button (centered below equipment slots, bottom-aligned with innerPad below) ---
+    // --- Stats & Social buttons (side-by-side below equipment slots) ---
     const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnH = this.statsBtnSize;
     const statsBtnW = this.statsBtnSize;
-    const statsBtnX = this.eqX + Math.round((this.eqW - this.statsBtnSize) / 2);
+    const btnGap = Math.max(2, Math.round(this.barGap));
+    const totalBtnW = this.statsBtnSize * 2 + btnGap;
+    const btnStartX = this.eqX + Math.round((this.eqW - totalBtnW) / 2);
+    const statsBtnX = btnStartX;
+    const socialBtnX = btnStartX + this.statsBtnSize + btnGap;
 
     this.statsButton = scene.add
       .image(statsBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "ui-btn-statpanel")
@@ -472,6 +483,28 @@ export class HUD {
     });
     this.statsButtonZone.on("pointerdown", () => {
       if (this.onStatsButtonClick) this.onStatsButtonClick();
+    });
+
+    this.socialButton = scene.add
+      .image(socialBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, "ui-btn-social")
+      .setDisplaySize(statsBtnW, statsBtnH)
+      .setScrollFactor(0)
+      .setDepth(101);
+
+    this.socialButtonZone = scene.add
+      .zone(socialBtnX + statsBtnW / 2, statsBtnY + statsBtnH / 2, statsBtnW, statsBtnH)
+      .setScrollFactor(0)
+      .setDepth(104)
+      .setInteractive({ useHandCursor: true });
+
+    this.socialButtonZone.on("pointerover", () => {
+      this.socialButton.setTint(0x44ffaa);
+    });
+    this.socialButtonZone.on("pointerout", () => {
+      this.socialButton.clearTint();
+    });
+    this.socialButtonZone.on("pointerdown", () => {
+      if (this.onSocialButtonClick) this.onSocialButtonClick();
     });
   }
 
@@ -545,14 +578,24 @@ export class HUD {
     this.zoneText.setFontSize(zoneFontSize);
     this.playerCountText.setFontSize(countFontSize);
 
-    // Update stats button (centered below equipment slots, bottom-aligned with innerPad below)
+    // Update stats & social buttons (side-by-side below equipment slots)
     const statsBtnY = this.panelY + this.panelH - this.innerPad - this.statsBtnSize;
     const statsBtnSize = this.statsBtnSize;
-    const statsBtnX = this.eqX + Math.round((this.eqW - statsBtnSize) / 2);
+    const btnGap = Math.max(2, Math.round(this.barGap));
+    const totalBtnW = statsBtnSize * 2 + btnGap;
+    const btnStartX = this.eqX + Math.round((this.eqW - totalBtnW) / 2);
+    const statsBtnX = btnStartX;
+    const socialBtnX = btnStartX + statsBtnSize + btnGap;
+
     this.statsButton.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
     this.statsButton.setDisplaySize(statsBtnSize, statsBtnSize);
     this.statsButtonZone.setPosition(statsBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
     this.statsButtonZone.setSize(statsBtnSize, statsBtnSize);
+
+    this.socialButton.setPosition(socialBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.socialButton.setDisplaySize(statsBtnSize, statsBtnSize);
+    this.socialButtonZone.setPosition(socialBtnX + statsBtnSize / 2, statsBtnY + statsBtnSize / 2);
+    this.socialButtonZone.setSize(statsBtnSize, statsBtnSize);
 
     // Update minimap button icon sizes
     const btnIconSize = Math.round(25 * S);
@@ -749,8 +792,10 @@ export class HUD {
           this.zoneText.setX(this.scene.scale.width / 2);
         }
       } else if (this.lastDiffZone === -1) {
-        this.zoneText.setText("The Wild");
-        this.zoneText.setColor("#e94560");
+        const tier = getRealmTierFromZone(zone);
+        const config = REALM_TIER_CONFIG[tier];
+        this.zoneText.setText(config?.name ?? "The Wild");
+        this.zoneText.setColor(config?.color ?? "#e94560");
         this.zoneText.setX(this.scene.scale.width / 2);
       }
     }
@@ -804,6 +849,10 @@ export class HUD {
 
   setStatsButtonCallback(cb: () => void): void {
     this.onStatsButtonClick = cb;
+  }
+
+  setSocialButtonCallback(cb: () => void): void {
+    this.onSocialButtonClick = cb;
   }
 
   setPortalGemCallback(cb: (worldX: number, worldY: number) => void): void {

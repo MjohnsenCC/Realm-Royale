@@ -92,6 +92,14 @@ export class NetworkManager {
     this.room?.send(ClientMessage.ChatMessage, { text, channel });
   }
 
+  sendAddFriend(name: string): void {
+    this.room?.send(ClientMessage.AddFriend, { name });
+  }
+
+  sendRemoveFriend(name: string): void {
+    this.room?.send(ClientMessage.RemoveFriend, { name });
+  }
+
   getRoom(): Colyseus.Room | null {
     return this.room;
   }

@@ -39,6 +39,11 @@ export interface CombatEvent {
   enemyMaxHp?: number;
 }
 
+// Only insert enemies within this radius of a player into the spatial grid.
+// Matches ENEMY_SYNC_RADIUS so every client-visible enemy is in the grid.
+const COMBAT_GRID_RADIUS = 1600;
+const COMBAT_GRID_RADIUS_SQ = COMBAT_GRID_RADIUS * COMBAT_GRID_RADIUS;
+
 export class CombatSystem {
   private events: CombatEvent[] = [];
   private enemyGrid = new SpatialGrid<Enemy>(200);
@@ -48,16 +53,31 @@ export class CombatSystem {
     this.events.length = 0;
     const dt = deltaTime / 1000;
 
-    // Rebuild spatial grids
-    this.enemyGrid.clear();
-    state.enemies.forEach((enemy) => {
-      this.enemyGrid.insert(enemy);
+    // Rebuild spatial grids — only insert enemies near any player
+    // to avoid O(all enemies) insertion cost with persistent chunks.
+    this.playerGrid.clear();
+    const alivePlayers: Player[] = [];
+    state.players.forEach((player) => {
+      if (player.alive) {
+        this.playerGrid.insert(player);
+        alivePlayers.push(player);
+      }
     });
 
-    this.playerGrid.clear();
-    state.players.forEach((player) => {
-      if (player.alive) this.playerGrid.insert(player);
-    });
+    this.enemyGrid.clear();
+    if (alivePlayers.length > 0) {
+      state.enemies.forEach((enemy) => {
+        for (const p of alivePlayers) {
+          if (p.zone !== enemy.zone) continue;
+          const dx = p.x - enemy.x;
+          const dy = p.y - enemy.y;
+          if (dx * dx + dy * dy <= COMBAT_GRID_RADIUS_SQ) {
+            this.enemyGrid.insert(enemy);
+            break;
+          }
+        }
+      });
+    }
 
     const projectilesToRemove: string[] = [];
 

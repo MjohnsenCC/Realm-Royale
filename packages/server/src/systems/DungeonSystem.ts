@@ -10,7 +10,6 @@ import {
   PortalType,
   DUNGEON_BOSS_TYPE,
   DUNGEON_PORTAL_LIFETIME,
-  DUNGEON_DROP_CHANCE,
   ENEMY_DEFS,
   DUNGEON_ROOM_ENEMIES,
   INFERNAL_NORMAL_ROOM_VARIANTS,
@@ -78,7 +77,8 @@ export class DungeonSystem {
     const def = ENEMY_DEFS[enemyType];
     if (!def || def.dungeonDrop === undefined) return false;
 
-    if (Math.random() >= DUNGEON_DROP_CHANCE) return false;
+    const dropChance = def.dungeonDropChance ?? 0;
+    if (Math.random() >= dropChance) return false;
 
     const dungeonType = def.dungeonDrop;
 

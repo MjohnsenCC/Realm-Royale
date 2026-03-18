@@ -73,27 +73,123 @@ export const EnemyType = {
   // Highlands Pack (Tier 4)
   FrostMatriarch: 63, // Pack leader
   FrostSprite: 64, // Pack minion
+
+  // ========== REALM TIER 2: THE RUINS ==========
+  // Shore (T2)
+  RuinCrawler: 70,
+  AshScarab: 71,
+  DustWraith: 72,
+  // Lowlands (T2)
+  CursedArcher: 73,
+  RuinedGolem: 74,
+  BlightedVine: 75,
+  // Midlands (T2)
+  TombGuard: 76,
+  SandPhantom: 77,
+  CursedObelisk: 78,
+  // Highlands (T2)
+  ObsidianSentinel: 79,
+  StormCaller: 80,
+  AshDrake: 81,
+  // Godlands (T2)
+  RuinLord: 82,
+  VoidHerald: 83,
+  ForgottenTitan: 84,
+  // T2 Pack: Lowlands
+  PlagueBrood: 85, // Pack leader
+  PlagueRat: 86, // Pack minion
+  // T2 Pack: Midlands
+  CursedMatron: 87, // Pack leader
+  CursedSpawn: 88, // Pack minion
+  // T2 Pack: Highlands
+  AshMatriarch: 89, // Pack leader
+  AshSprite: 90, // Pack minion
+
+  // ========== REALM TIER 3: DEVINE HELL ==========
+  // Shore (T3)
+  HellCrab: 100,
+  MagmaSlug: 101,
+  EmberWisp: 102,
+  // Lowlands (T3)
+  DemonHound: 103,
+  HellfireImp: 104,
+  BrimstoneGolem: 105,
+  // Midlands (T3)
+  InfernalKnight: 106,
+  LavaWyrm: 107,
+  SoulReaper: 108,
+  // Highlands (T3)
+  AbyssalLord: 109,
+  HellfireDrake: 110,
+  DoomSentinel: 111,
+  // Godlands (T3)
+  ArchDemon: 112,
+  VoidEmperor: 113,
+  WorldEnder: 114,
+  // T3 Pack: Lowlands
+  DemonBroodmother: 115, // Pack leader
+  DemonWhelp: 116, // Pack minion
+  // T3 Pack: Midlands
+  SoulHarvester: 117, // Pack leader
+  LostSoul: 118, // Pack minion
+  // T3 Pack: Highlands
+  DoomMatriarch: 119, // Pack leader
+  DoomSprite: 120, // Pack minion
 } as const;
 export type EnemyType = (typeof EnemyType)[keyof typeof EnemyType];
 
-// 16-biome island map system
+// 45-biome system — 15 unique biomes per realm tier, no sharing
 export const RealmBiome = {
-  Ocean: 0,
-  ShallowWater: 1,
-  Beach: 2,
-  Marsh: 3,
-  Desert: 4,
-  DryPlains: 5,
-  Grassland: 6,
-  Forest: 7,
-  Jungle: 8,
-  Shrubland: 9,
-  Taiga: 10,
-  DesertCliffs: 11,
-  Tundra: 12,
-  Scorched: 13,
-  Snow: 14,
-  Lake: 15,
+  // ===== TIER 1: THE WILD (natural/lush) =====
+  WildOcean: 0,       // water — deep ocean
+  WildShallows: 1,    // water — coastal/lake
+  WildShore: 2,       // shore — sandy beach
+  WildMeadow: 3,      // lowlands — green meadow
+  WildMarsh: 4,       // lowlands — murky swamp
+  WildPlains: 5,      // lowlands — dry grass
+  WildForest: 6,      // midlands — dense forest
+  WildJungle: 7,      // midlands — thick tropical
+  WildDesert: 8,      // midlands — sandy dunes
+  WildTaiga: 9,       // highlands — cold conifers
+  WildCliffs: 10,     // highlands — rocky cliffs
+  WildShrubland: 11,  // highlands — sparse bushes
+  WildTundra: 12,     // godlands — frozen barren
+  WildPeaks: 13,      // godlands — snowy peaks
+  WildVolcanic: 14,   // godlands — charred earth
+
+  // ===== TIER 2: THE RUINS (decayed/ancient) =====
+  RuinsOcean: 15,      // water — dark murky sea
+  RuinsShallows: 16,   // water — stagnant water
+  RuinsShore: 17,      // shore — ashen sand
+  RuinsDustlands: 18,  // lowlands — dusty wastes
+  RuinsBog: 19,        // lowlands — decayed swamp
+  RuinsBarrens: 20,    // lowlands — cracked earth
+  RuinsCatacombs: 21,  // midlands — ancient stone
+  RuinsWasteland: 22,  // midlands — desolate waste
+  RuinsDesolation: 23, // midlands — gray ruins
+  RuinsObsidian: 24,   // highlands — dark glass stone
+  RuinsFrostfall: 25,  // highlands — frozen decay
+  RuinsAshlands: 26,   // highlands — ash-covered
+  RuinsShadowlands: 27, // godlands — deep shadow
+  RuinsDarkSpire: 28,  // godlands — dark purple
+  RuinsVoidEdge: 29,   // godlands — void-tinged
+
+  // ===== TIER 3: DEVINE HELL (hellish/demonic) =====
+  HellOcean: 30,       // water — blood sea
+  HellLava: 31,        // water — molten lava
+  HellScorch: 32,      // shore — scorched coast
+  HellBrimstone: 33,   // lowlands — sulfur ground
+  HellCinder: 34,      // lowlands — burning cinders
+  HellEmberfield: 35,  // lowlands — glowing embers
+  HellInferno: 36,     // midlands — active fire
+  HellDemonforge: 37,  // midlands — dark forge
+  HellBloodmire: 38,   // midlands — blood pools
+  HellAbyssal: 39,     // highlands — deep abyss
+  HellDoomspire: 40,   // highlands — black rock
+  HellSoulfire: 41,    // highlands — soul flames
+  HellVoidmaw: 42,     // godlands — pure void
+  HellChaosrift: 43,   // godlands — chaos energy
+  HellAnnihilation: 44, // godlands — total destruction
 } as const;
 export type RealmBiome = (typeof RealmBiome)[keyof typeof RealmBiome];
 
@@ -213,6 +309,29 @@ export function isHostileZone(zone: string): boolean {
 
 export function isVaultZone(zone: string): boolean {
   return getZoneBase(zone) === "vault";
+}
+
+// Realm tiers — each hostile zone maps to a tier
+export const RealmTier = {
+  Wild: 1,
+  Ruins: 2,
+  DevineHell: 3,
+} as const;
+export type RealmTier = (typeof RealmTier)[keyof typeof RealmTier];
+
+export const REALM_TIER_CONFIG: Record<number, { name: string; requiredLevel: number; color: string }> = {
+  [RealmTier.Wild]: { name: "The Wild", requiredLevel: 1, color: "#aa66ff" },
+  [RealmTier.Ruins]: { name: "The Ruins", requiredLevel: 35, color: "#cc8844" },
+  [RealmTier.DevineHell]: { name: "Devine Hell", requiredLevel: 70, color: "#ff2244" },
+};
+
+/** Extract realm tier from a hostile zone string. e.g. "hostile:2" -> 2 */
+export function getRealmTierFromZone(zone: string): number {
+  if (!isHostileZone(zone)) return RealmTier.Wild;
+  const instance = getZoneInstance(zone);
+  const tier = Number(instance);
+  if (tier >= RealmTier.Wild && tier <= RealmTier.DevineHell) return tier;
+  return RealmTier.Wild;
 }
 
 export const DungeonType = {
@@ -372,6 +491,9 @@ export const ServerMessage = {
   CraftingOrbsUpdated: "craftingOrbsUpdated",
   ChatMessage: "chatMessage",
   Pong: "pong",
+  FriendsList: "friendsList",
+  FriendAdded: "friendAdded",
+  FriendRemoved: "friendRemoved",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -397,6 +519,8 @@ export const ClientMessage = {
   OpenCraftingTable: "openCraftingTable",
   ChatMessage: "chatMessage",
   Ping: "ping",
+  AddFriend: "addFriend",
+  RemoveFriend: "removeFriend",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 

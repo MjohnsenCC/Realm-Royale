@@ -234,6 +234,25 @@ export class ChatUI {
     }, 50);
   }
 
+  openInputWithText(text: string): void {
+    if (this._isTyping) return;
+    this._isTyping = true;
+    this.updateChannelLabel();
+    this.channelLabel.setVisible(true);
+    this.positionInput();
+    this.inputEl.style.display = "block";
+    this.inputEl.value = text;
+    setTimeout(() => {
+      this.inputEl.focus();
+      this.inputEl.setSelectionRange(text.length, text.length);
+      setTimeout(() => {
+        if (this._isTyping && document.activeElement !== this.inputEl) {
+          this.closeInput();
+        }
+      }, 100);
+    }, 50);
+  }
+
   private sendAndClose(): void {
     const text = this.inputEl.value.trim();
     if (text.length > 0) {
