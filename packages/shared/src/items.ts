@@ -405,73 +405,43 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     id: 101, name: "Crude Quiver", category: 1, subtype: 0, tier: 1,
     color: 0xcc8844, tierColor: TIER_COLORS[1],
     description: "Fires a piercing energy bolt.",
-    abilityStats: { damage: 50, range: 500, projectileSpeed: 600, projectileSize: 12, manaCost: 30, cooldown: 1000, piercing: true },
+    abilityStats: { damage: 56, range: 510, projectileSpeed: 619, projectileSize: 14, manaCost: 38, cooldown: 2125, piercing: true },
   },
   [makeItemId(1, 0, 2)]: {
     id: 102, name: "Iron Quiver", category: 1, subtype: 0, tier: 2,
     color: 0xaabbcc, tierColor: TIER_COLORS[2],
     description: "Reinforced bolts pierce deeper.",
-    abilityStats: { damage: 75, range: 520, projectileSpeed: 620, projectileSize: 13, manaCost: 32, cooldown: 950, piercing: true },
+    abilityStats: { damage: 98, range: 545, projectileSpeed: 649, projectileSize: 14, manaCost: 37, cooldown: 1214, piercing: true },
   },
   [makeItemId(1, 0, 3)]: {
     id: 103, name: "Elven Quiver", category: 1, subtype: 0, tier: 3,
     color: 0x44cc66, tierColor: TIER_COLORS[3],
     description: "Elven craft, devastating force.",
-    abilityStats: { damage: 105, range: 550, projectileSpeed: 650, projectileSize: 14, manaCost: 34, cooldown: 900, piercing: true },
+    abilityStats: { damage: 154, range: 592, projectileSpeed: 690, projectileSize: 15, manaCost: 36, cooldown: 773, piercing: true },
   },
   [makeItemId(1, 0, 4)]: {
     id: 104, name: "Crystal Quiver", category: 1, subtype: 0, tier: 4,
     color: 0x44ccee, tierColor: TIER_COLORS[4],
     description: "Crystal shards shred everything in their path.",
-    abilityStats: { damage: 140, range: 580, projectileSpeed: 680, projectileSize: 15, manaCost: 36, cooldown: 850, piercing: true },
+    abilityStats: { damage: 224, range: 650, projectileSpeed: 741, projectileSize: 16, manaCost: 34, cooldown: 531, piercing: true },
   },
   [makeItemId(1, 0, 5)]: {
     id: 105, name: "Shadow Quiver", category: 1, subtype: 0, tier: 5,
     color: 0x8844cc, tierColor: TIER_COLORS[5],
     description: "Shadow bolts consume all in their wake.",
-    abilityStats: { damage: 180, range: 620, projectileSpeed: 720, projectileSize: 16, manaCost: 38, cooldown: 800, piercing: true },
+    abilityStats: { damage: 308, range: 719, projectileSpeed: 802, projectileSize: 18, manaCost: 32, cooldown: 386, piercing: true },
   },
   [makeItemId(1, 0, 6)]: {
     id: 106, name: "Divine Quiver", category: 1, subtype: 0, tier: 6,
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "Holy wrath made manifest.",
-    abilityStats: { damage: 230, range: 660, projectileSpeed: 760, projectileSize: 18, manaCost: 40, cooldown: 750, piercing: true },
+    abilityStats: { damage: 420, range: 812, projectileSpeed: 884, projectileSize: 20, manaCost: 29, cooldown: 283, piercing: true },
   },
   [makeItemId(1, 0, 7)]: {
     id: 107, name: "Infernal Quiver", category: 1, subtype: 0, tier: 7,
     color: 0xff4444, tierColor: TIER_COLORS[7],
     description: "Bolts forged in hellfire.",
-    abilityStats: { damage: 252, range: 690, projectileSpeed: 790, projectileSize: 19, manaCost: 42, cooldown: 720, piercing: true },
-  },
-  [makeItemId(1, 0, 8)]: {
-    id: 108, name: "Abyssal Quiver", category: 1, subtype: 0, tier: 8,
-    color: 0xff66aa, tierColor: TIER_COLORS[8],
-    description: "Draws power from the deep abyss.",
-    abilityStats: { damage: 308, range: 720, projectileSpeed: 820, projectileSize: 20, manaCost: 44, cooldown: 690, piercing: true },
-  },
-  [makeItemId(1, 0, 9)]: {
-    id: 109, name: "Wraith Quiver", category: 1, subtype: 0, tier: 9,
-    color: 0x44ffcc, tierColor: TIER_COLORS[9],
-    description: "Spectral bolts phase through the living.",
-    abilityStats: { damage: 364, range: 750, projectileSpeed: 850, projectileSize: 21, manaCost: 46, cooldown: 660, piercing: true },
-  },
-  [makeItemId(1, 0, 10)]: {
-    id: 1010, name: "Celestial Quiver", category: 1, subtype: 0, tier: 10,
-    color: 0xffffff, tierColor: TIER_COLORS[10],
-    description: "Fires shards of pure starlight.",
-    abilityStats: { damage: 420, range: 780, projectileSpeed: 880, projectileSize: 22, manaCost: 48, cooldown: 630, piercing: true },
-  },
-  [makeItemId(1, 0, 11)]: {
-    id: 1011, name: "Doomfire Quiver", category: 1, subtype: 0, tier: 11,
-    color: 0xff8844, tierColor: TIER_COLORS[11],
-    description: "Each bolt carries the doom of worlds.",
-    abilityStats: { damage: 490, range: 810, projectileSpeed: 910, projectileSize: 23, manaCost: 50, cooldown: 600, piercing: true },
-  },
-  [makeItemId(1, 0, 12)]: {
-    id: 1012, name: "Eternity Quiver", category: 1, subtype: 0, tier: 12,
-    color: 0xff2266, tierColor: TIER_COLORS[12],
-    description: "Bolts that echo through time itself.",
-    abilityStats: { damage: 560, range: 840, projectileSpeed: 940, projectileSize: 24, manaCost: 52, cooldown: 570, piercing: true },
+    abilityStats: { damage: 560, range: 928, projectileSpeed: 986, projectileSize: 22, manaCost: 25, cooldown: 213, piercing: true },
   },
 
   // ===== HELMS (category=1, subtype=1) =====
@@ -479,73 +449,43 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     id: 1101, name: "Iron Helm", category: 1, subtype: 1, tier: 1,
     color: 0x8b7355, tierColor: TIER_COLORS[1],
     description: "A basic helm that spins with force.",
-    abilityStats: { damage: 30, range: 130, projectileSpeed: 350, projectileSize: 10, manaCost: 35, cooldown: 1100, piercing: true },
+    abilityStats: { damage: 32, range: 132, projectileSpeed: 364, projectileSize: 11, manaCost: 42, cooldown: 2500, piercing: true },
   },
   [makeItemId(1, 1, 2)]: {
     id: 1102, name: "Steel Helm", category: 1, subtype: 1, tier: 2,
     color: 0xaabbcc, tierColor: TIER_COLORS[2],
     description: "Reinforced steel spins with deadly force.",
-    abilityStats: { damage: 45, range: 135, projectileSpeed: 360, projectileSize: 10, manaCost: 37, cooldown: 1075, piercing: true },
+    abilityStats: { damage: 56, range: 141, projectileSpeed: 382, projectileSize: 11, manaCost: 41, cooldown: 1429, piercing: true },
   },
   [makeItemId(1, 1, 3)]: {
     id: 1103, name: "Crystal Helm", category: 1, subtype: 1, tier: 3,
     color: 0x44cc66, tierColor: TIER_COLORS[3],
     description: "Crystal shards shred nearby foes.",
-    abilityStats: { damage: 62, range: 140, projectileSpeed: 370, projectileSize: 11, manaCost: 38, cooldown: 1050, piercing: true },
+    abilityStats: { damage: 88, range: 153, projectileSpeed: 406, projectileSize: 12, manaCost: 40, cooldown: 909, piercing: true },
   },
   [makeItemId(1, 1, 4)]: {
     id: 1104, name: "Demon Helm", category: 1, subtype: 1, tier: 4,
     color: 0xff4422, tierColor: TIER_COLORS[4],
     description: "Demonic fury unleashed in a deadly spin.",
-    abilityStats: { damage: 80, range: 150, projectileSpeed: 400, projectileSize: 12, manaCost: 40, cooldown: 1000, piercing: true },
+    abilityStats: { damage: 128, range: 168, projectileSpeed: 436, projectileSize: 13, manaCost: 38, cooldown: 625, piercing: true },
   },
   [makeItemId(1, 1, 5)]: {
     id: 1105, name: "Shadow Helm", category: 1, subtype: 1, tier: 5,
     color: 0x8844cc, tierColor: TIER_COLORS[5],
     description: "Shadows lash out at all nearby enemies.",
-    abilityStats: { damage: 100, range: 160, projectileSpeed: 420, projectileSize: 12, manaCost: 42, cooldown: 950, piercing: true },
+    abilityStats: { damage: 176, range: 186, projectileSpeed: 472, projectileSize: 14, manaCost: 35, cooldown: 455, piercing: true },
   },
   [makeItemId(1, 1, 6)]: {
     id: 1106, name: "Divine Helm", category: 1, subtype: 1, tier: 6,
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "Holy wrath strikes all who stand near.",
-    abilityStats: { damage: 128, range: 170, projectileSpeed: 440, projectileSize: 13, manaCost: 44, cooldown: 900, piercing: true },
+    abilityStats: { damage: 240, range: 210, projectileSpeed: 520, projectileSize: 16, manaCost: 32, cooldown: 333, piercing: true },
   },
   [makeItemId(1, 1, 7)]: {
     id: 1107, name: "Infernal Helm", category: 1, subtype: 1, tier: 7,
     color: 0xff4444, tierColor: TIER_COLORS[7],
     description: "Hellfire erupts in a devastating circle.",
-    abilityStats: { damage: 144, range: 175, projectileSpeed: 450, projectileSize: 13, manaCost: 46, cooldown: 870, piercing: true },
-  },
-  [makeItemId(1, 1, 8)]: {
-    id: 1108, name: "Abyssal Helm", category: 1, subtype: 1, tier: 8,
-    color: 0xff66aa, tierColor: TIER_COLORS[8],
-    description: "Abyssal energy tears through everything nearby.",
-    abilityStats: { damage: 176, range: 185, projectileSpeed: 460, projectileSize: 14, manaCost: 48, cooldown: 840, piercing: true },
-  },
-  [makeItemId(1, 1, 9)]: {
-    id: 1109, name: "Spectral Helm", category: 1, subtype: 1, tier: 9,
-    color: 0x44ffcc, tierColor: TIER_COLORS[9],
-    description: "Ghostly blades spin through the living.",
-    abilityStats: { damage: 208, range: 195, projectileSpeed: 470, projectileSize: 14, manaCost: 50, cooldown: 810, piercing: true },
-  },
-  [makeItemId(1, 1, 10)]: {
-    id: 1110, name: "Celestial Helm", category: 1, subtype: 1, tier: 10,
-    color: 0xffffff, tierColor: TIER_COLORS[10],
-    description: "Starlight shreds all in its orbit.",
-    abilityStats: { damage: 240, range: 205, projectileSpeed: 480, projectileSize: 15, manaCost: 52, cooldown: 780, piercing: true },
-  },
-  [makeItemId(1, 1, 11)]: {
-    id: 1111, name: "Doomfire Helm", category: 1, subtype: 1, tier: 11,
-    color: 0xff8844, tierColor: TIER_COLORS[11],
-    description: "Apocalyptic flames consume the battlefield.",
-    abilityStats: { damage: 280, range: 215, projectileSpeed: 490, projectileSize: 15, manaCost: 54, cooldown: 750, piercing: true },
-  },
-  [makeItemId(1, 1, 12)]: {
-    id: 1112, name: "Eternity Helm", category: 1, subtype: 1, tier: 12,
-    color: 0xff2266, tierColor: TIER_COLORS[12],
-    description: "An endless vortex of annihilation.",
-    abilityStats: { damage: 320, range: 225, projectileSpeed: 500, projectileSize: 16, manaCost: 56, cooldown: 720, piercing: true },
+    abilityStats: { damage: 320, range: 240, projectileSpeed: 580, projectileSize: 17, manaCost: 28, cooldown: 250, piercing: true },
   },
 
   // ===== RELICS (category=1, subtype=2) =====
@@ -553,73 +493,43 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     id: 1201, name: "Stone Relic", category: 1, subtype: 2, tier: 1,
     color: 0x8b7355, tierColor: TIER_COLORS[1],
     description: "Emits a weak expanding pulse.",
-    abilityStats: { damage: 48, range: 176, projectileSpeed: 271, projectileSize: 13, manaCost: 47, cooldown: 3000, piercing: true },
+    abilityStats: { damage: 48, range: 176, projectileSpeed: 273, projectileSize: 14, manaCost: 48, cooldown: 3000, piercing: true },
   },
   [makeItemId(1, 2, 2)]: {
     id: 1202, name: "Iron Relic", category: 1, subtype: 2, tier: 2,
     color: 0xaabbcc, tierColor: TIER_COLORS[2],
     description: "Arcane energy ripples outward.",
-    abilityStats: { damage: 72, range: 184, projectileSpeed: 282, projectileSize: 14, manaCost: 46, cooldown: 2000, piercing: true },
+    abilityStats: { damage: 84, range: 188, projectileSpeed: 287, projectileSize: 14, manaCost: 46, cooldown: 1714, piercing: true },
   },
   [makeItemId(1, 2, 3)]: {
     id: 1203, name: "Crystal Relic", category: 1, subtype: 2, tier: 3,
     color: 0x44cc66, tierColor: TIER_COLORS[3],
     description: "Crystal resonance shatters nearby foes.",
-    abilityStats: { damage: 96, range: 192, projectileSpeed: 294, projectileSize: 14, manaCost: 45, cooldown: 1500, piercing: true },
+    abilityStats: { damage: 132, range: 204, projectileSpeed: 305, projectileSize: 15, manaCost: 45, cooldown: 1091, piercing: true },
   },
   [makeItemId(1, 2, 4)]: {
     id: 1204, name: "Arcane Relic", category: 1, subtype: 2, tier: 4,
     color: 0xaa44ff, tierColor: TIER_COLORS[4],
     description: "Unleashes a devastating arcane nova.",
-    abilityStats: { damage: 120, range: 200, projectileSpeed: 300, projectileSize: 15, manaCost: 45, cooldown: 1200, piercing: true },
+    abilityStats: { damage: 192, range: 224, projectileSpeed: 327, projectileSize: 16, manaCost: 42, cooldown: 750, piercing: true },
   },
   [makeItemId(1, 2, 5)]: {
     id: 1205, name: "Shadow Relic", category: 1, subtype: 2, tier: 5,
     color: 0x8844cc, tierColor: TIER_COLORS[5],
     description: "Shadow energy consumes all nearby.",
-    abilityStats: { damage: 144, range: 208, projectileSpeed: 318, projectileSize: 16, manaCost: 44, cooldown: 1000, piercing: true },
+    abilityStats: { damage: 264, range: 248, projectileSpeed: 354, projectileSize: 18, manaCost: 40, cooldown: 545, piercing: true },
   },
   [makeItemId(1, 2, 6)]: {
     id: 1206, name: "Divine Relic", category: 1, subtype: 2, tier: 6,
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "Holy radiance purges all within reach.",
-    abilityStats: { damage: 180, range: 220, projectileSpeed: 338, projectileSize: 16, manaCost: 42, cooldown: 800, piercing: true },
+    abilityStats: { damage: 360, range: 280, projectileSpeed: 390, projectileSize: 20, manaCost: 36, cooldown: 400, piercing: true },
   },
   [makeItemId(1, 2, 7)]: {
     id: 1207, name: "Infernal Relic", category: 1, subtype: 2, tier: 7,
     color: 0xff4444, tierColor: TIER_COLORS[7],
     description: "Hellfire erupts in an ever-growing wave.",
-    abilityStats: { damage: 216, range: 232, projectileSpeed: 357, projectileSize: 17, manaCost: 41, cooldown: 667, piercing: true },
-  },
-  [makeItemId(1, 2, 8)]: {
-    id: 1208, name: "Abyssal Relic", category: 1, subtype: 2, tier: 8,
-    color: 0xff66aa, tierColor: TIER_COLORS[8],
-    description: "The abyss expands to devour everything.",
-    abilityStats: { damage: 264, range: 248, projectileSpeed: 381, projectileSize: 18, manaCost: 39, cooldown: 545, piercing: true },
-  },
-  [makeItemId(1, 2, 9)]: {
-    id: 1209, name: "Spectral Relic", category: 1, subtype: 2, tier: 9,
-    color: 0x44ffcc, tierColor: TIER_COLORS[9],
-    description: "Ghostly energy tears through the living.",
-    abilityStats: { damage: 312, range: 264, projectileSpeed: 405, projectileSize: 19, manaCost: 37, cooldown: 462, piercing: true },
-  },
-  [makeItemId(1, 2, 10)]: {
-    id: 1210, name: "Celestial Relic", category: 1, subtype: 2, tier: 10,
-    color: 0xffffff, tierColor: TIER_COLORS[10],
-    description: "Starlight explodes in an expanding nova.",
-    abilityStats: { damage: 360, range: 280, projectileSpeed: 429, projectileSize: 20, manaCost: 35, cooldown: 400, piercing: true },
-  },
-  [makeItemId(1, 2, 11)]: {
-    id: 1211, name: "Doomfire Relic", category: 1, subtype: 2, tier: 11,
-    color: 0xff8844, tierColor: TIER_COLORS[11],
-    description: "Apocalyptic flame engulfs the battlefield.",
-    abilityStats: { damage: 420, range: 300, projectileSpeed: 459, projectileSize: 20, manaCost: 33, cooldown: 343, piercing: true },
-  },
-  [makeItemId(1, 2, 12)]: {
-    id: 1212, name: "Eternity Relic", category: 1, subtype: 2, tier: 12,
-    color: 0xff2266, tierColor: TIER_COLORS[12],
-    description: "An infinite expanding wave of annihilation.",
-    abilityStats: { damage: 480, range: 320, projectileSpeed: 488, projectileSize: 21, manaCost: 31, cooldown: 300, piercing: true },
+    abilityStats: { damage: 480, range: 320, projectileSpeed: 435, projectileSize: 22, manaCost: 32, cooldown: 300, piercing: true },
   },
 
   // ===== HEAVY ARMOR (category=2, subtype=0) =====
@@ -855,66 +765,36 @@ export const ITEM_DEFS: Record<number, ItemDefinition> = {
     id: 302, name: "Silver Ring", category: 3, subtype: 0, tier: 2,
     color: 0xcccccc, tierColor: TIER_COLORS[2],
     description: "Polished silver amplifies magic.",
-    ringStats: { speedBonus: 6, damageBonus: 4, hpRegenBonus: 1.0, maxHpBonus: 10, maxManaBonus: 10 },
+    ringStats: { speedBonus: 12, damageBonus: 9, hpRegenBonus: 2.0, maxHpBonus: 22, maxManaBonus: 22 },
   },
   [makeItemId(3, 0, 3)]: {
     id: 303, name: "Emerald Ring", category: 3, subtype: 0, tier: 3,
     color: 0x44cc66, tierColor: TIER_COLORS[3],
     description: "Emerald pulses with natural power.",
-    ringStats: { speedBonus: 10, damageBonus: 6, hpRegenBonus: 1.5, maxHpBonus: 15, maxManaBonus: 15 },
+    ringStats: { speedBonus: 21, damageBonus: 16, hpRegenBonus: 3.5, maxHpBonus: 40, maxManaBonus: 40 },
   },
   [makeItemId(3, 0, 4)]: {
     id: 304, name: "Ruby Ring", category: 3, subtype: 0, tier: 4,
     color: 0xcc3344, tierColor: TIER_COLORS[4],
     description: "Burning ruby fuels aggression.",
-    ringStats: { speedBonus: 14, damageBonus: 9, hpRegenBonus: 2.0, maxHpBonus: 20, maxManaBonus: 20 },
+    ringStats: { speedBonus: 30, damageBonus: 23, hpRegenBonus: 5.5, maxHpBonus: 57, maxManaBonus: 57 },
   },
   [makeItemId(3, 0, 5)]: {
     id: 305, name: "Diamond Ring", category: 3, subtype: 0, tier: 5,
     color: 0xaaeeff, tierColor: TIER_COLORS[5],
     description: "Flawless diamond radiates power.",
-    ringStats: { speedBonus: 18, damageBonus: 12, hpRegenBonus: 3.0, maxHpBonus: 30, maxManaBonus: 30 },
+    ringStats: { speedBonus: 39, damageBonus: 30, hpRegenBonus: 7.0, maxHpBonus: 75, maxManaBonus: 75 },
   },
   [makeItemId(3, 0, 6)]: {
     id: 306, name: "Celestial Ring", category: 3, subtype: 0, tier: 6,
     color: 0xffdd00, tierColor: TIER_COLORS[6],
     description: "A fragment of a fallen star.",
-    ringStats: { speedBonus: 22, damageBonus: 16, hpRegenBonus: 4.0, maxHpBonus: 40, maxManaBonus: 40 },
+    ringStats: { speedBonus: 48, damageBonus: 37, hpRegenBonus: 9.0, maxHpBonus: 92, maxManaBonus: 92 },
   },
   [makeItemId(3, 0, 7)]: {
     id: 3007, name: "Infernal Band", category: 3, subtype: 0, tier: 7,
     color: 0xff4444, tierColor: TIER_COLORS[7],
     description: "A ring that burns with hellfire.",
-    ringStats: { speedBonus: 26, damageBonus: 20, hpRegenBonus: 5.0, maxHpBonus: 50, maxManaBonus: 50 },
-  },
-  [makeItemId(3, 0, 8)]: {
-    id: 3008, name: "Abyssal Loop", category: 3, subtype: 0, tier: 8,
-    color: 0xff66aa, tierColor: TIER_COLORS[8],
-    description: "Draws power from the endless abyss.",
-    ringStats: { speedBonus: 32, damageBonus: 24, hpRegenBonus: 6.0, maxHpBonus: 60, maxManaBonus: 60 },
-  },
-  [makeItemId(3, 0, 9)]: {
-    id: 3009, name: "Wraith Ring", category: 3, subtype: 0, tier: 9,
-    color: 0x44ffcc, tierColor: TIER_COLORS[9],
-    description: "Whispers of the dead empower the wearer.",
-    ringStats: { speedBonus: 38, damageBonus: 28, hpRegenBonus: 7.0, maxHpBonus: 70, maxManaBonus: 70 },
-  },
-  [makeItemId(3, 0, 10)]: {
-    id: 3010, name: "Celestial Band", category: 3, subtype: 0, tier: 10,
-    color: 0xffffff, tierColor: TIER_COLORS[10],
-    description: "Forged from condensed starlight.",
-    ringStats: { speedBonus: 44, damageBonus: 33, hpRegenBonus: 8.0, maxHpBonus: 80, maxManaBonus: 80 },
-  },
-  [makeItemId(3, 0, 11)]: {
-    id: 3011, name: "Doomfire Signet", category: 3, subtype: 0, tier: 11,
-    color: 0xff8844, tierColor: TIER_COLORS[11],
-    description: "Sealed with the mark of apocalypse.",
-    ringStats: { speedBonus: 50, damageBonus: 38, hpRegenBonus: 9.5, maxHpBonus: 95, maxManaBonus: 95 },
-  },
-  [makeItemId(3, 0, 12)]: {
-    id: 3012, name: "Eternity Ring", category: 3, subtype: 0, tier: 12,
-    color: 0xff2266, tierColor: TIER_COLORS[12],
-    description: "Power beyond the end of time.",
     ringStats: { speedBonus: 58, damageBonus: 44, hpRegenBonus: 11.0, maxHpBonus: 110, maxManaBonus: 110 },
   },
 
@@ -1224,12 +1104,18 @@ function rollRandomOrb(): ItemInstanceData {
   return generateOrbInstance(pickRandom(orbTypes));
 }
 
-/** Equipment tier group: one roll picks a random Weapon/Ability/Armor/Ring. */
+/** Equipment tier group: one roll picks a random Weapon/Ability/Armor/Ring.
+ *  Optional abilityRingTierMin/Max override the tier range for abilities and rings
+ *  (which now cap at T7 instead of T12). */
 function makeEquipmentTierGroup(
   dropChance: number,
   tierMin: number,
-  tierMax: number
+  tierMax: number,
+  abilityRingTierMin?: number,
+  abilityRingTierMax?: number
 ): TierGroupDropEntry {
+  const arMin = abilityRingTierMin ?? tierMin;
+  const arMax = abilityRingTierMax ?? tierMax;
   return {
     type: "tierGroup",
     dropChance,
@@ -1237,13 +1123,13 @@ function makeEquipmentTierGroup(
       { category: ItemCategory.Weapon, subtype: WeaponSubtype.Sword, tierMin, tierMax },
       { category: ItemCategory.Weapon, subtype: WeaponSubtype.Bow, tierMin, tierMax },
       { category: ItemCategory.Weapon, subtype: WeaponSubtype.Wand, tierMin, tierMax },
-      { category: ItemCategory.Ability, subtype: AbilitySubtype.Quiver, tierMin, tierMax },
-      { category: ItemCategory.Ability, subtype: AbilitySubtype.Helm, tierMin, tierMax },
-      { category: ItemCategory.Ability, subtype: AbilitySubtype.Relic, tierMin, tierMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Quiver, tierMin: arMin, tierMax: arMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Helm, tierMin: arMin, tierMax: arMax },
+      { category: ItemCategory.Ability, subtype: AbilitySubtype.Relic, tierMin: arMin, tierMax: arMax },
       { category: ItemCategory.Armor, subtype: ArmorSubtype.Heavy, tierMin, tierMax },
       { category: ItemCategory.Armor, subtype: ArmorSubtype.Light, tierMin, tierMax },
       { category: ItemCategory.Armor, subtype: ArmorSubtype.Mantle, tierMin, tierMax },
-      { category: ItemCategory.Ring, subtype: 0, tierMin, tierMax },
+      { category: ItemCategory.Ring, subtype: 0, tierMin: arMin, tierMax: arMax },
     ],
   };
 }
@@ -1263,7 +1149,7 @@ export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
   [DungeonType.InfernalPit]: {
     entries: [
       { type: "independent", dropChance: 1.0, orbRarityWeighted: true },
-      makeEquipmentTierGroup(0.25, 10, 10),
+      makeEquipmentTierGroup(0.25, 10, 10, 6, 6),
     ],
   },
   [DungeonType.VoidSanctum]: {
@@ -1278,7 +1164,7 @@ export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
           itemId: id,
         })
       ),
-      makeEquipmentTierGroup(0.15, 11, 12),
+      makeEquipmentTierGroup(0.15, 11, 12, 7, 7),
     ],
   },
 };
@@ -1298,121 +1184,121 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
 
   // ===== LOWLANDS (T1) — T1-2 equipment =====
   [EnemyType.Wolf]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.Rattlesnake]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BogLurker]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SwampToad]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.ThornBush]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DesertScorpion]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BriarBeast]: {
-    entries: [makeEquipmentTierGroup(0.125, 1, 2), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 1, 2, 1, 1), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BriarImp]: {
-    entries: [makeEquipmentTierGroup(0.04, 1, 2), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 1, 2, 1, 1), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // ===== MIDLANDS (T1) — T2-3 equipment =====
   [EnemyType.ForestGuardian]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DustDevil]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.JungleStalker]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.StoneGolem]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.VenomSpitter]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SandWraith]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BroodMother]: {
-    entries: [makeEquipmentTierGroup(0.125, 2, 3), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 2, 3, 1, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.Broodling]: {
-    entries: [makeEquipmentTierGroup(0.04, 2, 3), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 2, 3, 1, 2), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // ===== HIGHLANDS (T1) — T3-4 equipment =====
   [EnemyType.FrostWarden]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.CliffDrake]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.StormElemental]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.IceWraith]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.ThunderHawk]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.MountainTroll]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.FrostMatriarch]: {
-    entries: [makeEquipmentTierGroup(0.125, 3, 4), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 3, 4, 2, 2), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.FrostSprite]: {
-    entries: [makeEquipmentTierGroup(0.04, 3, 4), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 3, 4, 2, 2), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // ===== GODLANDS (T1) — T3-4 equipment + orbs =====
   [EnemyType.FallenSeraph]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.VoidWalker]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.AncientTitan]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.AbyssalEye]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.ChaosSpawn]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.DoomPriest]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 3, 4),
+      makeEquipmentTierGroup(0.075, 3, 4, 2, 2),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
@@ -1429,73 +1315,73 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
 
   // Lowlands (T2 realm) — T5-6
   [EnemyType.CursedArcher]: {
-    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 5, 6, 3, 3), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.RuinedGolem]: {
-    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 5, 6, 3, 3), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BlightedVine]: {
-    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 5, 6, 3, 3), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.PlagueBrood]: {
-    entries: [makeEquipmentTierGroup(0.125, 5, 6), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 5, 6, 3, 3), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.PlagueRat]: {
-    entries: [makeEquipmentTierGroup(0.04, 5, 6), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 5, 6, 3, 3), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Midlands (T2 realm) — T6-7
   [EnemyType.TombGuard]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 6, 7, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SandPhantom]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 6, 7, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.CursedObelisk]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 6, 7, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.CursedMatron]: {
-    entries: [makeEquipmentTierGroup(0.125, 6, 7), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 6, 7, 3, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.CursedSpawn]: {
-    entries: [makeEquipmentTierGroup(0.04, 6, 7), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 6, 7, 3, 4), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Highlands (T2 realm) — T7-8
   [EnemyType.ObsidianSentinel]: {
-    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 7, 8, 4, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.StormCaller]: {
-    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 7, 8, 4, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.AshDrake]: {
-    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 7, 8, 4, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.AshMatriarch]: {
-    entries: [makeEquipmentTierGroup(0.125, 7, 8), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 7, 8, 4, 4), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.AshSprite]: {
-    entries: [makeEquipmentTierGroup(0.04, 7, 8), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 7, 8, 4, 4), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Godlands (T2 realm) — T7-8 + orbs
   [EnemyType.RuinLord]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 7, 8),
+      makeEquipmentTierGroup(0.075, 7, 8, 4, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.VoidHerald]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 7, 8),
+      makeEquipmentTierGroup(0.075, 7, 8, 4, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.ForgottenTitan]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 7, 8),
+      makeEquipmentTierGroup(0.075, 7, 8, 4, 4),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
@@ -1512,73 +1398,73 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
 
   // Lowlands (T3 realm) — T9-10
   [EnemyType.DemonHound]: {
-    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 9, 10, 5, 5), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.HellfireImp]: {
-    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 9, 10, 5, 5), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.BrimstoneGolem]: {
-    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 9, 10, 5, 5), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DemonBroodmother]: {
-    entries: [makeEquipmentTierGroup(0.125, 9, 10), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 9, 10, 5, 5), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DemonWhelp]: {
-    entries: [makeEquipmentTierGroup(0.04, 9, 10), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 9, 10, 5, 5), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Midlands (T3 realm) — T10-11
   [EnemyType.InfernalKnight]: {
-    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 10, 11, 5, 6), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.LavaWyrm]: {
-    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 10, 11, 5, 6), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SoulReaper]: {
-    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 10, 11, 5, 6), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.SoulHarvester]: {
-    entries: [makeEquipmentTierGroup(0.125, 10, 11), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 10, 11, 5, 6), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.LostSoul]: {
-    entries: [makeEquipmentTierGroup(0.04, 10, 11), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 10, 11, 5, 6), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Highlands (T3 realm) — T11-12
   [EnemyType.AbyssalLord]: {
-    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 11, 12, 6, 7), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.HellfireDrake]: {
-    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 11, 12, 6, 7), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DoomSentinel]: {
-    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 11, 12, 6, 7), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DoomMatriarch]: {
-    entries: [makeEquipmentTierGroup(0.125, 11, 12), ...CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.125, 11, 12, 6, 7), ...CONSUMABLE_ENTRIES],
   },
   [EnemyType.DoomSprite]: {
-    entries: [makeEquipmentTierGroup(0.04, 11, 12), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.04, 11, 12, 6, 7), ...MINION_CONSUMABLE_ENTRIES],
   },
 
   // Godlands (T3 realm) — T11-12 + orbs
   [EnemyType.ArchDemon]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 11, 12),
+      makeEquipmentTierGroup(0.075, 11, 12, 6, 7),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.VoidEmperor]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 11, 12),
+      makeEquipmentTierGroup(0.075, 11, 12, 6, 7),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.WorldEnder]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 11, 12),
+      makeEquipmentTierGroup(0.075, 11, 12, 6, 7),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
@@ -1587,21 +1473,21 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
   // ===== DUNGEON: The Infernal Pit — Godlands-level drops (unchanged) =====
   [EnemyType.InfernalHound]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.MagmaSerpent]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.CinderWraith]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
@@ -1610,27 +1496,27 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
   // ===== DUNGEON: The Void Sanctum — Godlands-level drops =====
   [EnemyType.VoidAcolyte]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.ShadowWeaver]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.AbyssalSentry]: {
     entries: [
-      makeEquipmentTierGroup(0.075, 8, 9),
+      makeEquipmentTierGroup(0.075, 8, 9, 4, 5),
       { type: "independent", dropChance: 0.0375, orbRarityWeighted: true },
       ...CONSUMABLE_ENTRIES,
     ],
   },
   [EnemyType.VoidMinion]: { // Spawned add — reduced drops
-    entries: [makeEquipmentTierGroup(0.02, 8, 9), ...MINION_CONSUMABLE_ENTRIES],
+    entries: [makeEquipmentTierGroup(0.02, 8, 9, 4, 5), ...MINION_CONSUMABLE_ENTRIES],
   },
   [EnemyType.VoidSwitch]: { entries: [] }, // Destructible object — no drops
 };
@@ -1767,7 +1653,11 @@ export function determineBagRarity(items: ItemInstanceData[]): number {
 
     if (tier === ItemTier.UT) {
       hasUT = true;
-    } else if (tier >= 8) {
+    } else if (
+      (category === ItemCategory.Ability || category === ItemCategory.Ring)
+        ? tier >= 6
+        : tier >= 8
+    ) {
       hasHighTier = true;
     }
   }

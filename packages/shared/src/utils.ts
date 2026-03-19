@@ -86,8 +86,9 @@ function accumulateItemBonuses(
   if (isEmptyItem(item)) return;
 
   // Locked stats — value determined by item tier (or UT range) + roll
-  addLockedStatBonus(bonuses, item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT, lockedStatMultiplier);
-  addLockedStatBonus(bonuses, item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT, lockedStatMultiplier);
+  const category = getItemCategory(item.baseItemId);
+  addLockedStatBonus(bonuses, item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT, lockedStatMultiplier, category);
+  addLockedStatBonus(bonuses, item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT, lockedStatMultiplier, category);
 
   // Open stats (packed as [type, tier, roll, type, tier, roll, ...])
   for (let i = 0; i < item.openStats.length; i += 3) {
@@ -117,10 +118,11 @@ function addLockedStatBonus(
   itemTier: number,
   roll: number,
   isUT: boolean,
-  multiplier: number = 1.0
+  multiplier: number = 1.0,
+  category?: number
 ): void {
   if (statType < 0) return;
-  const rawValue = getLockedStatValue(statType, itemTier, roll, isUT);
+  const rawValue = getLockedStatValue(statType, itemTier, roll, isUT, category);
   const value = multiplier !== 1.0 ? Math.round(rawValue * multiplier) : rawValue;
   applyStatBonus(bonuses, statType, value);
 }

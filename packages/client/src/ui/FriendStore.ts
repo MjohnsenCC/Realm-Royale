@@ -7,6 +7,7 @@ export interface FriendEntry {
   characterName?: string;
   characterClass?: number;
   level?: number;
+  serverRegion?: string;
 }
 
 // In-memory cache populated from server on join

@@ -21,6 +21,12 @@ export class NetworkManager {
   }
 
   async joinGame(options: string | AuthenticatedJoinOptions | GuestJoinOptions): Promise<Colyseus.Room> {
+    // Clean up any existing connection before creating a new one
+    if (this.room) {
+      this.stopPingTracking();
+      try { await this.room.leave(); } catch (_) { /* already disconnected */ }
+      this.room = null;
+    }
     this.client = new Colyseus.Client(getServerUrl());
     const joinOpts = typeof options === "string" ? { name: options } : options;
     this.room = await this.client.joinOrCreate("game_room", joinOpts);

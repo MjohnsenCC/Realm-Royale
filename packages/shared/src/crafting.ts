@@ -58,7 +58,8 @@ function rollRandomStat(item: ItemInstanceData, exclude?: Set<number>): [number,
   const available = exclude ? pool.filter(t => !exclude.has(t)) : pool;
   if (available.length === 0) return null;
   const statType = pickRandom(available);
-  const statTier = rollOpenStatTier(item.instanceTier);
+  const category = getItemCategory(item.baseItemId);
+  const statTier = rollOpenStatTier(item.instanceTier, category);
   const statRoll = rollStatRoll();
   return [statType, statTier, statRoll];
 }
@@ -293,7 +294,8 @@ export function applyPrismOrb(item: ItemInstanceData): CraftingResult {
 
   const result = cloneItem(item);
   const targetIdx = pickRandom(unprotected);
-  const newTier = rollOpenStatTier(item.instanceTier);
+  const category = getItemCategory(item.baseItemId);
+  const newTier = rollOpenStatTier(item.instanceTier, category);
   result.openStats[targetIdx * 3 + 1] = newTier;
   result.openStats[targetIdx * 3 + 2] = rollStatRoll(); // re-roll value for new tier
   consumeForgeProtection(result);

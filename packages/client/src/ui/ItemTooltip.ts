@@ -417,11 +417,11 @@ export class ItemTooltip {
         ? (ARMOR_LOCKED_STAT_MULTIPLIER[subtype] ?? 1.0)
         : 1.0;
       if (item.lockedStat1Type >= 0) {
-        const rawVal = getLockedStatValue(item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT);
+        const rawVal = getLockedStatValue(item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, item.isUT, category);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
         if (shiftHeld) {
-          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat1Type, item.instanceTier, item.isUT);
+          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat1Type, item.instanceTier, item.isUT, category);
           const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
           const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)}) ${name}`);
@@ -430,11 +430,11 @@ export class ItemTooltip {
         }
       }
       if (item.lockedStat2Type >= 0) {
-        const rawVal = getLockedStatValue(item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT);
+        const rawVal = getLockedStatValue(item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, item.isUT, category);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
         if (shiftHeld) {
-          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat2Type, item.instanceTier, item.isUT);
+          const [rawMin, rawMax] = getLockedStatRange(item.lockedStat2Type, item.instanceTier, item.isUT, category);
           const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
           const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
           lockedLines.push(`+${fmtStat(val)}(${fmtStat(min)}-${fmtStat(max)}) ${name}`);

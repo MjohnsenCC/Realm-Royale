@@ -3,6 +3,11 @@ import { getSupabase } from "./supabase";
 export interface FriendRecord {
   accountId: string;
   accountName: string;
+  isOnline: boolean;
+  serverRegion: string | null;
+  characterName: string | null;
+  characterClass: number | null;
+  characterLevel: number | null;
 }
 
 /**
@@ -13,7 +18,7 @@ export async function getAccountFriends(accountId: string): Promise<FriendRecord
 
   const { data, error } = await supabase
     .from("friends")
-    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name)")
+    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name, is_online, server_region, online_character_name, online_character_class, online_character_level)")
     .eq("account_id", accountId);
 
   if (error || !data) {
@@ -23,6 +28,11 @@ export async function getAccountFriends(accountId: string): Promise<FriendRecord
   return data.map((row: any) => ({
     accountId: row.friend_account_id as string,
     accountName: (row.accounts?.account_name as string) ?? "",
+    isOnline: row.accounts?.is_online ?? false,
+    serverRegion: row.accounts?.server_region ?? null,
+    characterName: row.accounts?.online_character_name ?? null,
+    characterClass: row.accounts?.online_character_class ?? null,
+    characterLevel: row.accounts?.online_character_level ?? null,
   }));
 }
 

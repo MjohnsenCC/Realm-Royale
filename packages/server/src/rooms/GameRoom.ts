@@ -115,7 +115,7 @@ import {
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
-import { getAccountVault, saveAccountVault, getAccountName } from "../db/accounts";
+import { getAccountVault, saveAccountVault, getAccountName, setAccountOnline, setAccountOffline } from "../db/accounts";
 import { getAccountFriends, addAccountFriend, removeAccountFriend } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
@@ -1118,18 +1118,15 @@ export class GameRoom extends Room<GameState> {
       if (!player || !player.accountId) return;
       try {
         const friendRecords = await getAccountFriends(player.accountId);
-        const friends = friendRecords.map((fr) => {
-          const sessionId = this.accountToSession.get(fr.accountId);
-          const onlinePlayer = sessionId ? this.state.players.get(sessionId) : undefined;
-          return {
-            accountId: fr.accountId,
-            accountName: fr.accountName,
-            online: !!onlinePlayer,
-            characterName: onlinePlayer?.name,
-            characterClass: onlinePlayer?.characterClass,
-            level: onlinePlayer?.level,
-          };
-        });
+        const friends = friendRecords.map((fr) => ({
+          accountId: fr.accountId,
+          accountName: fr.accountName,
+          online: fr.isOnline,
+          characterName: fr.characterName ?? undefined,
+          characterClass: fr.characterClass ?? undefined,
+          level: fr.characterLevel ?? undefined,
+          serverRegion: fr.serverRegion ?? undefined,
+        }));
         client.send(ServerMessage.FriendsList, { friends });
       } catch (err) {
         console.error("Failed to load friends:", err);
@@ -1235,7 +1232,39 @@ export class GameRoom extends Room<GameState> {
       // Load account name
       const acctName = await getAccountName(payload.accountId);
       player.accountName = acctName ?? "";
+
+      // Evict any existing session for this account (ghost cleanup)
+      const existingSessionId = this.accountToSession.get(payload.accountId);
+      if (existingSessionId && existingSessionId !== client.sessionId) {
+        const stalePlayer = this.state.players.get(existingSessionId);
+        if (stalePlayer?.characterId) {
+          try {
+            await this.savePlayerCharacter(stalePlayer);
+          } catch (err) {
+            console.error(`Failed to save stale character on eviction: ${stalePlayer.characterId}`, err);
+          }
+        }
+        this.state.players.delete(existingSessionId);
+        this.removePlayerProjectiles(existingSessionId);
+        this.state.playerCount = this.state.players.size;
+        console.log(`Evicted stale session ${existingSessionId} for account ${payload.accountId}`);
+        const staleClient = this.clients.find((c: any) => c.sessionId === existingSessionId);
+        if (staleClient) {
+          staleClient.leave();
+        }
+      }
+
       this.accountToSession.set(payload.accountId, client.sessionId);
+
+      // Mark account as online in the database for cross-server presence
+      setAccountOnline(
+        payload.accountId,
+        config.serverRegion,
+        character.name,
+        character.characterClass,
+        character.level
+      ).catch((err) => console.error("Failed to set account online:", err));
+
       player.characterClass = character.characterClass;
       player.level = character.level;
       player.xp = character.xp;
@@ -1297,9 +1326,12 @@ export class GameRoom extends Room<GameState> {
   async onLeave(client: Client, _consented: boolean) {
     const player = this.state.players.get(client.sessionId);
 
-    // Remove account-to-session tracking
+    // Remove account-to-session tracking and mark offline in DB
     if (player?.accountId) {
       this.accountToSession.delete(player.accountId);
+      setAccountOffline(player.accountId).catch((err) =>
+        console.error("Failed to set account offline:", err)
+      );
     }
 
     // Save authenticated player's character before removing

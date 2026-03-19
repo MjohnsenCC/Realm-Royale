@@ -24,6 +24,7 @@ export interface NearbyPlayerInfo {
   equipment: ItemInstanceData[];
   isFriend: boolean;
   online: boolean;
+  serverRegion?: string;
 }
 
 const MAX_ROWS = 30;
@@ -94,7 +95,6 @@ export class SocialPanel {
   private tabY!: number;
   private tabGap!: number;
   private rowStartY!: number;
-  private spriteSize!: number;
   private equipSize!: number;
   private rowStride!: number;
   private textMaxW!: number;
@@ -224,16 +224,10 @@ export class SocialPanel {
         .setOrigin(0.5, 0.5);
       this.contentContainer.add(bg);
 
-      // Character sprite (leftmost, with padding)
-      const spriteX = this.pad + this.spriteSize / 2;
-      const spriteCenterY = rowY + this.lineH / 2;
-      const charSprite = scene.add.image(spriteX, spriteCenterY, "sprite-player-archer")
-        .setDisplaySize(this.spriteSize, this.spriteSize);
-      this.contentContainer.add(charSprite);
-
-      // Name text (after sprite)
-      const textX = this.pad + this.spriteSize + Math.round(6 * S);
-      const nameText = scene.add.text(textX, rowY + Math.round(4 * S), "", {
+      // Name text (top of row, inset by row padding)
+      const rowPad = Math.round(4 * S);
+      const textX = this.pad + rowPad;
+      const nameText = scene.add.text(textX, rowY + rowPad, "", {
         fontSize: nameFontSize,
         color: "#66cc66",
         fontFamily: "'Press Start 2P', monospace",
@@ -242,7 +236,7 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(nameText);
 
-      const levelText = scene.add.text(textX, rowY + Math.round(4 * S) + Math.round(12 * S), "", {
+      const levelText = scene.add.text(textX, rowY + rowPad + Math.round(10 * S), "", {
         fontSize: smallFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -251,17 +245,24 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(levelText);
 
-      // Equipment slots (right side)
+      // Character sprite (bottom row, inline with equip slots, same size)
+      const slotsRowCenterY = rowY + this.lineH - this.equipSize / 2 - rowPad;
+      const spriteX = this.pad + rowPad + this.equipSize / 2;
+      const charSprite = scene.add.image(spriteX, slotsRowCenterY, "sprite-player-archer")
+        .setDisplaySize(this.equipSize, this.equipSize);
+      this.contentContainer.add(charSprite);
+
+      // Equipment slots (bottom row, after sprite)
       const equipSlots: Phaser.GameObjects.Image[] = [];
       const equipSlotBgs: Phaser.GameObjects.Image[] = [];
       const equipTierTexts: Phaser.GameObjects.Text[] = [];
       const eqGap = Math.round(2 * S);
-      const eqStartX = rowW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+      const eqStartX = this.pad + rowPad + this.equipSize + eqGap;
 
       for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
         const slotX = eqStartX + j * (this.equipSize + eqGap);
         const slotCenterX = slotX + this.equipSize / 2;
-        const slotCenterY = rowY + this.lineH / 2;
+        const slotCenterY = slotsRowCenterY;
 
         const bgImg = scene.add.image(slotCenterX, slotCenterY, "ui-slot-empty")
           .setDisplaySize(this.equipSize, this.equipSize);
@@ -272,7 +273,7 @@ export class SocialPanel {
           .setVisible(false);
         this.contentContainer.add(img);
 
-        const tierText = scene.add.text(slotX + this.equipSize - 1, rowY + this.lineH / 2 + this.equipSize / 2 - 1, "", {
+        const tierText = scene.add.text(slotX + this.equipSize - 1, slotsRowCenterY + this.equipSize / 2 - 1, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -435,30 +436,30 @@ export class SocialPanel {
       row.bg.setPosition(this.pad + bgW / 2, rowY + this.lineH / 2);
       row.bg.setSize(bgW, this.lineH);
 
-      // Character sprite
-      const spriteX = this.pad + this.spriteSize / 2;
-      const spriteCenterY = rowY + this.lineH / 2;
-      row.charSprite.setPosition(spriteX, spriteCenterY).setDisplaySize(this.spriteSize, this.spriteSize);
+      // Text (top of row, inset by row padding)
+      const rowPad = Math.round(4 * S);
+      const textX = this.pad + rowPad;
+      row.nameText.setPosition(textX, rowY + rowPad).setFontSize(nameFontSize).setScale(1);
+      row.levelText.setPosition(textX, rowY + rowPad + Math.round(10 * S)).setFontSize(smallFontSize).setScale(1);
 
-      // Text after sprite
-      const textX = this.pad + this.spriteSize + Math.round(6 * S);
-      row.nameText.setPosition(textX, rowY + Math.round(4 * S)).setFontSize(nameFontSize).setScale(1);
-      row.levelText.setPosition(textX, rowY + Math.round(4 * S) + Math.round(12 * S)).setFontSize(smallFontSize).setScale(1);
+      // Character sprite (bottom row, inline with equip slots)
+      const slotsRowCenterY = rowY + this.lineH - this.equipSize / 2 - rowPad;
+      const spriteX = this.pad + rowPad + this.equipSize / 2;
+      row.charSprite.setPosition(spriteX, slotsRowCenterY).setDisplaySize(this.equipSize, this.equipSize);
 
-      // Equipment slots
+      // Equipment slots (bottom row, after sprite)
       const eqGap = Math.round(2 * S);
-      const eqStartX = rowW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+      const eqStartX = this.pad + rowPad + this.equipSize + eqGap;
       const tierFontSize = `${Math.round(5 * S)}px`;
       for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
         const slotX = eqStartX + j * (this.equipSize + eqGap);
         const slotCenterX = slotX + this.equipSize / 2;
-        const slotCenterY = rowY + this.lineH / 2;
-        row.equipSlotBgs[j].setPosition(slotCenterX, slotCenterY).setDisplaySize(this.equipSize, this.equipSize);
-        row.equipSlots[j].setPosition(slotCenterX, slotCenterY);
+        row.equipSlotBgs[j].setPosition(slotCenterX, slotsRowCenterY).setDisplaySize(this.equipSize, this.equipSize);
+        row.equipSlots[j].setPosition(slotCenterX, slotsRowCenterY);
         if (row.equipSlots[j].texture.key !== "__DEFAULT") {
           row.equipSlots[j].setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
         }
-        row.equipTierTexts[j].setPosition(slotX + this.equipSize - 1, slotCenterY + this.equipSize / 2 - 1).setFontSize(tierFontSize);
+        row.equipTierTexts[j].setPosition(slotX + this.equipSize - 1, slotsRowCenterY + this.equipSize / 2 - 1).setFontSize(tierFontSize);
       }
     }
 
@@ -491,8 +492,9 @@ export class SocialPanel {
     // Size slot to fit the pre-rendered item sprite (same ratio as HUD equip slots)
     const nativeItemSize = getItemOutlinedSize();
     this.equipSize = Math.round(nativeItemSize / 0.8);
-    this.lineH = Math.max(Math.round(30 * S), this.equipSize + Math.round(4 * S));
-    this.spriteSize = this.lineH - Math.round(6 * S);
+    // Row has 3 sections: padding + name text + class/level text + sprite/slots row + padding
+    const rowPad = Math.round(4 * S);
+    this.lineH = rowPad + Math.round(10 * S) + Math.round(10 * S) + this.equipSize + rowPad;
     this.tabGap = Math.round(40 * S);
     this.rowStride = this.lineH + Math.round(4 * S);
 
@@ -511,12 +513,9 @@ export class SocialPanel {
     this.contentHeight = this.rowStartY + MAX_ROWS * this.rowStride + this.pad;
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
 
-    // Max width for name/level text so it doesn't overlap equip slots
+    // Max width for name/level text (text spans full row width now, inset by row padding)
     const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
-    const textX = this.pad + this.spriteSize + Math.round(6 * S);
-    const eqGap = Math.round(2 * S);
-    const eqStartX = contentW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
-    this.textMaxW = Math.max(0, eqStartX - textX - Math.round(4 * S));
+    this.textMaxW = Math.max(0, contentW - this.pad * 2 - rowPad * 2);
   }
 
   private setTab(tab: "nearby" | "friends"): void {
@@ -572,14 +571,10 @@ export class SocialPanel {
 
         if (info.online) {
           row.nameText.setColor("#66cc66");
-          if (this.activeTab === "friends") {
-            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}  Online`);
-          } else {
-            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}`);
-          }
+          row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
         } else {
           row.nameText.setColor("#666666");
-          row.levelText.setText("Offline");
+          row.levelText.setText("");
         }
         row.levelText.setScale(1).setVisible(true);
         if (row.levelText.width > this.textMaxW) {
@@ -776,13 +771,16 @@ export class SocialPanel {
     this.friendsTabZone.setPosition(this.px + centerX + this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
 
     // Row zones and equip zones (screen space)
+    const rowPad = Math.round(S * 4);
     const eqGap = Math.round(S * 2);
-    const eqStartX = contentW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+    const eqStartX = this.pad + rowPad + this.equipSize + eqGap;
 
     for (let i = 0; i < MAX_ROWS; i++) {
       const row = this.rows[i];
       const rowY = this.rowStartY + i * this.rowStride;
       const screenRowY = this.py + rowY + this.lineH / 2 - this.scrollY;
+      const slotsRowCenterY = rowY + this.lineH - this.equipSize / 2 - rowPad;
+      const screenSlotsY = this.py + slotsRowCenterY - this.scrollY;
 
       row.rowZone.setPosition(this.px + contentW / 2, screenRowY);
       row.rowZone.setSize(contentW, this.lineH);
@@ -791,7 +789,7 @@ export class SocialPanel {
       for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
         const slotX = eqStartX + j * (this.equipSize + eqGap);
         const screenSlotCenterX = this.px + slotX + this.equipSize / 2;
-        this.equipZones[i][j].setPosition(screenSlotCenterX, screenRowY);
+        this.equipZones[i][j].setPosition(screenSlotCenterX, screenSlotsY);
         this.equipZones[i][j].setSize(this.equipSize, this.equipSize);
       }
     }

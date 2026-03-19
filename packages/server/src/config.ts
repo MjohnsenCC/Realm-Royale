@@ -4,4 +4,5 @@ export const config = {
   port: Number(process.env.PORT) || SERVER_PORT,
   tickRate: TICK_RATE,
   maxPlayers: MAX_PLAYERS,
+  serverRegion: process.env.SERVER_REGION || "local",
 };

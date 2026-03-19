@@ -582,18 +582,18 @@ export class GameScene extends Phaser.Scene {
           },
         }, localAccountName);
       },
-      onExitToCharacterSelect: () => {
+      onExitToCharacterSelect: async () => {
         this.escapeMenuUI.hide();
-        this.network.leave();
+        await this.network.leave();
         if (AuthManager.getInstance().isAuthenticated()) {
           this.scene.start("CharacterSelectScene");
         } else {
           this.scene.start("MenuScene");
         }
       },
-      onLogOut: () => {
+      onLogOut: async () => {
         this.escapeMenuUI.hide();
-        this.network.leave();
+        await this.network.leave();
         AuthManager.getInstance().logout();
         this.scene.start("MenuScene");
       },
@@ -3504,22 +3504,38 @@ export class GameScene extends Phaser.Scene {
     const offlineFriends: NearbyPlayerInfo[] = [];
 
     for (const friend of friendEntries) {
-      const online = onlineByAccountName.get(friend.accountName);
-      if (online && online.sprite) {
-        const dx = online.sprite.x - localSprite.x;
-        const dy = online.sprite.y - localSprite.y;
+      // Check if this friend is on the same server (local presence)
+      const local = onlineByAccountName.get(friend.accountName);
+      if (local && local.sprite) {
+        const dx = local.sprite.x - localSprite.x;
+        const dy = local.sprite.y - localSprite.y;
         const distance = Math.sqrt(dx * dx + dy * dy);
         onlineFriends.push({
-          sessionId: online.sid,
-          name: (online.schema.name as string) || "",
+          sessionId: local.sid,
+          name: (local.schema.name as string) || "",
           accountName: friend.accountName,
           accountId: friend.accountId,
-          level: (online.schema.level as number) ?? 1,
-          characterClass: (online.schema.characterClass as number) ?? 0,
+          level: (local.schema.level as number) ?? 1,
+          characterClass: (local.schema.characterClass as number) ?? 0,
           distance,
-          equipment: readEquipmentData(online.schema),
+          equipment: readEquipmentData(local.schema),
           isFriend: true,
           online: true,
+        });
+      } else if (friend.online) {
+        // Friend is online on a different server (cross-server presence from DB)
+        onlineFriends.push({
+          sessionId: "",
+          name: friend.characterName ?? "",
+          accountName: friend.accountName,
+          accountId: friend.accountId,
+          level: friend.level ?? 0,
+          characterClass: friend.characterClass ?? 0,
+          distance: 0,
+          equipment: [],
+          isFriend: true,
+          online: true,
+          serverRegion: friend.serverRegion,
         });
       } else {
         offlineFriends.push({

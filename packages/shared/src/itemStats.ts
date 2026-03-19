@@ -30,6 +30,7 @@ export interface ItemInstanceData {
 export const MAX_OPEN_STATS = 5;
 export const MAX_STAT_TIER = 6;
 export const MAX_ITEM_TIER = 12;
+export const MAX_ABILITY_RING_TIER = 7;
 export const ORB_MAX_STACK = 99;
 
 // --- Item Tier to Max Stat Tier Mapping ---
@@ -44,7 +45,15 @@ export const MAX_STAT_TIER_FOR_ITEM_TIER: Record<number, number> = {
   11: 6, 12: 6,
 };
 
-export function getMaxStatTierForItemTier(itemTier: number): number {
+// Ability/Ring: each tier maps 1:1 to stat tier (T6-7 both cap at stat T6)
+export const MAX_STAT_TIER_FOR_ABILITY_RING_TIER: Record<number, number> = {
+  1: 1, 2: 2, 3: 3, 4: 4, 5: 5, 6: 6, 7: 6,
+};
+
+export function getMaxStatTierForItemTier(itemTier: number, category?: number): number {
+  if (category === ItemCategory.Ability || category === ItemCategory.Ring) {
+    return MAX_STAT_TIER_FOR_ABILITY_RING_TIER[itemTier] ?? 1;
+  }
   return MAX_STAT_TIER_FOR_ITEM_TIER[itemTier] ?? 1;
 }
 
@@ -156,20 +165,37 @@ export const LOCKED_QUALITY_BY_ITEM_TIER: Record<number, [number, number]> = {
   11: [1.38, 1.47],  12: [1.48, 1.58],
 };
 
+// Ability/Ring quality: 7 tiers spanning the full T1-12 range.
+export const ABILITY_RING_QUALITY_BY_ITEM_TIER: Record<number, [number, number]> = {
+  1: [0.70, 0.76],  2: [0.78, 0.86],  3: [0.88, 0.97],
+  4: [0.99, 1.10],  5: [1.12, 1.25],  6: [1.27, 1.42],  7: [1.44, 1.58],
+};
+
 // UT weapons/abilities: single quality range (~T9-11 equivalent).
 export const UT_LOCKED_QUALITY: [number, number] = [1.20, 1.47];
 
 /** Get the locked quality multiplier for an item tier and roll (0-100). */
-export function getLockedQualityMultiplier(itemTier: number, roll: number, isUT: boolean = false): number {
-  const range = isUT ? UT_LOCKED_QUALITY : LOCKED_QUALITY_BY_ITEM_TIER[itemTier];
+export function getLockedQualityMultiplier(itemTier: number, roll: number, isUT: boolean = false, category?: number): number {
+  let range: [number, number] | undefined;
+  if (isUT) {
+    range = UT_LOCKED_QUALITY;
+  } else if (category === ItemCategory.Ability || category === ItemCategory.Ring) {
+    range = ABILITY_RING_QUALITY_BY_ITEM_TIER[itemTier];
+  } else {
+    range = LOCKED_QUALITY_BY_ITEM_TIER[itemTier];
+  }
   if (!range) return 1.0;
   const [min, max] = range;
   return min + (max - min) * (roll / 100);
 }
 
 /** Get the locked quality range for an item tier (or UT). */
-export function getLockedQualityRange(itemTier: number, isUT: boolean = false): [number, number] {
-  return isUT ? UT_LOCKED_QUALITY : (LOCKED_QUALITY_BY_ITEM_TIER[itemTier] ?? [1.0, 1.0]);
+export function getLockedQualityRange(itemTier: number, isUT: boolean = false, category?: number): [number, number] {
+  if (isUT) return UT_LOCKED_QUALITY;
+  if (category === ItemCategory.Ability || category === ItemCategory.Ring) {
+    return ABILITY_RING_QUALITY_BY_ITEM_TIER[itemTier] ?? [1.0, 1.0];
+  }
+  return LOCKED_QUALITY_BY_ITEM_TIER[itemTier] ?? [1.0, 1.0];
 }
 
 // --- NEW: Locked Stat Ranges by Item Tier (non-overlapping) ---
@@ -198,6 +224,18 @@ export const LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number, [num
   },
 };
 
+// Ring-specific locked stat ranges: 7 tiers spanning the full T1-12 range.
+export const RING_LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number, [number, number]>> = {
+  [StatType.Mana]: {
+    1: [15, 50],    2: [55, 115],   3: [120, 205],  4: [210, 325],
+    5: [330, 475],  6: [480, 640],  7: [645, 770],
+  },
+  [StatType.ManaRegen]: {
+    1: [3, 11],    2: [12, 26],   3: [27, 48],   4: [49, 78],
+    5: [79, 116],  6: [117, 148], 7: [149, 162],
+  },
+};
+
 // UT armor/ring: single range per stat type (~T9-11 equivalent).
 export const UT_LOCKED_STAT_RANGES: Record<number, [number, number]> = {
   [StatType.Health]:     [645, 1090],
@@ -211,11 +249,17 @@ export function getLockedStatValue(
   statType: number,
   itemTier: number,
   roll: number,
-  isUT: boolean = false
+  isUT: boolean = false,
+  category?: number
 ): number {
-  const range = isUT
-    ? UT_LOCKED_STAT_RANGES[statType]
-    : LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier];
+  let range: [number, number] | undefined;
+  if (isUT) {
+    range = UT_LOCKED_STAT_RANGES[statType];
+  } else if (category === ItemCategory.Ring) {
+    range = RING_LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier];
+  } else {
+    range = LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier];
+  }
   if (!range) return 0;
   const [min, max] = range;
   return Math.round(min + (max - min) * (roll / 100));
@@ -225,9 +269,13 @@ export function getLockedStatValue(
 export function getLockedStatRange(
   statType: number,
   itemTier: number,
-  isUT: boolean = false
+  isUT: boolean = false,
+  category?: number
 ): [number, number] {
   if (isUT) return UT_LOCKED_STAT_RANGES[statType] ?? [0, 0];
+  if (category === ItemCategory.Ring) {
+    return RING_LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier] ?? [0, 0];
+  }
   return LOCKED_STAT_RANGES_BY_ITEM_TIER[statType]?.[itemTier] ?? [0, 0];
 }
 
@@ -247,6 +295,17 @@ export const ITEM_TIER_MULTIPLIER: Record<number, number> = {
   10: 3.0,
   11: 3.5,
   12: 4.0,
+};
+
+// Ability/Ring: 7 tiers spanning the full T1-12 power range (T7 = old T12).
+export const ABILITY_RING_TIER_MULTIPLIER: Record<number, number> = {
+  1: 0.4,
+  2: 0.7,
+  3: 1.1,
+  4: 1.6,
+  5: 2.2,
+  6: 3.0,
+  7: 4.0,
 };
 
 // --- Weapon Templates (base stats at tier multiplier 1.0 = T4) ---
@@ -560,8 +619,8 @@ const STAT_TIER_WEIGHTS: Record<number, number[]> = {
 };
 
 /** Roll a random stat tier for open stats, respecting the item tier cap. */
-export function rollOpenStatTier(itemTier: number): number {
-  const maxStatTier = getMaxStatTierForItemTier(itemTier);
+export function rollOpenStatTier(itemTier: number, category?: number): number {
+  const maxStatTier = getMaxStatTierForItemTier(itemTier, category);
   // Linearly decreasing weight: slight bias toward lower tiers
   const weights: number[] = [];
   for (let t = 1; t <= MAX_STAT_TIER; t++) {
@@ -617,7 +676,7 @@ export function rollInitialOpenStats(category: number, itemTier: number): number
   const actual = Math.min(count, shuffled.length);
   const stats: number[] = [];
   for (let i = 0; i < actual; i++) {
-    stats.push(shuffled[i], rollOpenStatTier(itemTier), rollStatRoll());
+    stats.push(shuffled[i], rollOpenStatTier(itemTier, category), rollStatRoll());
   }
   return stats;
 }
@@ -786,9 +845,9 @@ export function getScaledAbilityStats(
   if (!template) {
     return { damage: 50, range: 500, projectileSpeed: 600, projectileSize: 12, manaCost: 30, cooldown: 1000, piercing: true };
   }
-  const mult = ITEM_TIER_MULTIPLIER[itemTier] ?? 1.0;
-  const dmgQuality = getLockedQualityMultiplier(itemTier, damageRoll);
-  const manaQuality = getLockedQualityMultiplier(itemTier, manaCostRoll);
+  const mult = ABILITY_RING_TIER_MULTIPLIER[itemTier] ?? 1.0;
+  const dmgQuality = getLockedQualityMultiplier(itemTier, damageRoll, false, ItemCategory.Ability);
+  const manaQuality = getLockedQualityMultiplier(itemTier, manaCostRoll, false, ItemCategory.Ability);
   return {
     damage: Math.round(template.baseDamage * mult * dmgQuality),
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),

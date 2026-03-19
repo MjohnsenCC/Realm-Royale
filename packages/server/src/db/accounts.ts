@@ -114,3 +114,55 @@ export async function saveAccountVault(
     throw new Error(`Failed to save vault for account ${accountId}: ${error.message}`);
   }
 }
+
+/**
+ * Mark an account as online with character and server info.
+ */
+export async function setAccountOnline(
+  accountId: string,
+  serverRegion: string,
+  characterName: string,
+  characterClass: number,
+  characterLevel: number
+): Promise<void> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      is_online: true,
+      server_region: serverRegion,
+      online_character_name: characterName,
+      online_character_class: characterClass,
+      online_character_level: characterLevel,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId);
+
+  if (error) {
+    console.error(`Failed to set account online ${accountId}: ${error.message}`);
+  }
+}
+
+/**
+ * Mark an account as offline and clear presence data.
+ */
+export async function setAccountOffline(accountId: string): Promise<void> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("accounts")
+    .update({
+      is_online: false,
+      server_region: null,
+      online_character_name: null,
+      online_character_class: null,
+      online_character_level: null,
+      updated_at: new Date().toISOString(),
+    })
+    .eq("id", accountId);
+
+  if (error) {
+    console.error(`Failed to set account offline ${accountId}: ${error.message}`);
+  }
+}

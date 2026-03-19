@@ -909,19 +909,19 @@ export class CraftingUI {
         ? (ARMOR_LOCKED_STAT_MULTIPLIER[subtype] ?? 1.0)
         : 1.0;
       if (item.lockedStat1Type >= 0) {
-        const rawVal = getLockedStatValue(item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll);
+        const rawVal = getLockedStatValue(item.lockedStat1Type, item.instanceTier, item.lockedStat1Roll, false, category);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat1Type] ?? "???";
-        const [rawMin, rawMax] = getLockedStatRange(item.lockedStat1Type, item.instanceTier);
+        const [rawMin, rawMax] = getLockedStatRange(item.lockedStat1Type, item.instanceTier, false, category);
         const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
         const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
         lockedLines.push(`+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`);
       }
       if (item.lockedStat2Type >= 0) {
-        const rawVal = getLockedStatValue(item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll);
+        const rawVal = getLockedStatValue(item.lockedStat2Type, item.instanceTier, item.lockedStat2Roll, false, category);
         const val = armorMult !== 1.0 ? Math.round(rawVal * armorMult) : rawVal;
         const name = STAT_NAMES[item.lockedStat2Type] ?? "???";
-        const [rawMin, rawMax] = getLockedStatRange(item.lockedStat2Type, item.instanceTier);
+        const [rawMin, rawMax] = getLockedStatRange(item.lockedStat2Type, item.instanceTier, false, category);
         const min = armorMult !== 1.0 ? Math.round(rawMin * armorMult) : rawMin;
         const max = armorMult !== 1.0 ? Math.round(rawMax * armorMult) : rawMax;
         lockedLines.push(`+${fmtVal(val)}(${fmtVal(min)}-${fmtVal(max)}) ${name}`);
