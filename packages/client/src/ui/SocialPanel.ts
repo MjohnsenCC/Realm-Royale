@@ -11,6 +11,7 @@ import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { isFriendByAccountName } from "./FriendStore";
 import { getPlayerSpriteKey } from "./EntityTextures";
+import { ItemTooltip } from "./ItemTooltip";
 
 export interface NearbyPlayerInfo {
   sessionId: string;
@@ -26,17 +27,26 @@ export interface NearbyPlayerInfo {
 }
 
 const MAX_ROWS = 30;
+const EQUIP_SLOT_COUNT = 4;
 
 interface RowObjects {
   bg: Phaser.GameObjects.Rectangle;
   charSprite: Phaser.GameObjects.Image;
   nameText: Phaser.GameObjects.Text;
   levelText: Phaser.GameObjects.Text;
-  dmBtn: Phaser.GameObjects.Image;
+  equipSlots: Phaser.GameObjects.Image[];
+  equipSlotBgs: Phaser.GameObjects.Image[];
+  equipTierTexts: Phaser.GameObjects.Text[];
+  rowZone: Phaser.GameObjects.Zone;
+}
+
+// Context menu
+interface ContextMenuObjects {
+  bg: Phaser.GameObjects.NineSlice;
+  dmText: Phaser.GameObjects.Text;
   dmZone: Phaser.GameObjects.Zone;
-  friendBtn: Phaser.GameObjects.Image;
+  friendText: Phaser.GameObjects.Text;
   friendZone: Phaser.GameObjects.Zone;
-  hoverZone: Phaser.GameObjects.Zone;
 }
 
 export class SocialPanel {
@@ -69,6 +79,13 @@ export class SocialPanel {
 
   // Row pool
   private rows: RowObjects[] = [];
+  private equipZones: Phaser.GameObjects.Zone[][] = [];
+  private tooltip: ItemTooltip;
+
+  // Context menu
+  private ctxMenu: ContextMenuObjects | null = null;
+  private ctxTarget: NearbyPlayerInfo | null = null;
+  private ctxDismissListener: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
   // Layout
   private pad!: number;
@@ -77,9 +94,10 @@ export class SocialPanel {
   private tabY!: number;
   private tabGap!: number;
   private rowStartY!: number;
-  private btnSize!: number;
   private spriteSize!: number;
+  private equipSize!: number;
   private rowStride!: number;
+  private textMaxW!: number;
 
   // Scroll state
   private scrollY = 0;
@@ -96,12 +114,12 @@ export class SocialPanel {
   // Callbacks
   private onDM: ((name: string) => void) | null = null;
   private onToggleFriend: ((name: string) => void) | null = null;
-  private onHover: ((info: NearbyPlayerInfo | null, screenX: number, screenY: number) => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
     this.S = getUIScale();
     this.computeLayout();
+    this.tooltip = new ItemTooltip(scene);
 
     const C = UI_PANEL_CORNER;
     this.panelBg = scene.add.nineslice(0, 0, "ui-panel-dark", undefined, 100, 100, C, C, C, C)
@@ -194,6 +212,7 @@ export class SocialPanel {
     // Build row pool
     const nameFontSize = `${Math.round(6 * S)}px`;
     const smallFontSize = `${Math.round(5 * S)}px`;
+    const tierFontSize = `${Math.round(5 * S)}px`;
 
     for (let i = 0; i < MAX_ROWS; i++) {
       const rowY = this.rowStartY + i * this.rowStride;
@@ -232,63 +251,84 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(levelText);
 
-      // DM button (right side, second from right)
-      const dmBtnCenterX = rowW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
-      const dmBtnCenterY = rowY + this.lineH / 2;
-      const dmBtn = scene.add.image(dmBtnCenterX, dmBtnCenterY, "ui-btn-dm")
-        .setDisplaySize(this.btnSize, this.btnSize);
-      this.contentContainer.add(dmBtn);
+      // Equipment slots (right side)
+      const equipSlots: Phaser.GameObjects.Image[] = [];
+      const equipSlotBgs: Phaser.GameObjects.Image[] = [];
+      const equipTierTexts: Phaser.GameObjects.Text[] = [];
+      const eqGap = Math.round(2 * S);
+      const eqStartX = rowW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
 
-      const dmZone = scene.add.zone(0, 0, this.btnSize, this.btnSize)
-        .setScrollFactor(0).setDepth(255).setInteractive({ useHandCursor: true });
+      for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+        const slotX = eqStartX + j * (this.equipSize + eqGap);
+        const slotCenterX = slotX + this.equipSize / 2;
+        const slotCenterY = rowY + this.lineH / 2;
+
+        const bgImg = scene.add.image(slotCenterX, slotCenterY, "ui-slot-empty")
+          .setDisplaySize(this.equipSize, this.equipSize);
+        this.contentContainer.add(bgImg);
+
+        const img = scene.add.image(slotCenterX, slotCenterY, "__DEFAULT")
+          .setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize())
+          .setVisible(false);
+        this.contentContainer.add(img);
+
+        const tierText = scene.add.text(slotX + this.equipSize - 1, rowY + this.lineH / 2 + this.equipSize / 2 - 1, "", {
+          fontSize: tierFontSize,
+          color: "#ffffff",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
+        }).setOrigin(1, 1).setVisible(false);
+        this.contentContainer.add(tierText);
+
+        equipSlotBgs.push(bgImg);
+        equipSlots.push(img);
+        equipTierTexts.push(tierText);
+      }
+
+      // Per-slot zones for hover tooltips
       const rowIdx = i;
-      dmZone.on("pointerover", () => dmBtn.setTint(0x44ffaa));
-      dmZone.on("pointerout", () => dmBtn.clearTint());
-      dmZone.on("pointerdown", () => {
-        const info = this.getVisiblePlayers()[rowIdx];
-        if (info && this.onDM) this.onDM(info.name);
-      });
+      const slotZones: Phaser.GameObjects.Zone[] = [];
+      for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+        const eqZone = scene.add.zone(0, 0, this.equipSize, this.equipSize)
+          .setScrollFactor(0).setDepth(255).setInteractive();
+        const slotIdx = j;
+        eqZone.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+          const info = this.getVisiblePlayers()[rowIdx];
+          if (info && info.online && slotIdx < info.equipment.length && !isEmptyItem(info.equipment[slotIdx])) {
+            this.tooltip.show(info.equipment[slotIdx], pointer.x, pointer.y);
+          }
+        });
+        eqZone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+          const info = this.getVisiblePlayers()[rowIdx];
+          if (info && info.online && slotIdx < info.equipment.length && !isEmptyItem(info.equipment[slotIdx])) {
+            this.tooltip.show(info.equipment[slotIdx], pointer.x, pointer.y);
+          } else {
+            this.tooltip.hide();
+          }
+        });
+        eqZone.on("pointerout", () => {
+          this.tooltip.hide();
+        });
+        slotZones.push(eqZone);
+      }
+      this.equipZones.push(slotZones);
 
-      // Friend button (rightmost)
-      const friendBtnCenterX = rowW - this.pad - this.btnSize / 2;
-      const friendBtn = scene.add.image(friendBtnCenterX, dmBtnCenterY, "ui-btn-addfriend")
-        .setDisplaySize(this.btnSize, this.btnSize);
-      this.contentContainer.add(friendBtn);
-
-      const friendZone = scene.add.zone(0, 0, this.btnSize, this.btnSize)
-        .setScrollFactor(0).setDepth(255).setInteractive({ useHandCursor: true });
-      friendZone.on("pointerover", () => friendBtn.setTint(0x44ffaa));
-      friendZone.on("pointerout", () => {
-        const info = this.getVisiblePlayers()[rowIdx];
-        if (info && info.isFriend) {
-          friendBtn.setTexture("ui-btn-removefriend");
-        } else {
-          friendBtn.setTexture("ui-btn-addfriend");
-        }
-        friendBtn.clearTint();
-      });
-      friendZone.on("pointerdown", () => {
-        const info = this.getVisiblePlayers()[rowIdx];
-        if (info && this.onToggleFriend) this.onToggleFriend(info.name);
-      });
-
-      // Hover zone for tooltip (full row)
-      const hoverZone = scene.add.zone(0, 0, rowW, this.lineH)
+      // Row zone for right-click context menu
+      const rowZone = scene.add.zone(0, 0, rowW, this.lineH)
         .setScrollFactor(0).setDepth(254).setInteractive();
-      hoverZone.on("pointerover", (pointer: Phaser.Input.Pointer) => {
-        const info = this.getVisiblePlayers()[rowIdx];
-        if (info && this.onHover) this.onHover(info, pointer.x, pointer.y);
-      });
-      hoverZone.on("pointerout", () => {
-        if (this.onHover) this.onHover(null, 0, 0);
-      });
-      hoverZone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
-        const info = this.getVisiblePlayers()[rowIdx];
-        if (info && this.onHover) this.onHover(info, pointer.x, pointer.y);
+      rowZone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+        if (pointer.rightButtonDown()) {
+          const info = this.getVisiblePlayers()[rowIdx];
+          if (info && info.online) this.showContextMenu(info, pointer.x, pointer.y);
+        }
       });
 
-      this.rows.push({ bg, charSprite, nameText, levelText, dmBtn, dmZone, friendBtn, friendZone, hoverZone });
+      this.rows.push({ bg, charSprite, nameText, levelText, equipSlots, equipSlotBgs, equipTierTexts, rowZone });
     }
+
+    // Disable browser right-click menu on canvas
+    scene.game.canvas.addEventListener("contextmenu", (e) => e.preventDefault());
 
     // Start hidden
     this.setAllVisible(false);
@@ -297,11 +337,9 @@ export class SocialPanel {
   setCallbacks(
     onDM: (name: string) => void,
     onToggleFriend: (name: string) => void,
-    onHover: (info: NearbyPlayerInfo | null, screenX: number, screenY: number) => void,
   ): void {
     this.onDM = onDM;
     this.onToggleFriend = onToggleFriend;
-    this.onHover = onHover;
   }
 
   populate(players: NearbyPlayerInfo[], allFriends: NearbyPlayerInfo[]): void {
@@ -330,6 +368,7 @@ export class SocialPanel {
       ) {
         this.scrollY = Math.max(0, Math.min(this.maxScrollY, this.scrollY + e.deltaY * 0.5));
         this.applyScroll();
+        this.tooltip.hide();
         e.preventDefault();
       }
     };
@@ -339,6 +378,8 @@ export class SocialPanel {
   hide(): void {
     if (!this.visible) return;
     this.visible = false;
+    this.hideContextMenu();
+    this.tooltip.hide();
     this.setAllVisible(false);
     if (this.wheelListener) {
       this.scene.game.canvas.removeEventListener("wheel", this.wheelListener);
@@ -401,16 +442,24 @@ export class SocialPanel {
 
       // Text after sprite
       const textX = this.pad + this.spriteSize + Math.round(6 * S);
-      row.nameText.setPosition(textX, rowY + Math.round(4 * S)).setFontSize(nameFontSize);
-      row.levelText.setPosition(textX, rowY + Math.round(4 * S) + Math.round(12 * S)).setFontSize(smallFontSize);
+      row.nameText.setPosition(textX, rowY + Math.round(4 * S)).setFontSize(nameFontSize).setScale(1);
+      row.levelText.setPosition(textX, rowY + Math.round(4 * S) + Math.round(12 * S)).setFontSize(smallFontSize).setScale(1);
 
-      // Buttons on right side
-      const dmBtnCenterX = rowW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
-      const dmBtnCenterY = rowY + this.lineH / 2;
-      row.dmBtn.setPosition(dmBtnCenterX, dmBtnCenterY).setDisplaySize(this.btnSize, this.btnSize);
-
-      const friendBtnCenterX = rowW - this.pad - this.btnSize / 2;
-      row.friendBtn.setPosition(friendBtnCenterX, dmBtnCenterY).setDisplaySize(this.btnSize, this.btnSize);
+      // Equipment slots
+      const eqGap = Math.round(2 * S);
+      const eqStartX = rowW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+      const tierFontSize = `${Math.round(5 * S)}px`;
+      for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+        const slotX = eqStartX + j * (this.equipSize + eqGap);
+        const slotCenterX = slotX + this.equipSize / 2;
+        const slotCenterY = rowY + this.lineH / 2;
+        row.equipSlotBgs[j].setPosition(slotCenterX, slotCenterY).setDisplaySize(this.equipSize, this.equipSize);
+        row.equipSlots[j].setPosition(slotCenterX, slotCenterY);
+        if (row.equipSlots[j].texture.key !== "__DEFAULT") {
+          row.equipSlots[j].setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
+        }
+        row.equipTierTexts[j].setPosition(slotX + this.equipSize - 1, slotCenterY + this.equipSize / 2 - 1).setFontSize(tierFontSize);
+      }
     }
 
     // Rebuild mask
@@ -421,6 +470,9 @@ export class SocialPanel {
     this.contentContainer.setMask(mask);
 
     this.scrollY = 0;
+    this.hideContextMenu();
+    this.tooltip.hide();
+    this.tooltip.relayout();
 
     if (this.visible) {
       this.drawBackground();
@@ -435,9 +487,11 @@ export class SocialPanel {
     const screenH = getScreenHeight();
 
     this.pad = Math.round(12 * S);
-    this.lineH = Math.round(30 * S);
     this.scrollBarWidth = Math.round(8 * S);
-    this.btnSize = Math.round(18 * S);
+    // Size slot to fit the pre-rendered item sprite (same ratio as HUD equip slots)
+    const nativeItemSize = getItemOutlinedSize();
+    this.equipSize = Math.round(nativeItemSize / 0.8);
+    this.lineH = Math.max(Math.round(30 * S), this.equipSize + Math.round(4 * S));
     this.spriteSize = this.lineH - Math.round(6 * S);
     this.tabGap = Math.round(40 * S);
     this.rowStride = this.lineH + Math.round(4 * S);
@@ -456,6 +510,13 @@ export class SocialPanel {
 
     this.contentHeight = this.rowStartY + MAX_ROWS * this.rowStride + this.pad;
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
+
+    // Max width for name/level text so it doesn't overlap equip slots
+    const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
+    const textX = this.pad + this.spriteSize + Math.round(6 * S);
+    const eqGap = Math.round(2 * S);
+    const eqStartX = contentW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+    this.textMaxW = Math.max(0, eqStartX - textX - Math.round(4 * S));
   }
 
   private setTab(tab: "nearby" | "friends"): void {
@@ -464,6 +525,8 @@ export class SocialPanel {
     this.nearbyTab.setColor(tab === "nearby" ? "#ffffff" : "#888888");
     this.friendsTab.setColor(tab === "friends" ? "#ffffff" : "#888888");
     this.scrollY = 0;
+    this.hideContextMenu();
+    this.tooltip.hide();
     this.renderRows();
     this.applyScroll();
   }
@@ -493,7 +556,7 @@ export class SocialPanel {
           row.charSprite.setVisible(false);
         }
 
-        // Display name: "AccountName (CharName)" for friends tab, just char name for nearby
+        // Display name
         let displayName = info.name;
         if (this.activeTab === "friends" && info.accountName) {
           displayName = info.online && info.name
@@ -502,45 +565,71 @@ export class SocialPanel {
         } else if (info.accountName && this.activeTab === "nearby") {
           displayName = `${info.accountName} (${info.name})`;
         }
-        row.nameText.setText(displayName).setVisible(true);
+        row.nameText.setText(displayName).setScale(1).setVisible(true);
+        if (row.nameText.width > this.textMaxW) {
+          row.nameText.setScale(this.textMaxW / row.nameText.width);
+        }
 
         if (info.online) {
           row.nameText.setColor("#66cc66");
           if (this.activeTab === "friends") {
-            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}  Online`).setVisible(true);
+            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}  Online`);
           } else {
-            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}`).setVisible(true);
+            row.levelText.setText(`Lv.${info.level}  ${CLASS_NAMES[info.characterClass] ?? "???"}`);
           }
         } else {
           row.nameText.setColor("#666666");
-          row.levelText.setText("Offline").setVisible(true);
+          row.levelText.setText("Offline");
+        }
+        row.levelText.setScale(1).setVisible(true);
+        if (row.levelText.width > this.textMaxW) {
+          row.levelText.setScale(this.textMaxW / row.levelText.width);
         }
 
-        // DM button only for online players
-        row.dmBtn.setVisible(info.online);
-        row.dmZone.setVisible(info.online);
-
-        row.friendBtn.setVisible(true);
-        row.friendZone.setVisible(true);
-        row.hoverZone.setVisible(info.online);
-
-        // Use dedicated remove friend texture instead of tinting
-        if (info.isFriend) {
-          row.friendBtn.setTexture("ui-btn-removefriend");
-        } else {
-          row.friendBtn.setTexture("ui-btn-addfriend");
+        // Equipment slots
+        for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+          if (info.online) {
+            const hasItem = j < info.equipment.length && !isEmptyItem(info.equipment[j]);
+            row.equipSlotBgs[j].setTexture(hasItem ? "ui-slot-filled" : "ui-slot-empty");
+            row.equipSlotBgs[j].setDisplaySize(this.equipSize, this.equipSize);
+            row.equipSlotBgs[j].setVisible(true);
+            if (hasItem) {
+              const item = info.equipment[j];
+              const category = getItemCategory(item.baseItemId);
+              const subtype = getItemSubtype(item.baseItemId);
+              const key = getItemSpriteKey(category, subtype, item.instanceTier, item.isUT);
+              if (key && this.scene.textures.exists(key)) {
+                row.equipSlots[j].setTexture(key);
+                row.equipSlots[j].setDisplaySize(getItemOutlinedSize(), getItemOutlinedSize());
+                row.equipSlots[j].setVisible(true);
+              } else {
+                row.equipSlots[j].setVisible(false);
+              }
+              const tierLabel = item.isUT ? "UT" : `T${item.instanceTier}`;
+              row.equipTierTexts[j].setText(tierLabel).setVisible(true);
+            } else {
+              row.equipSlots[j].setVisible(false);
+              row.equipTierTexts[j].setVisible(false);
+            }
+          } else {
+            row.equipSlotBgs[j].setVisible(false);
+            row.equipSlots[j].setVisible(false);
+            row.equipTierTexts[j].setVisible(false);
+          }
         }
-        row.friendBtn.clearTint();
+
+        row.rowZone.setVisible(true);
       } else {
         row.bg.setVisible(false);
         row.charSprite.setVisible(false);
         row.nameText.setVisible(false);
         row.levelText.setVisible(false);
-        row.dmBtn.setVisible(false);
-        row.dmZone.setVisible(false);
-        row.friendBtn.setVisible(false);
-        row.friendZone.setVisible(false);
-        row.hoverZone.setVisible(false);
+        for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+          row.equipSlotBgs[j].setVisible(false);
+          row.equipSlots[j].setVisible(false);
+          row.equipTierTexts[j].setVisible(false);
+        }
+        row.rowZone.setVisible(false);
       }
     }
 
@@ -550,6 +639,101 @@ export class SocialPanel {
     this.maxScrollY = Math.max(0, this.contentHeight - this.viewHeight);
     if (this.scrollY > this.maxScrollY) this.scrollY = this.maxScrollY;
   }
+
+  // ---- Context menu ----
+
+  private showContextMenu(info: NearbyPlayerInfo, screenX: number, screenY: number): void {
+    this.hideContextMenu();
+    this.ctxTarget = info;
+
+    const S = this.S;
+    const menuW = Math.round(100 * S);
+    const itemH = Math.round(16 * S);
+    const pad = Math.round(6 * S);
+    const menuH = pad * 2 + itemH * 2 + Math.round(4 * S);
+    const fontSize = `${Math.round(6 * S)}px`;
+
+    const C = UI_PANEL_CORNER;
+    const bg = this.scene.add.nineslice(screenX, screenY, "ui-panel-dark", undefined, menuW, menuH, C, C, C, C)
+      .setOrigin(0, 0).setScrollFactor(0).setDepth(310);
+
+    // Clamp to screen
+    const screenW = getScreenWidth();
+    const screenH = getScreenHeight();
+    if (screenX + menuW > screenW - 4) bg.setX(screenW - 4 - menuW);
+    if (screenY + menuH > screenH - 4) bg.setY(screenH - 4 - menuH);
+    const mx = bg.x;
+    const my = bg.y;
+
+    // DM option
+    const dmText = this.scene.add.text(mx + pad, my + pad, "DM", {
+      fontSize,
+      color: "#cccccc",
+      fontFamily: "'Press Start 2P', monospace",
+      stroke: "#000000",
+      strokeThickness: 2,
+    }).setScrollFactor(0).setDepth(311);
+
+    const dmZone = this.scene.add.zone(mx + menuW / 2, my + pad + itemH / 2, menuW, itemH)
+      .setScrollFactor(0).setDepth(312).setInteractive({ useHandCursor: true });
+    dmZone.on("pointerover", () => dmText.setColor("#44ffaa"));
+    dmZone.on("pointerout", () => dmText.setColor("#cccccc"));
+    dmZone.on("pointerdown", () => {
+      if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget.name);
+      this.hideContextMenu();
+    });
+
+    // Friend option
+    const friendLabel = info.isFriend ? "Remove Friend" : "Add Friend";
+    const friendText = this.scene.add.text(mx + pad, my + pad + itemH + Math.round(4 * S), friendLabel, {
+      fontSize,
+      color: "#cccccc",
+      fontFamily: "'Press Start 2P', monospace",
+      stroke: "#000000",
+      strokeThickness: 2,
+    }).setScrollFactor(0).setDepth(311);
+
+    const friendZone = this.scene.add.zone(mx + menuW / 2, my + pad + itemH + Math.round(4 * S) + itemH / 2, menuW, itemH)
+      .setScrollFactor(0).setDepth(312).setInteractive({ useHandCursor: true });
+    friendZone.on("pointerover", () => friendText.setColor("#44ffaa"));
+    friendZone.on("pointerout", () => friendText.setColor("#cccccc"));
+    friendZone.on("pointerdown", () => {
+      if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget.name);
+      this.hideContextMenu();
+    });
+
+    this.ctxMenu = { bg, dmText, dmZone, friendText, friendZone };
+
+    // Close on any left click outside the menu (delayed so the current right-click doesn't consume it)
+    this.scene.time.delayedCall(0, () => {
+      if (this.ctxDismissListener) {
+        this.scene.input.off("pointerdown", this.ctxDismissListener);
+      }
+      this.ctxDismissListener = (pointer: Phaser.Input.Pointer) => {
+        if (!pointer.rightButtonDown()) {
+          this.hideContextMenu();
+        }
+      };
+      this.scene.input.on("pointerdown", this.ctxDismissListener);
+    });
+  }
+
+  private hideContextMenu(): void {
+    if (this.ctxDismissListener) {
+      this.scene.input.off("pointerdown", this.ctxDismissListener);
+      this.ctxDismissListener = null;
+    }
+    if (!this.ctxMenu) return;
+    this.ctxMenu.bg.destroy();
+    this.ctxMenu.dmText.destroy();
+    this.ctxMenu.dmZone.destroy();
+    this.ctxMenu.friendText.destroy();
+    this.ctxMenu.friendZone.destroy();
+    this.ctxMenu = null;
+    this.ctxTarget = null;
+  }
+
+  // ---- Drawing helpers ----
 
   private drawBackground(): void {
     this.panelBg.setPosition(this.px, this.py);
@@ -591,24 +775,25 @@ export class SocialPanel {
     this.nearbyTabZone.setPosition(this.px + centerX - this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
     this.friendsTabZone.setPosition(this.px + centerX + this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
 
-    // Row zones (screen space)
+    // Row zones and equip zones (screen space)
+    const eqGap = Math.round(S * 2);
+    const eqStartX = contentW - this.pad - (EQUIP_SLOT_COUNT * this.equipSize + (EQUIP_SLOT_COUNT - 1) * eqGap);
+
     for (let i = 0; i < MAX_ROWS; i++) {
       const row = this.rows[i];
       const rowY = this.rowStartY + i * this.rowStride;
       const screenRowY = this.py + rowY + this.lineH / 2 - this.scrollY;
 
-      // DM button zone (right side, second from right)
-      const dmBtnCenterX = this.px + contentW - this.pad - this.btnSize * 1.5 - Math.round(4 * S);
-      row.dmZone.setPosition(dmBtnCenterX, screenRowY);
-      row.dmZone.setSize(this.btnSize, this.btnSize);
+      row.rowZone.setPosition(this.px + contentW / 2, screenRowY);
+      row.rowZone.setSize(contentW, this.lineH);
 
-      // Friend button zone (rightmost)
-      const friendBtnCenterX = this.px + contentW - this.pad - this.btnSize / 2;
-      row.friendZone.setPosition(friendBtnCenterX, screenRowY);
-      row.friendZone.setSize(this.btnSize, this.btnSize);
-
-      row.hoverZone.setPosition(this.px + contentW / 2, screenRowY);
-      row.hoverZone.setSize(contentW, this.lineH);
+      // Equip slot zones
+      for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+        const slotX = eqStartX + j * (this.equipSize + eqGap);
+        const screenSlotCenterX = this.px + slotX + this.equipSize / 2;
+        this.equipZones[i][j].setPosition(screenSlotCenterX, screenRowY);
+        this.equipZones[i][j].setSize(this.equipSize, this.equipSize);
+      }
     }
   }
 
@@ -620,28 +805,31 @@ export class SocialPanel {
     this.nearbyTabZone.setVisible(vis);
     this.friendsTabZone.setVisible(vis);
 
-    for (const row of this.rows) {
-      row.dmZone.setVisible(vis);
-      row.friendZone.setVisible(vis);
-      row.hoverZone.setVisible(vis);
+    for (let i = 0; i < this.rows.length; i++) {
+      this.rows[i].rowZone.setVisible(vis);
+      for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+        this.equipZones[i][j].setVisible(vis);
+      }
     }
 
     // Disable/enable interactivity
     if (vis) {
       this.nearbyTabZone.setInteractive({ useHandCursor: true });
       this.friendsTabZone.setInteractive({ useHandCursor: true });
-      for (const row of this.rows) {
-        row.dmZone.setInteractive({ useHandCursor: true });
-        row.friendZone.setInteractive({ useHandCursor: true });
-        row.hoverZone.setInteractive();
+      for (let i = 0; i < this.rows.length; i++) {
+        this.rows[i].rowZone.setInteractive();
+        for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+          this.equipZones[i][j].setInteractive();
+        }
       }
     } else {
       this.nearbyTabZone.disableInteractive();
       this.friendsTabZone.disableInteractive();
-      for (const row of this.rows) {
-        row.dmZone.disableInteractive();
-        row.friendZone.disableInteractive();
-        row.hoverZone.disableInteractive();
+      for (let i = 0; i < this.rows.length; i++) {
+        this.rows[i].rowZone.disableInteractive();
+        for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
+          this.equipZones[i][j].disableInteractive();
+        }
       }
     }
   }

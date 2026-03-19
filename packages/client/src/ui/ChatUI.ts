@@ -53,7 +53,7 @@ export class ChatUI {
           fontFamily: "'Press Start 2P', monospace",
           fontSize: "7px",
           color: "#cccccc",
-          wordWrap: { width: PANEL_WIDTH_REF },
+          wordWrap: { callback: this.charWrap, callbackScope: this, width: PANEL_WIDTH_REF },
           stroke: "#000000",
           strokeThickness: 2,
         })
@@ -179,25 +179,75 @@ export class ChatUI {
     this.inputEl.style.fontSize = `${Math.max(8, Math.round(FONT_SIZE_REF * getUIScale()))}px`;
   }
 
+  /** Character-level word wrap callback – fills each line fully before breaking. */
+  private charWrap(text: string, textObject: Phaser.GameObjects.Text): string {
+    const ctx = textObject.context;
+    const wrapWidth = (textObject.style.wordWrapWidth as number) || 200;
+    let result = "";
+    let lineWidth = 0;
+
+    for (let i = 0; i < text.length; i++) {
+      const char = text[i];
+      if (char === "\n") {
+        result += "\n";
+        lineWidth = 0;
+        continue;
+      }
+      const cw = ctx.measureText(char).width;
+      if (lineWidth + cw > wrapWidth && lineWidth > 0) {
+        result += "\n";
+        lineWidth = 0;
+      }
+      result += char;
+      lineWidth += cw;
+    }
+    return result;
+  }
+
   private drawLog(): void {
     this.bg.setPosition(this.panelX, this.panelY);
     this.bg.setSize(this.panelW, this.panelH);
 
-    // Show last VISIBLE_LINES messages
-    const start = Math.max(0, this.messages.length - VISIBLE_LINES);
-    for (let i = 0; i < VISIBLE_LINES; i++) {
-      const idx = start + i;
-      const t = this.lineTexts[i];
-      if (idx < this.messages.length) {
-        const m = this.messages[idx];
-        const prefix = m.channel === "global" ? "[G]" : "[L]";
-        t.setText(`${prefix} ${m.playerName}: ${m.text}`);
-        t.setColor(m.channel === "global" ? "#ffcc44" : "#44ccff");
-        t.setVisible(true);
-      } else {
+    const S = getUIScale();
+    const pad = Math.round(PANEL_PADDING * S);
+    const gap = Math.round(2 * S);
+
+    // Hide all text objects first
+    for (const t of this.lineTexts) {
+      t.setText("");
+      t.setVisible(false);
+    }
+
+    if (this.messages.length === 0) return;
+
+    // Lay out messages bottom-up so newest is at the bottom
+    let curBottom = this.panelY + this.panelH - pad;
+    const topLimit = this.panelY + pad;
+    let slot = VISIBLE_LINES - 1;
+    let msgIdx = this.messages.length - 1;
+
+    while (slot >= 0 && msgIdx >= 0) {
+      const m = this.messages[msgIdx];
+      const t = this.lineTexts[slot];
+      const prefix = m.channel === "global" ? "[G]" : "[L]";
+      t.setText(`${prefix} ${m.playerName}: ${m.text}`);
+      t.setColor(m.channel === "global" ? "#ffcc44" : "#44ccff");
+
+      const h = t.height;
+      const top = curBottom - h;
+
+      if (top < topLimit) {
+        // Doesn't fit – hide and stop
         t.setText("");
         t.setVisible(false);
+        break;
       }
+
+      t.setPosition(this.panelX + pad, top);
+      t.setVisible(true);
+      curBottom = top - gap;
+      slot--;
+      msgIdx--;
     }
   }
 

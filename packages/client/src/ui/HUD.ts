@@ -624,6 +624,9 @@ export class HUD {
     this.lastZone = "";
     this.lastPlayerCount = -1;
 
+    // Regenerate item textures at the new slot size so sprites scale with the HUD
+    generateItemTextures(this.scene, this.slotSize);
+
     // Relayout sub-UIs
     this.inventoryUI.relayout({
       eqX: this.eqX,

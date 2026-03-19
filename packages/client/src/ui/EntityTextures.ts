@@ -116,7 +116,7 @@ function upscaleAndOutline(scene: Phaser.Scene, key: string): void {
   const canvas = document.createElement("canvas");
   canvas.width = outW;
   canvas.height = outH;
-  const ctx = canvas.getContext("2d")!;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!
 
   // Nearest-neighbor upscale: draw source at offset (1,1) scaled to display size
   ctx.imageSmoothingEnabled = false;

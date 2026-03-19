@@ -222,7 +222,7 @@ export class CraftingUI {
     this.itemSlotGraphics = scene.add.graphics();
     this.panelContainer.add(this.itemSlotGraphics);
 
-    this.itemImage = scene.add.image(0, 0, "item-sword").setVisible(false);
+    this.itemImage = scene.add.image(0, 0, "items-spreadsheet").setVisible(false);
     this.panelContainer.add(this.itemImage);
 
     this.separatorGraphics = scene.add.graphics();
@@ -628,6 +628,7 @@ export class CraftingUI {
   }
 
   hide(): void {
+    if (!this.visible) return;
     this.visible = false;
     this.currentItem = null;
     this.currentSlotIndex = -1;

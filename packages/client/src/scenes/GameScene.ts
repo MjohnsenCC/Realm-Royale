@@ -543,14 +543,10 @@ export class GameScene extends Phaser.Scene {
     this.socialPanel.setCallbacks(
       (name: string) => {
         this.socialPanel.hide();
-        this.playerTooltip.hide();
         this.chatUI.openInputWithText(`/dm ${name} `);
       },
       (name: string) => {
         if (!isFriendsAuthenticated()) return;
-        // name here is used differently depending on context:
-        // For adding: it's the character name (server resolves to account)
-        // For removing: we need to find the accountId from the visible players
         const visiblePlayers = this.gatherSocialData();
         const allPlayers = [...visiblePlayers.nearby, ...visiblePlayers.friends];
         const target = allPlayers.find((p) => p.name === name);
@@ -558,14 +554,6 @@ export class GameScene extends Phaser.Scene {
           removeFriend(target.accountId);
         } else {
           addFriend(name);
-        }
-        // Panel will refresh when server confirms via FriendAdded/FriendRemoved
-      },
-      (info: NearbyPlayerInfo | null, screenX: number, screenY: number) => {
-        if (info) {
-          this.playerTooltip.show(info, screenX, screenY);
-        } else {
-          this.playerTooltip.hide();
         }
       },
     );
@@ -1231,7 +1219,7 @@ export class GameScene extends Phaser.Scene {
     const tilesetKey = "realm-biome-tileset-v2";
     if (!this.textures.exists(tilesetKey)) {
       const canvas = document.createElement("canvas");
-      canvas.width = EXTRUDE + numTiles * (ts + EXTRUDE * 2);
+      canvas.width = numTiles * (ts + EXTRUDE * 2);
       canvas.height = ts + EXTRUDE * 2;
       const ctx = canvas.getContext("2d")!;
       ctx.imageSmoothingEnabled = false; // nearest-neighbor for crisp pixel art
@@ -1333,6 +1321,10 @@ export class GameScene extends Phaser.Scene {
   private updateHostileChunks(): void {
     const mapData = getRealmMap();
     if (!mapData) return;
+
+    // Tileset texture is created asynchronously in createHostileTilemap();
+    // skip chunk creation until it's ready to avoid "texture not found" errors.
+    if (!this.textures.exists("realm-biome-tileset-v2")) return;
 
     const sessionId = this.network.getSessionId();
     const localSprite = this.playerSprites.get(sessionId);
@@ -2203,10 +2195,8 @@ export class GameScene extends Phaser.Scene {
           piercing: pt === ProjectileType.RelicExpand || pt === ProjectileType.HelmSpin || pt === ProjectileType.WandBolt,
           hitEnemies: new Set(),
         });
-        // Re-sync local timer to prevent continued drift
-        if (pt === ProjectileType.QuiverShot || pt === ProjectileType.RelicExpand || pt === ProjectileType.HelmSpin) {
-          this.lastLocalAbilityTime = performance.now();
-        } else {
+        // Re-sync local shoot timer to prevent continued drift (skip ability timer to avoid cooldown flicker)
+        if (pt !== ProjectileType.QuiverShot && pt !== ProjectileType.RelicExpand && pt !== ProjectileType.HelmSpin) {
           this.lastLocalShootTime = performance.now();
         }
         return;
@@ -2913,6 +2903,7 @@ export class GameScene extends Phaser.Scene {
       this.hud.inventoryUI.updateInventory(invItems);
 
       // Update equipment UI from synced player equipment (ItemInstance schemas)
+      this.hud.inventoryUI.setCharacterClass((localPlayer.characterClass as number) ?? 0);
       const eqItems = readEquipmentData(localPlayer);
       this.hud.inventoryUI.updateEquipment(eqItems);
 
@@ -3430,7 +3421,6 @@ export class GameScene extends Phaser.Scene {
     }
     if (except !== "social" && except !== "vault" && except !== "crafting" && this.socialPanel.isVisible()) {
       this.socialPanel.hide();
-      this.playerTooltip.hide();
     }
     if (except !== "stats" && except !== "vault" && except !== "crafting" && this.statsPanel.isVisible()) {
       this.statsPanel.hide();
@@ -3454,7 +3444,6 @@ export class GameScene extends Phaser.Scene {
   private toggleSocialPanel(): void {
     if (this.socialPanel.isVisible()) {
       this.socialPanel.hide();
-      this.playerTooltip.hide();
     } else {
       if (this.craftingUI.isVisible() || this.hud.vaultUI.isVisible()) {
         this.socialPanel.setSide("right");

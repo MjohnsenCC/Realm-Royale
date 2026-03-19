@@ -88,14 +88,6 @@ export class BootScene extends Phaser.Scene {
     // Death gravestone sprite
     this.load.image("deco-gravestone", "assets/sprites/decorations/scenery_gravestone.png");
 
-    // Item sprites (12x12 pixel art) — generic fallbacks (not in spreadsheet)
-    this.load.image("item-sword", "assets/sprites/items/sword.png");
-    this.load.image("item-bow", "assets/sprites/items/bow.png");
-    this.load.image("item-wand", "assets/sprites/items/wand.png");
-    this.load.image("item-heavy-armor", "assets/sprites/items/heavy_armor.png");
-    this.load.image("item-light-armor", "assets/sprites/items/light_armor.png");
-    this.load.image("item-mantle", "assets/sprites/items/mantle.png");
-
     // Item spritesheet (8x8 pixel art) — all tiered items + consumables
     // Layout: 13 columns × 11 rows, 8px spacing between tiles
     // Row 0: Swords t1-t12, UT sword

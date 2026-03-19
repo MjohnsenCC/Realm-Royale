@@ -8,6 +8,7 @@ import {
   getItemColor,
   ItemCategory,
   isStackableItem,
+  CLASS_EQUIPMENT_MAP,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { createEmptyItemInstance } from "@rotmg-lite/shared";
@@ -75,6 +76,9 @@ export class InventoryUI {
   private highlightedEqSlot = -1;
   private dragSourceSlot = -1;
   private dragSourceEqSlot = -1;
+
+  // Character class (for empty-slot placeholders)
+  private characterClass: number = 0;
 
   // Scaled dimensions
   private S: number;
@@ -204,7 +208,7 @@ export class InventoryUI {
         .setDepth(102);
       this.eqTierTexts.push(tierText);
 
-      const eqImg = scene.add.image(0, 0, "item-sword")
+      const eqImg = scene.add.image(0, 0, "items-spreadsheet")
         .setScrollFactor(0)
         .setDepth(101.5)
         .setVisible(false);
@@ -313,7 +317,7 @@ export class InventoryUI {
         .setDepth(102);
       this.qtyTexts.push(qtyText);
 
-      const img = scene.add.image(0, 0, "item-sword")
+      const img = scene.add.image(0, 0, "items-spreadsheet")
         .setScrollFactor(0)
         .setDepth(101.5)
         .setVisible(false);
@@ -326,6 +330,13 @@ export class InventoryUI {
 
   setRoom(room: any): void {
     this.room = room;
+  }
+
+  setCharacterClass(characterClass: number): void {
+    if (this.characterClass !== characterClass) {
+      this.characterClass = characterClass;
+      this.drawEquipmentSlots();
+    }
   }
 
   getTooltip(): ItemTooltip {
@@ -505,8 +516,13 @@ export class InventoryUI {
           this.eqTierTexts[i].setText(tierLabel);
         }
       } else {
-        // Show faded sprite placeholder for empty equipment slot
-        const placeholderKey = getItemSpriteKey(i, 0);
+        // Show faded sprite placeholder for empty equipment slot (class-specific)
+        const classMap = CLASS_EQUIPMENT_MAP[this.characterClass];
+        const placeholderSubtype =
+          i === 0 ? classMap?.weapon ?? 0 :
+          i === 1 ? classMap?.ability ?? 0 :
+          i === 2 ? classMap?.armor ?? 0 : 0;
+        const placeholderKey = getItemSpriteKey(i, placeholderSubtype);
         if (placeholderKey) {
           this.eqItemImages[i]
             .setTexture(placeholderKey)

@@ -204,7 +204,7 @@ export class VaultUI {
         .setDepth(102);
       this.qtyTexts.push(qtyText);
 
-      const img = scene.add.image(0, 0, "item-sword").setVisible(false);
+      const img = scene.add.image(0, 0, "items-spreadsheet").setVisible(false);
       this.container.add(img);
       this.itemImages.push(img);
     }
