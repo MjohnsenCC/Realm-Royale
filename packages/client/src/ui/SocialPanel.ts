@@ -9,7 +9,7 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
-import { isFriendByAccountName } from "./FriendStore";
+import { isFriendByAccountName, hasPendingRequestToByName, hasPendingRequestFromByName, type FriendRequestEntry } from "./FriendStore";
 import { getPlayerSpriteKey } from "./EntityTextures";
 import { ItemTooltip } from "./ItemTooltip";
 
@@ -39,15 +39,18 @@ interface RowObjects {
   equipSlotBgs: Phaser.GameObjects.Image[];
   equipTierTexts: Phaser.GameObjects.Text[];
   rowZone: Phaser.GameObjects.Zone;
+  // Inline action buttons for friend requests
+  actionBtn1: Phaser.GameObjects.Text;
+  actionBtn2: Phaser.GameObjects.Text;
+  actionZone1: Phaser.GameObjects.Zone;
+  actionZone2: Phaser.GameObjects.Zone;
 }
 
 // Context menu
 interface ContextMenuObjects {
   bg: Phaser.GameObjects.NineSlice;
-  dmText: Phaser.GameObjects.Text;
-  dmZone: Phaser.GameObjects.Zone;
-  friendText: Phaser.GameObjects.Text;
-  friendZone: Phaser.GameObjects.Zone;
+  menuTexts: Phaser.GameObjects.Text[];
+  menuZones: Phaser.GameObjects.Zone[];
 }
 
 export class SocialPanel {
@@ -74,9 +77,11 @@ export class SocialPanel {
   // Tabs
   private nearbyTab: Phaser.GameObjects.Text;
   private friendsTab: Phaser.GameObjects.Text;
+  private requestsTab: Phaser.GameObjects.Text;
   private nearbyTabZone: Phaser.GameObjects.Zone;
   private friendsTabZone: Phaser.GameObjects.Zone;
-  private activeTab: "nearby" | "friends" = "nearby";
+  private requestsTabZone: Phaser.GameObjects.Zone;
+  private activeTab: "nearby" | "friends" | "requests" = "nearby";
 
   // Row pool
   private rows: RowObjects[] = [];
@@ -110,10 +115,15 @@ export class SocialPanel {
   // Data
   private players: NearbyPlayerInfo[] = [];
   private allFriends: NearbyPlayerInfo[] = [];
+  private incomingRequests: FriendRequestEntry[] = [];
+  private outgoingRequests: FriendRequestEntry[] = [];
 
   // Callbacks
   private onDM: ((name: string) => void) | null = null;
   private onToggleFriend: ((name: string) => void) | null = null;
+  private onAcceptRequest: ((accountId: string) => void) | null = null;
+  private onDeclineRequest: ((accountId: string) => void) | null = null;
+  private onCancelRequest: ((accountId: string) => void) | null = null;
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -190,7 +200,7 @@ export class SocialPanel {
     this.contentContainer.add(this.nearbyTab);
 
     this.friendsTab = scene.add
-      .text(centerX + this.tabGap, tabBaseY, "FRIENDS", {
+      .text(centerX, tabBaseY, "FRIENDS", {
         fontSize: tabFontSize,
         color: "#888888",
         fontFamily: "'Press Start 2P', monospace",
@@ -200,6 +210,17 @@ export class SocialPanel {
       .setOrigin(0.5, 0);
     this.contentContainer.add(this.friendsTab);
 
+    this.requestsTab = scene.add
+      .text(centerX + this.tabGap, tabBaseY, "REQUESTS", {
+        fontSize: tabFontSize,
+        color: "#888888",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
+      })
+      .setOrigin(0.5, 0);
+    this.contentContainer.add(this.requestsTab);
+
     // Tab zones (added to scene, not container, for correct input)
     this.nearbyTabZone = scene.add.zone(0, 0, Math.round(50 * S), Math.round(14 * S))
       .setScrollFactor(0).setDepth(254).setInteractive({ useHandCursor: true });
@@ -208,6 +229,10 @@ export class SocialPanel {
     this.friendsTabZone = scene.add.zone(0, 0, Math.round(50 * S), Math.round(14 * S))
       .setScrollFactor(0).setDepth(254).setInteractive({ useHandCursor: true });
     this.friendsTabZone.on("pointerdown", () => this.setTab("friends"));
+
+    this.requestsTabZone = scene.add.zone(0, 0, Math.round(50 * S), Math.round(14 * S))
+      .setScrollFactor(0).setDepth(254).setInteractive({ useHandCursor: true });
+    this.requestsTabZone.on("pointerdown", () => this.setTab("requests"));
 
     // Build row pool
     const nameFontSize = `${Math.round(6 * S)}px`;
@@ -311,9 +336,66 @@ export class SocialPanel {
         eqZone.on("pointerout", () => {
           this.tooltip.hide();
         });
+        eqZone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+          if (pointer.rightButtonDown()) {
+            this.tooltip.hide();
+            const info = this.getVisiblePlayers()[rowIdx];
+            if (info && (info.online || this.activeTab === "friends" || this.activeTab === "requests")) {
+              this.showContextMenu(info, pointer.x, pointer.y);
+            }
+          }
+        });
         slotZones.push(eqZone);
       }
       this.equipZones.push(slotZones);
+
+      // Inline action buttons for friend requests (positioned at bottom-right of row)
+      const btnFontSize = `${Math.round(5 * S)}px`;
+      const actionBtn1 = scene.add.text(0, 0, "", {
+        fontSize: btnFontSize,
+        color: "#44ff44",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
+      }).setOrigin(1, 0.5).setVisible(false);
+      this.contentContainer.add(actionBtn1);
+
+      const actionBtn2 = scene.add.text(0, 0, "", {
+        fontSize: btnFontSize,
+        color: "#ff4444",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
+      }).setOrigin(1, 0.5).setVisible(false);
+      this.contentContainer.add(actionBtn2);
+
+      // Action zones (in screen space, like equip zones)
+      const actionZone1 = scene.add.zone(0, 0, Math.round(50 * S), Math.round(14 * S))
+        .setScrollFactor(0).setDepth(256).setInteractive({ useHandCursor: true });
+      actionZone1.on("pointerover", () => actionBtn1.setColor("#88ff88"));
+      actionZone1.on("pointerout", () => actionBtn1.setColor("#44ff44"));
+      actionZone1.on("pointerdown", () => {
+        const info = this.getVisiblePlayers()[rowIdx];
+        if (!info || this.activeTab !== "requests") return;
+        const isIncoming = info.serverRegion === "incoming";
+        if (isIncoming) {
+          if (this.onAcceptRequest) this.onAcceptRequest(info.accountId);
+        } else {
+          if (this.onCancelRequest) this.onCancelRequest(info.accountId);
+        }
+      });
+
+      const actionZone2 = scene.add.zone(0, 0, Math.round(50 * S), Math.round(14 * S))
+        .setScrollFactor(0).setDepth(256).setInteractive({ useHandCursor: true });
+      actionZone2.on("pointerover", () => actionBtn2.setColor("#ff8888"));
+      actionZone2.on("pointerout", () => actionBtn2.setColor("#ff4444"));
+      actionZone2.on("pointerdown", () => {
+        const info = this.getVisiblePlayers()[rowIdx];
+        if (!info || this.activeTab !== "requests") return;
+        if (info.serverRegion === "incoming") {
+          if (this.onDeclineRequest) this.onDeclineRequest(info.accountId);
+        }
+      });
 
       // Row zone for right-click context menu
       const rowZone = scene.add.zone(0, 0, rowW, this.lineH)
@@ -321,11 +403,11 @@ export class SocialPanel {
       rowZone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
         if (pointer.rightButtonDown()) {
           const info = this.getVisiblePlayers()[rowIdx];
-          if (info && info.online) this.showContextMenu(info, pointer.x, pointer.y);
+          if (info && (info.online || this.activeTab === "friends" || this.activeTab === "requests")) this.showContextMenu(info, pointer.x, pointer.y);
         }
       });
 
-      this.rows.push({ bg, charSprite, nameText, levelText, equipSlots, equipSlotBgs, equipTierTexts, rowZone });
+      this.rows.push({ bg, charSprite, nameText, levelText, equipSlots, equipSlotBgs, equipTierTexts, rowZone, actionBtn1, actionBtn2, actionZone1, actionZone2 });
     }
 
     // Disable browser right-click menu on canvas
@@ -338,14 +420,22 @@ export class SocialPanel {
   setCallbacks(
     onDM: (name: string) => void,
     onToggleFriend: (name: string) => void,
+    onAcceptRequest: (accountId: string) => void,
+    onDeclineRequest: (accountId: string) => void,
+    onCancelRequest: (accountId: string) => void,
   ): void {
     this.onDM = onDM;
     this.onToggleFriend = onToggleFriend;
+    this.onAcceptRequest = onAcceptRequest;
+    this.onDeclineRequest = onDeclineRequest;
+    this.onCancelRequest = onCancelRequest;
   }
 
-  populate(players: NearbyPlayerInfo[], allFriends: NearbyPlayerInfo[]): void {
+  populate(players: NearbyPlayerInfo[], allFriends: NearbyPlayerInfo[], incomingRequests: FriendRequestEntry[] = [], outgoingRequests: FriendRequestEntry[] = []): void {
     this.players = players;
     this.allFriends = allFriends;
+    this.incomingRequests = incomingRequests;
+    this.outgoingRequests = outgoingRequests;
     this.renderRows();
   }
 
@@ -424,7 +514,8 @@ export class SocialPanel {
     this.titleText.setPosition(centerX, this.pad).setFontSize(titleFontSize);
     this.hintText.setPosition(centerX, this.pad + Math.round(14 * S)).setFontSize(hintFontSize);
     this.nearbyTab.setPosition(centerX - this.tabGap, this.tabY).setFontSize(tabFontSize);
-    this.friendsTab.setPosition(centerX + this.tabGap, this.tabY).setFontSize(tabFontSize);
+    this.friendsTab.setPosition(centerX, this.tabY).setFontSize(tabFontSize);
+    this.requestsTab.setPosition(centerX + this.tabGap, this.tabY).setFontSize(tabFontSize);
 
     // Update rows layout
     for (let i = 0; i < MAX_ROWS; i++) {
@@ -461,6 +552,11 @@ export class SocialPanel {
         }
         row.equipTierTexts[j].setPosition(slotX + this.equipSize - 1, slotsRowCenterY + this.equipSize / 2 - 1).setFontSize(tierFontSize);
       }
+
+      // Action buttons font size (positions set by renderRows)
+      const btnFontSize = `${Math.round(5 * S)}px`;
+      row.actionBtn1.setFontSize(btnFontSize);
+      row.actionBtn2.setFontSize(btnFontSize);
     }
 
     // Rebuild mask
@@ -495,7 +591,7 @@ export class SocialPanel {
     // Row has 3 sections: padding + name text + class/level text + sprite/slots row + padding
     const rowPad = Math.round(4 * S);
     this.lineH = rowPad + Math.round(10 * S) + Math.round(10 * S) + this.equipSize + rowPad;
-    this.tabGap = Math.round(40 * S);
+    this.tabGap = Math.round(55 * S);
     this.rowStride = this.lineH + Math.round(4 * S);
 
     this.panelWidth = Math.min(Math.round(PANEL_REF_WIDTH * S), Math.round(screenW * 0.28));
@@ -518,11 +614,12 @@ export class SocialPanel {
     this.textMaxW = Math.max(0, contentW - this.pad * 2 - rowPad * 2);
   }
 
-  private setTab(tab: "nearby" | "friends"): void {
+  private setTab(tab: "nearby" | "friends" | "requests"): void {
     if (this.activeTab === tab) return;
     this.activeTab = tab;
     this.nearbyTab.setColor(tab === "nearby" ? "#ffffff" : "#888888");
     this.friendsTab.setColor(tab === "friends" ? "#ffffff" : "#888888");
+    this.requestsTab.setColor(tab === "requests" ? "#ffffff" : "#888888");
     this.scrollY = 0;
     this.hideContextMenu();
     this.tooltip.hide();
@@ -534,7 +631,49 @@ export class SocialPanel {
     if (this.activeTab === "friends") {
       return this.allFriends;
     }
+    if (this.activeTab === "requests") {
+      return this.getRequestRows();
+    }
     return this.players;
+  }
+
+  /**
+   * Build virtual NearbyPlayerInfo rows for the requests tab.
+   * Incoming requests first (with a header-like marker), then outgoing.
+   */
+  private getRequestRows(): NearbyPlayerInfo[] {
+    const rows: NearbyPlayerInfo[] = [];
+    for (const req of this.incomingRequests) {
+      rows.push({
+        sessionId: "",
+        name: "",
+        accountName: req.accountName,
+        accountId: req.accountId,
+        level: 0,
+        characterClass: 0,
+        distance: 0,
+        equipment: [],
+        isFriend: false,
+        online: false,
+        serverRegion: "incoming",
+      });
+    }
+    for (const req of this.outgoingRequests) {
+      rows.push({
+        sessionId: "",
+        name: "",
+        accountName: req.accountName,
+        accountId: req.accountId,
+        level: 0,
+        characterClass: 0,
+        distance: 0,
+        equipment: [],
+        isFriend: false,
+        online: false,
+        serverRegion: "outgoing",
+      });
+    }
+    return rows;
   }
 
   private renderRows(): void {
@@ -557,24 +696,46 @@ export class SocialPanel {
 
         // Display name
         let displayName = info.name;
-        if (this.activeTab === "friends" && info.accountName) {
+        if (this.activeTab === "requests") {
+          const isIncoming = info.serverRegion === "incoming";
+          displayName = info.accountName;
+          row.nameText.setText(displayName).setScale(1).setVisible(true);
+          if (row.nameText.width > this.textMaxW) {
+            row.nameText.setScale(this.textMaxW / row.nameText.width);
+          }
+          row.nameText.setColor(isIncoming ? "#ffcc44" : "#888888");
+          row.levelText.setText(isIncoming ? "Incoming request" : "Outgoing request");
+          row.levelText.setColor(isIncoming ? "#aa8833" : "#555555");
+        } else if (this.activeTab === "friends" && info.accountName) {
           displayName = info.online && info.name
             ? `${info.accountName} (${info.name})`
             : info.accountName;
-        } else if (info.accountName && this.activeTab === "nearby") {
-          displayName = `${info.accountName} (${info.name})`;
-        }
-        row.nameText.setText(displayName).setScale(1).setVisible(true);
-        if (row.nameText.width > this.textMaxW) {
-          row.nameText.setScale(this.textMaxW / row.nameText.width);
-        }
-
-        if (info.online) {
-          row.nameText.setColor("#66cc66");
-          row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
+          row.nameText.setText(displayName).setScale(1).setVisible(true);
+          if (row.nameText.width > this.textMaxW) {
+            row.nameText.setScale(this.textMaxW / row.nameText.width);
+          }
+          if (info.online) {
+            row.nameText.setColor("#66cc66");
+            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
+          } else {
+            row.nameText.setColor("#666666");
+            row.levelText.setText("");
+          }
         } else {
-          row.nameText.setColor("#666666");
-          row.levelText.setText("");
+          if (info.accountName && this.activeTab === "nearby") {
+            displayName = `${info.accountName} (${info.name})`;
+          }
+          row.nameText.setText(displayName).setScale(1).setVisible(true);
+          if (row.nameText.width > this.textMaxW) {
+            row.nameText.setScale(this.textMaxW / row.nameText.width);
+          }
+          if (info.online) {
+            row.nameText.setColor("#66cc66");
+            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
+          } else {
+            row.nameText.setColor("#666666");
+            row.levelText.setText("");
+          }
         }
         row.levelText.setScale(1).setVisible(true);
         if (row.levelText.width > this.textMaxW) {
@@ -613,6 +774,39 @@ export class SocialPanel {
           }
         }
 
+        // Action buttons for requests tab
+        if (this.activeTab === "requests") {
+          const isIncoming = info.serverRegion === "incoming";
+          const rowY = this.rowStartY + i * this.rowStride;
+          const rowPad = Math.round(4 * S);
+          const contentW = this.panelWidth - this.scrollBarWidth - Math.round(8 * S);
+          const btnRightX = contentW - this.pad - rowPad;
+          const btnCenterY = rowY + this.lineH / 2;
+
+          if (isIncoming) {
+            row.actionBtn1.setText("Accept").setColor("#44ff44")
+              .setPosition(btnRightX, btnCenterY - Math.round(6 * S)).setVisible(true);
+            row.actionBtn2.setText("Decline").setColor("#ff4444")
+              .setPosition(btnRightX, btnCenterY + Math.round(6 * S)).setVisible(true);
+            row.actionZone1.setVisible(true).setInteractive({ useHandCursor: true });
+            row.actionZone2.setVisible(true).setInteractive({ useHandCursor: true });
+          } else {
+            row.actionBtn1.setText("Cancel").setColor("#ff8844")
+              .setPosition(btnRightX, btnCenterY).setVisible(true);
+            row.actionBtn2.setVisible(false);
+            row.actionZone1.setVisible(true).setInteractive({ useHandCursor: true });
+            row.actionZone2.setVisible(false);
+            row.actionZone2.disableInteractive();
+          }
+        } else {
+          row.actionBtn1.setVisible(false);
+          row.actionBtn2.setVisible(false);
+          row.actionZone1.setVisible(false);
+          row.actionZone2.setVisible(false);
+          row.actionZone1.disableInteractive();
+          row.actionZone2.disableInteractive();
+        }
+
         row.rowZone.setVisible(true);
       } else {
         row.bg.setVisible(false);
@@ -624,6 +818,12 @@ export class SocialPanel {
           row.equipSlots[j].setVisible(false);
           row.equipTierTexts[j].setVisible(false);
         }
+        row.actionBtn1.setVisible(false);
+        row.actionBtn2.setVisible(false);
+        row.actionZone1.setVisible(false);
+        row.actionZone2.setVisible(false);
+        row.actionZone1.disableInteractive();
+        row.actionZone2.disableInteractive();
         row.rowZone.setVisible(false);
       }
     }
@@ -645,8 +845,65 @@ export class SocialPanel {
     const menuW = Math.round(100 * S);
     const itemH = Math.round(16 * S);
     const pad = Math.round(6 * S);
-    const menuH = pad * 2 + itemH * 2 + Math.round(4 * S);
     const fontSize = `${Math.round(6 * S)}px`;
+
+    // Build menu items based on context
+    const menuItems: { label: string; action: () => void }[] = [];
+
+    if (this.activeTab === "requests") {
+      const isIncoming = info.serverRegion === "incoming";
+      if (isIncoming) {
+        menuItems.push({
+          label: "Accept",
+          action: () => { if (this.ctxTarget && this.onAcceptRequest) this.onAcceptRequest(this.ctxTarget.accountId); },
+        });
+        menuItems.push({
+          label: "Decline",
+          action: () => { if (this.ctxTarget && this.onDeclineRequest) this.onDeclineRequest(this.ctxTarget.accountId); },
+        });
+      } else {
+        menuItems.push({
+          label: "Cancel Request",
+          action: () => { if (this.ctxTarget && this.onCancelRequest) this.onCancelRequest(this.ctxTarget.accountId); },
+        });
+      }
+    } else {
+      // DM option (only for online players with a character name)
+      if (info.name) {
+        menuItems.push({
+          label: "DM",
+          action: () => { if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget!.name); },
+        });
+      }
+
+      // Friend/request option
+      if (info.isFriend) {
+        menuItems.push({
+          label: "Remove Friend",
+          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+        });
+      } else if (hasPendingRequestToByName(info.accountName)) {
+        menuItems.push({
+          label: "Cancel Request",
+          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+        });
+      } else if (hasPendingRequestFromByName(info.accountName)) {
+        menuItems.push({
+          label: "Accept Request",
+          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+        });
+      } else {
+        menuItems.push({
+          label: "Send Request",
+          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+        });
+      }
+    }
+
+    if (menuItems.length === 0) return;
+
+    const gaps = Math.max(0, menuItems.length - 1) * Math.round(4 * S);
+    const menuH = pad * 2 + itemH * menuItems.length + gaps;
 
     const C = UI_PANEL_CORNER;
     const bg = this.scene.add.nineslice(screenX, screenY, "ui-panel-dark", undefined, menuW, menuH, C, C, C, C)
@@ -660,44 +917,35 @@ export class SocialPanel {
     const mx = bg.x;
     const my = bg.y;
 
-    // DM option
-    const dmText = this.scene.add.text(mx + pad, my + pad, "DM", {
-      fontSize,
-      color: "#cccccc",
-      fontFamily: "'Press Start 2P', monospace",
-      stroke: "#000000",
-      strokeThickness: 2,
-    }).setScrollFactor(0).setDepth(311);
+    const menuTexts: Phaser.GameObjects.Text[] = [];
+    const menuZones: Phaser.GameObjects.Zone[] = [];
 
-    const dmZone = this.scene.add.zone(mx + menuW / 2, my + pad + itemH / 2, menuW, itemH)
-      .setScrollFactor(0).setDepth(312).setInteractive({ useHandCursor: true });
-    dmZone.on("pointerover", () => dmText.setColor("#44ffaa"));
-    dmZone.on("pointerout", () => dmText.setColor("#cccccc"));
-    dmZone.on("pointerdown", () => {
-      if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget.name);
-      this.hideContextMenu();
-    });
+    for (let i = 0; i < menuItems.length; i++) {
+      const item = menuItems[i];
+      const itemY = my + pad + i * (itemH + Math.round(4 * S));
 
-    // Friend option
-    const friendLabel = info.isFriend ? "Remove Friend" : "Add Friend";
-    const friendText = this.scene.add.text(mx + pad, my + pad + itemH + Math.round(4 * S), friendLabel, {
-      fontSize,
-      color: "#cccccc",
-      fontFamily: "'Press Start 2P', monospace",
-      stroke: "#000000",
-      strokeThickness: 2,
-    }).setScrollFactor(0).setDepth(311);
+      const text = this.scene.add.text(mx + pad, itemY, item.label, {
+        fontSize,
+        color: "#cccccc",
+        fontFamily: "'Press Start 2P', monospace",
+        stroke: "#000000",
+        strokeThickness: 2,
+      }).setScrollFactor(0).setDepth(311);
 
-    const friendZone = this.scene.add.zone(mx + menuW / 2, my + pad + itemH + Math.round(4 * S) + itemH / 2, menuW, itemH)
-      .setScrollFactor(0).setDepth(312).setInteractive({ useHandCursor: true });
-    friendZone.on("pointerover", () => friendText.setColor("#44ffaa"));
-    friendZone.on("pointerout", () => friendText.setColor("#cccccc"));
-    friendZone.on("pointerdown", () => {
-      if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget.name);
-      this.hideContextMenu();
-    });
+      const zone = this.scene.add.zone(mx + menuW / 2, itemY + itemH / 2, menuW, itemH)
+        .setScrollFactor(0).setDepth(312).setInteractive({ useHandCursor: true });
+      zone.on("pointerover", () => text.setColor("#44ffaa"));
+      zone.on("pointerout", () => text.setColor("#cccccc"));
+      zone.on("pointerdown", () => {
+        item.action();
+        this.hideContextMenu();
+      });
 
-    this.ctxMenu = { bg, dmText, dmZone, friendText, friendZone };
+      menuTexts.push(text);
+      menuZones.push(zone);
+    }
+
+    this.ctxMenu = { bg, menuTexts, menuZones };
 
     // Close on any left click outside the menu (delayed so the current right-click doesn't consume it)
     this.scene.time.delayedCall(0, () => {
@@ -720,10 +968,8 @@ export class SocialPanel {
     }
     if (!this.ctxMenu) return;
     this.ctxMenu.bg.destroy();
-    this.ctxMenu.dmText.destroy();
-    this.ctxMenu.dmZone.destroy();
-    this.ctxMenu.friendText.destroy();
-    this.ctxMenu.friendZone.destroy();
+    for (const t of this.ctxMenu.menuTexts) t.destroy();
+    for (const z of this.ctxMenu.menuZones) z.destroy();
     this.ctxMenu = null;
     this.ctxTarget = null;
   }
@@ -768,7 +1014,8 @@ export class SocialPanel {
 
     // Tab zones (screen space)
     this.nearbyTabZone.setPosition(this.px + centerX - this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
-    this.friendsTabZone.setPosition(this.px + centerX + this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
+    this.friendsTabZone.setPosition(this.px + centerX, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
+    this.requestsTabZone.setPosition(this.px + centerX + this.tabGap, this.py + this.tabY + Math.round(7 * S) - this.scrollY);
 
     // Row zones and equip zones (screen space)
     const rowPad = Math.round(S * 4);
@@ -792,6 +1039,17 @@ export class SocialPanel {
         this.equipZones[i][j].setPosition(screenSlotCenterX, screenSlotsY);
         this.equipZones[i][j].setSize(this.equipSize, this.equipSize);
       }
+
+      // Action button zones (aligned with the text buttons in content space)
+      const btnRightX = contentW - this.pad - rowPad;
+      const screenBtnRightX = this.px + btnRightX;
+      const btnZoneW = Math.round(50 * S);
+      // btn1: upper position for incoming ("Accept"), center for outgoing ("Cancel")
+      row.actionZone1.setPosition(screenBtnRightX - btnZoneW / 2, screenRowY - Math.round(6 * S));
+      row.actionZone1.setSize(btnZoneW, Math.round(12 * S));
+      // btn2: lower position ("Decline")
+      row.actionZone2.setPosition(screenBtnRightX - btnZoneW / 2, screenRowY + Math.round(6 * S));
+      row.actionZone2.setSize(btnZoneW, Math.round(12 * S));
     }
   }
 
@@ -802,9 +1060,17 @@ export class SocialPanel {
     this.scrollBarThumb.setVisible(vis);
     this.nearbyTabZone.setVisible(vis);
     this.friendsTabZone.setVisible(vis);
+    this.requestsTabZone.setVisible(vis);
 
     for (let i = 0; i < this.rows.length; i++) {
       this.rows[i].rowZone.setVisible(vis);
+      // Action buttons are controlled by renderRows, just hide when panel hides
+      if (!vis) {
+        this.rows[i].actionBtn1.setVisible(false);
+        this.rows[i].actionBtn2.setVisible(false);
+        this.rows[i].actionZone1.setVisible(false);
+        this.rows[i].actionZone2.setVisible(false);
+      }
       for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
         this.equipZones[i][j].setVisible(vis);
       }
@@ -814,6 +1080,7 @@ export class SocialPanel {
     if (vis) {
       this.nearbyTabZone.setInteractive({ useHandCursor: true });
       this.friendsTabZone.setInteractive({ useHandCursor: true });
+      this.requestsTabZone.setInteractive({ useHandCursor: true });
       for (let i = 0; i < this.rows.length; i++) {
         this.rows[i].rowZone.setInteractive();
         for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
@@ -823,8 +1090,11 @@ export class SocialPanel {
     } else {
       this.nearbyTabZone.disableInteractive();
       this.friendsTabZone.disableInteractive();
+      this.requestsTabZone.disableInteractive();
       for (let i = 0; i < this.rows.length; i++) {
         this.rows[i].rowZone.disableInteractive();
+        this.rows[i].actionZone1.disableInteractive();
+        this.rows[i].actionZone2.disableInteractive();
         for (let j = 0; j < EQUIP_SLOT_COUNT; j++) {
           this.equipZones[i][j].disableInteractive();
         }

@@ -10,7 +10,7 @@ import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { SocialPanel, NearbyPlayerInfo } from "../ui/SocialPanel";
 import { PlayerTooltip } from "../ui/PlayerTooltip";
-import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, type FriendEntry } from "../ui/FriendStore";
+import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, initRequestsFromServer, onFriendRequestReceived, onFriendRequestDeclined, onFriendRequestCancelled, getIncomingRequests, getOutgoingRequests, hasPendingRequestToByName, hasPendingRequestFromByName, acceptRequest, declineRequest, cancelRequest, updateFriendStatus, type FriendEntry, type FriendRequestEntry } from "../ui/FriendStore";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
@@ -396,6 +396,10 @@ export class GameScene extends Phaser.Scene {
 
     room.onMessage(ServerMessage.FriendsList, (data: { friends: FriendEntry[] }) => {
       initFriendsFromServer(data.friends);
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
     });
     room.onMessage(ServerMessage.FriendAdded, (data: { accountId: string; accountName: string }) => {
       onFriendAdded(data);
@@ -405,7 +409,7 @@ export class GameScene extends Phaser.Scene {
       }
       if (this.socialPanel?.isVisible()) {
         const d = this.gatherSocialData();
-        this.socialPanel.populate(d.nearby, d.friends);
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
       }
     });
     room.onMessage(ServerMessage.FriendRemoved, (data: { accountId: string }) => {
@@ -415,12 +419,63 @@ export class GameScene extends Phaser.Scene {
       }
       if (this.socialPanel?.isVisible()) {
         const d = this.gatherSocialData();
-        this.socialPanel.populate(d.nearby, d.friends);
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
       }
     });
 
-    // Request friends list from server (handlers are now registered)
+    // Friend request handlers
+    room.onMessage(ServerMessage.FriendRequestReceived, (data: { accountId: string; accountName: string; direction: "incoming" | "outgoing" }) => {
+      onFriendRequestReceived({ accountId: data.accountId, accountName: data.accountName }, data.direction);
+      if (this.chatUI) {
+        if (data.direction === "incoming") {
+          this.chatUI.addMessage({ playerName: "", text: `${data.accountName} sent you a friend request.`, channel: "global" });
+        } else {
+          this.chatUI.addMessage({ playerName: "", text: `Friend request sent to ${data.accountName}.`, channel: "global" });
+        }
+      }
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
+    });
+    room.onMessage(ServerMessage.FriendRequestAccepted, (data: { accountId: string; accountName: string }) => {
+      // FriendAdded handler already updates the friends cache; this is just for the chat message
+      if (this.chatUI) {
+        this.chatUI.addMessage({ playerName: "", text: `${data.accountName} accepted your friend request.`, channel: "global" });
+      }
+    });
+    room.onMessage(ServerMessage.FriendRequestDeclined, (data: { accountId: string }) => {
+      onFriendRequestDeclined(data.accountId);
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
+    });
+    room.onMessage(ServerMessage.FriendRequestCancelled, (data: { accountId: string }) => {
+      onFriendRequestCancelled(data.accountId);
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
+    });
+    room.onMessage(ServerMessage.FriendRequestsList, (data: { incoming: FriendRequestEntry[]; outgoing: FriendRequestEntry[] }) => {
+      initRequestsFromServer(data.incoming, data.outgoing);
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
+    });
+    room.onMessage(ServerMessage.FriendStatusUpdate, (data: { accountId: string; online: boolean; characterName?: string; characterClass?: number; level?: number; serverRegion?: string }) => {
+      updateFriendStatus(data.accountId, data.online, data.characterName, data.characterClass, data.level, data.serverRegion);
+      if (this.socialPanel?.isVisible()) {
+        const d = this.gatherSocialData();
+        this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
+      }
+    });
+
+    // Request friends list and pending requests from server (handlers are now registered)
     this.network.sendGetFriendsList();
+    this.network.sendGetFriendRequests();
 
     // Pre-render all entity shapes into reusable textures (batched draw calls)
     generateEntityTextures(this);
@@ -545,16 +600,32 @@ export class GameScene extends Phaser.Scene {
         this.socialPanel.hide();
         this.chatUI.openInputWithText(`/dm ${name} `);
       },
-      (name: string) => {
+      (nameOrAccount: string) => {
         if (!isFriendsAuthenticated()) return;
         const visiblePlayers = this.gatherSocialData();
-        const allPlayers = [...visiblePlayers.nearby, ...visiblePlayers.friends];
-        const target = allPlayers.find((p) => p.name === name);
+        const allPlayers = [...visiblePlayers.friends, ...visiblePlayers.nearby];
+        const target = allPlayers.find((p) => p.accountName === nameOrAccount || p.name === nameOrAccount);
         if (target && target.isFriend && target.accountId) {
           removeFriend(target.accountId);
+        } else if (target && target.accountId && hasPendingRequestToByName(target.accountName)) {
+          cancelRequest(target.accountId);
+        } else if (target && target.accountId && hasPendingRequestFromByName(target.accountName)) {
+          acceptRequest(target.accountId);
         } else {
-          addFriend(name);
+          addFriend(nameOrAccount);
         }
+      },
+      (accountId: string) => {
+        if (!isFriendsAuthenticated()) return;
+        acceptRequest(accountId);
+      },
+      (accountId: string) => {
+        if (!isFriendsAuthenticated()) return;
+        declineRequest(accountId);
+      },
+      (accountId: string) => {
+        if (!isFriendsAuthenticated()) return;
+        cancelRequest(accountId);
       },
     );
     this.hud.setSocialButtonCallback(() => this.toggleSocialPanel());
@@ -3451,15 +3522,18 @@ export class GameScene extends Phaser.Scene {
         this.closeLeftPanels("social");
         this.socialPanel.setSide("left");
       }
-      { const d = this.gatherSocialData(); this.socialPanel.populate(d.nearby, d.friends); }
+      // Refresh friends data from server to catch cross-server status changes
+      this.network.sendGetFriendsList();
+      this.network.sendGetFriendRequests();
+      { const d = this.gatherSocialData(); this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests); }
       this.socialPanel.show();
     }
   }
 
-  private gatherSocialData(): { nearby: NearbyPlayerInfo[]; friends: NearbyPlayerInfo[] } {
+  private gatherSocialData(): { nearby: NearbyPlayerInfo[]; friends: NearbyPlayerInfo[]; incomingRequests: FriendRequestEntry[]; outgoingRequests: FriendRequestEntry[] } {
     const sessionId = this.network.getSessionId();
     const localSprite = this.playerSprites.get(sessionId);
-    if (!localSprite) return { nearby: [], friends: [] };
+    if (!localSprite) return { nearby: [], friends: [], incomingRequests: [], outgoingRequests: [] };
 
     const state = this.decodedState;
     const nearby: NearbyPlayerInfo[] = [];
@@ -3556,7 +3630,7 @@ export class GameScene extends Phaser.Scene {
     // Online friends first, then offline
     const friends = [...onlineFriends, ...offlineFriends];
 
-    return { nearby, friends };
+    return { nearby, friends, incomingRequests: getIncomingRequests(), outgoingRequests: getOutgoingRequests() };
   }
 
   private updateDungeonTooltip(localSprite: PlayerSprite | undefined): void {

@@ -110,6 +110,22 @@ export class NetworkManager {
     this.room?.send(ClientMessage.RemoveFriend, { accountId });
   }
 
+  sendAcceptFriendRequest(accountId: string): void {
+    this.room?.send(ClientMessage.AcceptFriendRequest, { accountId });
+  }
+
+  sendDeclineFriendRequest(accountId: string): void {
+    this.room?.send(ClientMessage.DeclineFriendRequest, { accountId });
+  }
+
+  sendCancelFriendRequest(accountId: string): void {
+    this.room?.send(ClientMessage.CancelFriendRequest, { accountId });
+  }
+
+  sendGetFriendRequests(): void {
+    this.room?.send(ClientMessage.GetFriendRequests);
+  }
+
   sendRefreshAccountName(): void {
     this.room?.send(ClientMessage.RefreshAccountName);
   }

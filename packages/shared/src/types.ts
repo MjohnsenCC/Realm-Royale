@@ -494,6 +494,12 @@ export const ServerMessage = {
   FriendsList: "friendsList",
   FriendAdded: "friendAdded",
   FriendRemoved: "friendRemoved",
+  FriendRequestReceived: "friendRequestReceived",
+  FriendRequestAccepted: "friendRequestAccepted",
+  FriendRequestDeclined: "friendRequestDeclined",
+  FriendRequestCancelled: "friendRequestCancelled",
+  FriendRequestsList: "friendRequestsList",
+  FriendStatusUpdate: "friendStatusUpdate",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -522,6 +528,10 @@ export const ClientMessage = {
   AddFriend: "addFriend",
   RemoveFriend: "removeFriend",
   GetFriendsList: "getFriendsList",
+  AcceptFriendRequest: "acceptFriendRequest",
+  DeclineFriendRequest: "declineFriendRequest",
+  CancelFriendRequest: "cancelFriendRequest",
+  GetFriendRequests: "getFriendRequests",
   RefreshAccountName: "refreshAccountName",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];

@@ -116,7 +116,7 @@ import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
 import { getAccountVault, saveAccountVault, getAccountName, setAccountOnline, setAccountOffline } from "../db/accounts";
-import { getAccountFriends, addAccountFriend, removeAccountFriend } from "../db/friends";
+import { getAccountFriends, removeAccountFriend, getExistingRelationship, createFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, getPendingRequests } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
@@ -1134,7 +1134,7 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
-    // Add friend (client sends character name; server resolves to account)
+    // Send friend request (client sends character name; server resolves to account)
     this.onMessage(
       ClientMessage.AddFriend,
       async (client, data: { name: string }) => {
@@ -1143,11 +1143,11 @@ export class GameRoom extends Room<GameState> {
         const name = typeof data.name === "string" ? data.name.trim() : "";
         if (name.length === 0) return;
 
-        // Find the target player in the room by character name
+        // Find the target player in the room by character name or account name
         let targetAccountId = "";
         let targetAccountName = "";
         this.state.players.forEach((p) => {
-          if (p.name === name && p.accountId) {
+          if ((p.name === name || p.accountName === name) && p.accountId) {
             targetAccountId = p.accountId;
             targetAccountName = p.accountName;
           }
@@ -1156,15 +1156,148 @@ export class GameRoom extends Room<GameState> {
         if (!targetAccountId || targetAccountId === player.accountId) return;
 
         try {
-          await addAccountFriend(player.accountId, targetAccountId);
-          client.send(ServerMessage.FriendAdded, { accountId: targetAccountId, accountName: targetAccountName });
+          const relationship = await getExistingRelationship(player.accountId, targetAccountId);
+          if (relationship === "accepted" || relationship === "pending_outgoing") return;
+
+          // If target already sent us a request, auto-accept (mutual request)
+          if (relationship === "pending_incoming") {
+            await acceptFriendRequest(targetAccountId, player.accountId);
+            client.send(ServerMessage.FriendAdded, { accountId: targetAccountId, accountName: targetAccountName });
+            // Notify the original requester if online
+            const targetSessionId = this.accountToSession.get(targetAccountId);
+            if (targetSessionId) {
+              const targetClient = this.clients.getById(targetSessionId);
+              if (targetClient) {
+                targetClient.send(ServerMessage.FriendRequestAccepted, { accountId: player.accountId, accountName: player.accountName });
+                targetClient.send(ServerMessage.FriendAdded, { accountId: player.accountId, accountName: player.accountName });
+              }
+            }
+            return;
+          }
+
+          // Create pending request
+          await createFriendRequest(player.accountId, targetAccountId);
+          client.send(ServerMessage.FriendRequestReceived, { accountId: targetAccountId, accountName: targetAccountName, direction: "outgoing" });
+
+          // Notify target if online
+          const targetSessionId = this.accountToSession.get(targetAccountId);
+          if (targetSessionId) {
+            const targetClient = this.clients.getById(targetSessionId);
+            if (targetClient) {
+              targetClient.send(ServerMessage.FriendRequestReceived, { accountId: player.accountId, accountName: player.accountName, direction: "incoming" });
+            }
+          }
         } catch (err) {
-          console.error("Failed to add friend:", err);
+          console.error("Failed to send friend request:", err);
         }
       },
     );
 
-    // Remove friend (client sends account ID)
+    // Accept friend request
+    this.onMessage(
+      ClientMessage.AcceptFriendRequest,
+      async (client, data: { accountId: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.accountId) return;
+        const requesterAccountId = typeof data.accountId === "string" ? data.accountId.trim() : "";
+        if (requesterAccountId.length === 0) return;
+
+        try {
+          await acceptFriendRequest(requesterAccountId, player.accountId);
+
+          // Find requester's account name
+          let requesterAccountName = "";
+          this.state.players.forEach((p) => {
+            if (p.accountId === requesterAccountId) {
+              requesterAccountName = p.accountName;
+            }
+          });
+
+          client.send(ServerMessage.FriendAdded, { accountId: requesterAccountId, accountName: requesterAccountName });
+
+          // Notify requester if online
+          const requesterSessionId = this.accountToSession.get(requesterAccountId);
+          if (requesterSessionId) {
+            const requesterClient = this.clients.getById(requesterSessionId);
+            if (requesterClient) {
+              requesterClient.send(ServerMessage.FriendRequestAccepted, { accountId: player.accountId, accountName: player.accountName });
+              requesterClient.send(ServerMessage.FriendAdded, { accountId: player.accountId, accountName: player.accountName });
+            }
+          }
+        } catch (err) {
+          console.error("Failed to accept friend request:", err);
+        }
+      },
+    );
+
+    // Decline friend request
+    this.onMessage(
+      ClientMessage.DeclineFriendRequest,
+      async (client, data: { accountId: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.accountId) return;
+        const requesterAccountId = typeof data.accountId === "string" ? data.accountId.trim() : "";
+        if (requesterAccountId.length === 0) return;
+
+        try {
+          await declineFriendRequest(requesterAccountId, player.accountId);
+          client.send(ServerMessage.FriendRequestDeclined, { accountId: requesterAccountId });
+
+          // Notify requester if online
+          const requesterSessionId = this.accountToSession.get(requesterAccountId);
+          if (requesterSessionId) {
+            const requesterClient = this.clients.getById(requesterSessionId);
+            if (requesterClient) {
+              requesterClient.send(ServerMessage.FriendRequestDeclined, { accountId: player.accountId });
+            }
+          }
+        } catch (err) {
+          console.error("Failed to decline friend request:", err);
+        }
+      },
+    );
+
+    // Cancel outgoing friend request
+    this.onMessage(
+      ClientMessage.CancelFriendRequest,
+      async (client, data: { accountId: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.accountId) return;
+        const targetAccountId = typeof data.accountId === "string" ? data.accountId.trim() : "";
+        if (targetAccountId.length === 0) return;
+
+        try {
+          await cancelFriendRequest(player.accountId, targetAccountId);
+          client.send(ServerMessage.FriendRequestCancelled, { accountId: targetAccountId });
+
+          // Notify target if online
+          const targetSessionId = this.accountToSession.get(targetAccountId);
+          if (targetSessionId) {
+            const targetClient = this.clients.getById(targetSessionId);
+            if (targetClient) {
+              targetClient.send(ServerMessage.FriendRequestCancelled, { accountId: player.accountId });
+            }
+          }
+        } catch (err) {
+          console.error("Failed to cancel friend request:", err);
+        }
+      },
+    );
+
+    // Get pending friend requests
+    this.onMessage(ClientMessage.GetFriendRequests, async (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.accountId) return;
+      try {
+        const requests = await getPendingRequests(player.accountId);
+        client.send(ServerMessage.FriendRequestsList, requests);
+      } catch (err) {
+        console.error("Failed to load friend requests:", err);
+        client.send(ServerMessage.FriendRequestsList, { incoming: [], outgoing: [] });
+      }
+    });
+
+    // Remove friend (client sends account ID) — removes both directions
     this.onMessage(
       ClientMessage.RemoveFriend,
       async (client, data: { accountId: string }) => {
@@ -1175,6 +1308,15 @@ export class GameRoom extends Room<GameState> {
         try {
           await removeAccountFriend(player.accountId, friendAccountId);
           client.send(ServerMessage.FriendRemoved, { accountId: friendAccountId });
+
+          // Notify the other party if online
+          const friendSessionId = this.accountToSession.get(friendAccountId);
+          if (friendSessionId) {
+            const friendClient = this.clients.getById(friendSessionId);
+            if (friendClient) {
+              friendClient.send(ServerMessage.FriendRemoved, { accountId: player.accountId });
+            }
+          }
         } catch (err) {
           console.error("Failed to remove friend:", err);
         }
@@ -1265,6 +1407,13 @@ export class GameRoom extends Room<GameState> {
         character.level
       ).catch((err) => console.error("Failed to set account online:", err));
 
+      // Notify friends in this room that this player came online
+      this.notifyFriendsOfStatusChange(payload.accountId, true, {
+        name: character.name,
+        characterClass: character.characterClass,
+        level: character.level,
+      });
+
       player.characterClass = character.characterClass;
       player.level = character.level;
       player.xp = character.xp;
@@ -1326,8 +1475,9 @@ export class GameRoom extends Room<GameState> {
   async onLeave(client: Client, _consented: boolean) {
     const player = this.state.players.get(client.sessionId);
 
-    // Remove account-to-session tracking and mark offline in DB
+    // Notify friends in this room that this player went offline, then clean up
     if (player?.accountId) {
+      this.notifyFriendsOfStatusChange(player.accountId, false);
       this.accountToSession.delete(player.accountId);
       setAccountOffline(player.accountId).catch((err) =>
         console.error("Failed to set account offline:", err)
@@ -1379,6 +1529,35 @@ export class GameRoom extends Room<GameState> {
     }
 
     console.log("GameRoom disposed");
+  }
+
+  /**
+   * Notify friends in this room when a player comes online or goes offline.
+   */
+  private async notifyFriendsOfStatusChange(
+    accountId: string,
+    online: boolean,
+    playerData?: { name: string; characterClass: number; level: number },
+  ): Promise<void> {
+    try {
+      const friendRecords = await getAccountFriends(accountId);
+      for (const friend of friendRecords) {
+        const friendSessionId = this.accountToSession.get(friend.accountId);
+        if (!friendSessionId) continue;
+        const friendClient = this.clients.getById(friendSessionId);
+        if (!friendClient) continue;
+        friendClient.send(ServerMessage.FriendStatusUpdate, {
+          accountId,
+          online,
+          characterName: online ? playerData?.name : undefined,
+          characterClass: online ? playerData?.characterClass : undefined,
+          level: online ? playerData?.level : undefined,
+          serverRegion: online ? config.serverRegion : undefined,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to notify friends of status change:", err);
+    }
   }
 
   private async autoSaveAll(): Promise<void> {
