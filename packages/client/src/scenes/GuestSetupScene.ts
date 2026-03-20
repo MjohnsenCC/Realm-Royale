@@ -398,7 +398,7 @@ export class GuestSetupScene extends Phaser.Scene {
       htmlInput?.blur();
       if (this.input.keyboard) this.input.keyboard.enabled = true;
 
-      const rawName = htmlInput?.value?.trim() ?? "";
+      const rawName = (htmlInput?.value?.trim() ?? "").replace(/\s+/g, "");
       const playerName = rawName.length > 0 ? rawName : "Player";
 
       try {

@@ -49,7 +49,7 @@ export class PlayerTooltip {
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
 
     this.levelText = new Phaser.GameObjects.Text(scene, pad, pad + Math.round(14 * S), "", {
       fontSize: infoFontSize,
@@ -57,7 +57,7 @@ export class PlayerTooltip {
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
 
     this.classText = new Phaser.GameObjects.Text(scene, pad, pad + Math.round(24 * S), "", {
       fontSize: infoFontSize,
@@ -65,7 +65,7 @@ export class PlayerTooltip {
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
 
     // Equipment slots (4)
     const slotSize = Math.round(18 * S);

@@ -30,6 +30,7 @@ import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./
 import { drawItemIcon, getSlotBorderColor } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { UI_PANEL_CORNER } from "./UITextures";
+import { addText } from "./TextFactory";
 
 const ORB_KEYS = [
   CraftingOrbType.Blank,
@@ -235,8 +236,7 @@ export class CraftingUI {
     this.itemInfoDividerGfx = scene.add.graphics().setScrollFactor(0).setDepth(251);
 
     // --- Title ---
-    this.titleText = scene.add
-      .text(this.px + this.statsColumnWidth / 2, this.py + pad, "Crafting", {
+    this.titleText = addText(scene, this.px + this.statsColumnWidth / 2, this.py + pad, "Crafting", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily,
@@ -250,8 +250,7 @@ export class CraftingUI {
 
     // --- Placeholder text ---
     const placeholderY = this.py + pad + Math.round(22 * S);
-    this.placeholderText = scene.add
-      .text(this.px + this.statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
+    this.placeholderText = addText(scene, this.px + this.statsColumnWidth / 2, placeholderY, "Drag an item here to craft", {
         fontSize: smallFontSize,
         color: "#666688",
         fontFamily,
@@ -272,8 +271,7 @@ export class CraftingUI {
     const infoStartY = this.itemSlotCy + this.itemSlotSize / 2 + Math.round(8 * S);
 
     // Item name
-    this.itemNameText = scene.add
-      .text(leftPad, infoStartY, "", {
+    this.itemNameText = addText(scene, leftPad, infoStartY, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily,
@@ -288,8 +286,7 @@ export class CraftingUI {
       .setWordWrapWidth(wrapWidth);
 
     // Tier label
-    this.tierText = scene.add
-      .text(leftPad, 0, "", {
+    this.tierText = addText(scene, leftPad, 0, "", {
         fontSize: tierFontSize,
         color: "#cccccc",
         fontFamily,
@@ -302,8 +299,7 @@ export class CraftingUI {
       .setDepth(251);
 
     // Class names
-    this.classText = scene.add
-      .text(leftPad, 0, "", {
+    this.classText = addText(scene, leftPad, 0, "", {
         fontSize: smallFontSize,
         color: "#aaaaaa",
         fontFamily,
@@ -317,8 +313,7 @@ export class CraftingUI {
       .setWordWrapWidth(wrapWidth);
 
     // Description
-    this.descText = scene.add
-      .text(leftPad, 0, "", {
+    this.descText = addText(scene, leftPad, 0, "", {
         fontSize: smallFontSize,
         color: "#888899",
         fontFamily,
@@ -334,8 +329,7 @@ export class CraftingUI {
 
     // Locked stat pool (2 entries, left-aligned)
     for (let i = 0; i < 2; i++) {
-      const txt = scene.add
-        .text(leftPad, 0, "", {
+      const txt = addText(scene, leftPad, 0, "", {
           fontSize: statFontSize,
           color: "#ffffff",
           fontFamily,
@@ -362,8 +356,7 @@ export class CraftingUI {
         .setDepth(251)
         .setVisible(false);
 
-      const txt = scene.add
-        .text(statTextX, 0, "", {
+      const txt = addText(scene, statTextX, 0, "", {
           fontSize: statFontSize,
           color: "#4488ff",
           fontFamily,
@@ -381,8 +374,7 @@ export class CraftingUI {
     }
 
     // "No open stats" text
-    this.noOpenStatsText = scene.add
-      .text(leftPad, 0, "No open stats", {
+    this.noOpenStatsText = addText(scene, leftPad, 0, "No open stats", {
         fontSize: statFontSize,
         color: "#4488ff",
         fontFamily,
@@ -401,8 +393,7 @@ export class CraftingUI {
 
     this.orbInfoBg = scene.add.nineslice(0, 0, "ui-panel-tooltip", undefined, 100, 100, C, C, C, C).setOrigin(0, 0).setScrollFactor(0).setDepth(260).setVisible(false);
 
-    this.orbInfoNameText = scene.add
-      .text(0, 0, "", {
+    this.orbInfoNameText = addText(scene, 0, 0, "", {
         fontSize: `${Math.round(8 * S)}px`,
         color: "#ffffff",
         fontFamily,
@@ -417,8 +408,7 @@ export class CraftingUI {
       .setVisible(false)
       .setWordWrapWidth(orbInfoWidth - orbInfoPad * 2);
 
-    this.orbInfoDescText = scene.add
-      .text(0, 0, "", {
+    this.orbInfoDescText = addText(scene, 0, 0, "", {
         fontSize: smallFontSize,
         color: "#888899",
         fontFamily,
@@ -480,8 +470,7 @@ export class CraftingUI {
       }
 
       // Count text (bottom-right of slot)
-      const countText = scene.add
-        .text(sx + this.orbSlotW - Math.round(8 * S), sy + this.orbSlotH - Math.round(8 * S), "x0", {
+      const countText = addText(scene, sx + this.orbSlotW - Math.round(8 * S), sy + this.orbSlotH - Math.round(8 * S), "x0", {
           fontSize: smallFontSize,
           color: "#888888",
           fontFamily,

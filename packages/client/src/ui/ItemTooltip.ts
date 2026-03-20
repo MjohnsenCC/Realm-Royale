@@ -28,6 +28,7 @@ import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
 import { getSlotBorderColor } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { addText } from "./TextFactory";
 import { UI_PANEL_CORNER } from "./UITextures";
 
 const BASE_TOOLTIP_WIDTH = 240;
@@ -148,8 +149,7 @@ export class ItemTooltip {
 
     // Name text — left-aligned, right of sprite
     const nameX = pad + this.spriteSize + Math.round(4 * S);
-    this.nameText = scene.add
-      .text(nameX, this.bannerHeight / 2, "", {
+    this.nameText = addText(scene, nameX, this.bannerHeight / 2, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily,
@@ -163,8 +163,7 @@ export class ItemTooltip {
     this.container.add(this.nameText);
 
     // Tier badge — right-aligned in banner
-    this.tierBadge = scene.add
-      .text(this.tooltipWidth - pad, this.bannerHeight / 2, "", {
+    this.tierBadge = addText(scene, this.tooltipWidth - pad, this.bannerHeight / 2, "", {
         fontSize: tierFontSize,
         color: "#aaaaaa",
         fontFamily,
@@ -176,8 +175,7 @@ export class ItemTooltip {
     this.container.add(this.tierBadge);
 
     // Class text — below banner
-    this.classText = scene.add
-      .text(pad, 0, "", {
+    this.classText = addText(scene, pad, 0, "", {
         fontSize: smallFontSize,
         color: "#aaaaaa",
         fontFamily,
@@ -190,8 +188,7 @@ export class ItemTooltip {
     this.container.add(this.classText);
 
     // Description text
-    this.descText = scene.add
-      .text(pad, 0, "", {
+    this.descText = addText(scene, pad, 0, "", {
         fontSize: smallFontSize,
         color: "#888899",
         fontFamily,
@@ -206,8 +203,7 @@ export class ItemTooltip {
 
     // Locked stat pool (2 entries)
     for (let i = 0; i < 2; i++) {
-      const txt = scene.add
-        .text(pad, 0, "", {
+      const txt = addText(scene, pad, 0, "", {
           fontSize: statFontSize,
           color: "#ffffff",
           fontFamily,
@@ -232,8 +228,7 @@ export class ItemTooltip {
         .setVisible(false);
       this.container.add(icon);
 
-      const txt = scene.add
-        .text(statTextX, 0, "", {
+      const txt = addText(scene, statTextX, 0, "", {
           fontSize: statFontSize,
           color: "#66bbff",
           fontFamily,
@@ -250,8 +245,7 @@ export class ItemTooltip {
     }
 
     // Generic stats text (for static items / consumables / UT lore)
-    this.statsText = scene.add
-      .text(pad, 0, "", {
+    this.statsText = addText(scene, pad, 0, "", {
         fontSize: statFontSize,
         color: "#aaffaa",
         fontFamily,
@@ -265,8 +259,7 @@ export class ItemTooltip {
     this.container.add(this.statsText);
 
     // Shift hint
-    this.shiftHintText = scene.add
-      .text(pad, 0, "[SHIFT] for more info", {
+    this.shiftHintText = addText(scene, pad, 0, "[SHIFT] for more info", {
         fontSize: smallFontSize,
         color: "#888888",
         fontFamily,

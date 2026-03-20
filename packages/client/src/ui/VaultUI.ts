@@ -15,6 +15,7 @@ import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./
 import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { UI_PANEL_CORNER } from "./UITextures";
+import { addText } from "./TextFactory";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_GAP = 4;
@@ -95,8 +96,8 @@ export class VaultUI {
       .setOrigin(0, 0);
     this.container.add(this.panelBg);
 
-    this.headerText = scene.add
-      .text(0, 0, "Vault", {
+    this.headerText = addText(scene,
+      0, 0, "Vault", {
         fontSize: headerFontSize,
         color: VAULT_HEADER_COLOR,
         fontFamily: "'Press Start 2P', monospace",
@@ -163,8 +164,8 @@ export class VaultUI {
 
       this.slotZones.push(zone);
 
-      const text = scene.add
-        .text(0, 0, "", {
+      const text = addText(scene,
+        0, 0, "", {
           fontSize: slotFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -178,8 +179,8 @@ export class VaultUI {
         .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
 
-      const tierText = scene.add
-        .text(0, 0, "", {
+      const tierText = addText(scene,
+        0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -191,8 +192,8 @@ export class VaultUI {
         .setDepth(102);
       this.tierTexts.push(tierText);
 
-      const qtyText = scene.add
-        .text(0, 0, "", {
+      const qtyText = addText(scene,
+        0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",

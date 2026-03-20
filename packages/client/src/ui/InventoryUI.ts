@@ -16,6 +16,7 @@ import { ItemTooltip } from "./ItemTooltip";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { addText } from "./TextFactory";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_SIZE = 36;
@@ -180,8 +181,7 @@ export class InventoryUI {
 
       this.eqSlotZones.push(zone);
 
-      const text = scene.add
-        .text(sx + this.slotSize / 2, sy + this.slotSize / 2, EQ_SLOT_LABELS[i], {
+      const text = addText(scene, sx + this.slotSize / 2, sy + this.slotSize / 2, EQ_SLOT_LABELS[i], {
           fontSize: slotFontSize,
           color: "#666666",
           fontFamily: "'Press Start 2P', monospace",
@@ -195,8 +195,7 @@ export class InventoryUI {
         .setWordWrapWidth(this.slotSize - 4);
       this.eqItemTexts.push(text);
 
-      const tierText = scene.add
-        .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
+      const tierText = addText(scene, sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -276,8 +275,7 @@ export class InventoryUI {
 
       this.slotZones.push(zone);
 
-      const text = scene.add
-        .text(sx + this.slotSize / 2, sy + this.slotSize / 2, "", {
+      const text = addText(scene, sx + this.slotSize / 2, sy + this.slotSize / 2, "", {
           fontSize: slotFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -291,8 +289,7 @@ export class InventoryUI {
         .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
 
-      const tierText = scene.add
-        .text(sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
+      const tierText = addText(scene, sx + this.slotSize - 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -304,8 +301,7 @@ export class InventoryUI {
         .setDepth(102);
       this.tierTexts.push(tierText);
 
-      const qtyText = scene.add
-        .text(sx + 2, sy + this.slotSize - 2, "", {
+      const qtyText = addText(scene, sx + 2, sy + this.slotSize - 2, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",

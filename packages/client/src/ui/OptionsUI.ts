@@ -64,7 +64,7 @@ export class OptionsUI {
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.titleText.setOrigin(0.5, 0.5).setDepth(312).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.titleText);
 
@@ -74,7 +74,7 @@ export class OptionsUI {
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.backText.setOrigin(0.5, 0.5).setDepth(312).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.backText);
 
@@ -98,7 +98,7 @@ export class OptionsUI {
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.acctNameLabel.setOrigin(0, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.acctNameLabel);
 
@@ -109,7 +109,7 @@ export class OptionsUI {
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.acctNameValue.setOrigin(1, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.acctNameValue);
 
@@ -123,7 +123,7 @@ export class OptionsUI {
       fontFamily: "'Press Start 2P', monospace",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.acctNameStatusText.setOrigin(0.5, 0).setDepth(313).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.acctNameStatusText);
 
@@ -149,7 +149,7 @@ export class OptionsUI {
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 2,
-      });
+      }).setResolution(2);
       label.setOrigin(0, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
       scene.add.existing(label);
 
@@ -161,7 +161,7 @@ export class OptionsUI {
         fontStyle: "bold",
         stroke: "#000000",
         strokeThickness: 2,
-      });
+      }).setResolution(2);
       value.setOrigin(1, 0.5).setDepth(313).setScrollFactor(0).setVisible(false);
       scene.add.existing(value);
 

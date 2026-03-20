@@ -13,6 +13,7 @@ import { createEmptyItemInstance } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
+import { addText } from "./TextFactory";
 import type { InventoryUI } from "./InventoryUI";
 import type { LootBagUI } from "./LootBagUI";
 import type { CraftingUI } from "./CraftingUI";
@@ -463,8 +464,7 @@ export class DragManager {
     // Stack quantity label for stackable items only
     if (isStackableItem(item.baseItemId)) {
       const qty = item.quantity || 1;
-      this.ghostTierText = this.scene.add
-        .text(0, 0, `x${qty}`, {
+      this.ghostTierText = addText(this.scene, 0, 0, `x${qty}`, {
           fontSize: `${Math.round(4 * getUIScale())}px`,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",

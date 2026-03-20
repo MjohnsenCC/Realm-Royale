@@ -10,9 +10,20 @@ export class BootScene extends Phaser.Scene {
 
   preload() {
     // Player class sprites (8x8 pixel art)
+    // Classes with tilesets use spritesheet loading; others fall back to static images
     this.load.image("sprite-player-archer", "assets/sprites/players/archer.png");
     this.load.image("sprite-player-warrior", "assets/sprites/players/warrior.png");
     this.load.image("sprite-player-arcanist", "assets/sprites/players/arcanist.png");
+
+    // Walk animation tilesets (256x8, 16 frames of 8x8 with 8px spacing)
+    // Frame order: Right(0-3), Down(4-7), Up(8-11), Left(12-15)
+    for (const cls of ["archer", "warrior", "arcanist"]) {
+      this.load.spritesheet(`tileset-player-${cls}`, `assets/sprites/players/${cls}_tileset.png`, {
+        frameWidth: 8,
+        frameHeight: 8,
+        spacing: 8,
+      });
+    }
 
     // Enemy sprites (8x8 pixel art) — enemy types cycle through these
     for (let i = 1; i <= 6; i++) {

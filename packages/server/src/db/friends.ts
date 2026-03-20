@@ -216,23 +216,14 @@ export async function removeAccountFriend(
 ): Promise<void> {
   const supabase = getSupabase();
 
-  const { error: error1 } = await supabase
+  const { error } = await supabase
     .from("friends")
     .delete()
-    .eq("account_id", accountId)
-    .eq("friend_account_id", friendAccountId);
+    .or(
+      `and(account_id.eq.${accountId},friend_account_id.eq.${friendAccountId}),and(account_id.eq.${friendAccountId},friend_account_id.eq.${accountId})`,
+    );
 
-  if (error1) {
-    throw new Error(`Failed to remove friend for account ${accountId}: ${error1.message}`);
-  }
-
-  const { error: error2 } = await supabase
-    .from("friends")
-    .delete()
-    .eq("account_id", friendAccountId)
-    .eq("friend_account_id", accountId);
-
-  if (error2) {
-    throw new Error(`Failed to remove reverse friend: ${error2.message}`);
+  if (error) {
+    throw new Error(`Failed to remove friend between ${accountId} and ${friendAccountId}: ${error.message}`);
   }
 }

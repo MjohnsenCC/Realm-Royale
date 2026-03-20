@@ -10,6 +10,7 @@ import { generateItemTextures } from "./ItemTextures";
 import { isFpsVisible, isPingVisible } from "./OptionsUI";
 import { NetworkManager } from "../network/NetworkManager";
 import { UI_PANEL_CORNER, UI_BAR_CORNER, UI_BTN_CORNER, UI_MINIMAP_CORNER } from "./UITextures";
+import { addText } from "./TextFactory";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -212,13 +213,11 @@ export class HUD {
       .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.hpBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.hpBarFillImg = scene.add.image(0, 0, "ui-bar-hp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
-    this.hpLabel = scene.add
-      .text(0, 0, "HP", { ...barTextStyle })
+    this.hpLabel = addText(scene, 0, 0, "HP", { ...barTextStyle })
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(102);
-    this.hpText = scene.add
-      .text(0, 0, "", { ...barTextStyle })
+    this.hpText = addText(scene, 0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
@@ -227,13 +226,11 @@ export class HUD {
       .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.manaBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.manaBarFillImg = scene.add.image(0, 0, "ui-bar-mp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
-    this.manaLabel = scene.add
-      .text(0, 0, "MP", { ...barTextStyle })
+    this.manaLabel = addText(scene, 0, 0, "MP", { ...barTextStyle })
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(102);
-    this.manaText = scene.add
-      .text(0, 0, "", { ...barTextStyle })
+    this.manaText = addText(scene, 0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
@@ -242,19 +239,16 @@ export class HUD {
       .setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.lvlBarBgImg = scene.add.image(0, 0, "ui-bar-bg").setOrigin(0, 0).setScrollFactor(0).setDepth(100);
     this.lvlBarFillImg = scene.add.image(0, 0, "ui-bar-xp").setOrigin(0, 0).setScrollFactor(0).setDepth(101);
-    this.lvlLabel = scene.add
-      .text(0, 0, "LV", { ...barTextStyle })
+    this.lvlLabel = addText(scene, 0, 0, "LV", { ...barTextStyle })
       .setOrigin(0, 0.5)
       .setScrollFactor(0)
       .setDepth(102);
-    this.lvlText = scene.add
-      .text(0, 0, "", { ...barTextStyle })
+    this.lvlText = addText(scene, 0, 0, "", { ...barTextStyle })
       .setScrollFactor(0)
       .setDepth(102);
 
     // --- Zone/Biome display (top-center) ---
-    this.zoneText = scene.add
-      .text(screenW / 2, 15, "Nexus (Safe Zone)", {
+    this.zoneText = addText(scene, screenW / 2, 15, "Nexus (Safe Zone)", {
         fontSize: zoneFontSize,
         color: "#44aa66",
         fontFamily: "'Press Start 2P', monospace",
@@ -267,8 +261,7 @@ export class HUD {
 
     // --- FPS / Ping display (top-left) ---
     const perfFontSize = `${Math.round(6 * S)}px`;
-    this.fpsText = scene.add
-      .text(Math.round(8 * S), Math.round(8 * S), "", {
+    this.fpsText = addText(scene, Math.round(8 * S), Math.round(8 * S), "", {
         fontSize: perfFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -279,8 +272,7 @@ export class HUD {
       .setDepth(100)
       .setVisible(false);
 
-    this.pingText = scene.add
-      .text(Math.round(8 * S), Math.round(8 * S) + Math.round(13 * S), "", {
+    this.pingText = addText(scene, Math.round(8 * S), Math.round(8 * S) + Math.round(13 * S), "", {
         fontSize: perfFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -294,8 +286,7 @@ export class HUD {
     // --- Player count (inside minimap, bottom-left) ---
     const mmPad = Math.round(25 * S);
     const btnPadInit = Math.round(8 * S);
-    this.playerCountText = scene.add
-      .text(screenW - mmPad - this.mmWidth + btnPadInit, mmPad + this.mmHeight - btnPadInit, `Players: 0/${MAX_PLAYERS}`, {
+    this.playerCountText = addText(scene, screenW - mmPad - this.mmWidth + btnPadInit, mmPad + this.mmHeight - btnPadInit, `Players: 0/${MAX_PLAYERS}`, {
         fontSize: countFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -904,8 +895,7 @@ export class HUD {
 
     // Teleport button below minimap
     const S = this.S;
-    this.teleportButton = this.scene.add
-      .text(
+    this.teleportButton = addText(this.scene,
         this.mmScreenX + this.mmWidth / 2,
         this.mmScreenY + this.mmHeight + Math.round(8 * S),
         "TELEPORT  -1\u25C6",
@@ -1402,8 +1392,7 @@ export class HUD {
     this.deathOverlay.fillStyle(0x000000, 0.5);
     this.deathOverlay.fillRect(0, 0, width, height);
 
-    this.deathText = this.scene.add
-      .text(width / 2, height / 2 - Math.round(40 * S), "YOU DIED!", {
+    this.deathText = addText(this.scene, width / 2, height / 2 - Math.round(40 * S), "YOU DIED!", {
         fontSize: `${Math.round(24 * S)}px`,
         color: "#e94560",
         fontFamily: "'Press Start 2P', monospace",
@@ -1414,8 +1403,7 @@ export class HUD {
       .setScrollFactor(0)
       .setDepth(201);
 
-    this.deathButton = this.scene.add
-      .text(width / 2, height / 2 + Math.round(25 * S), "[ Respawn ]", {
+    this.deathButton = addText(this.scene, width / 2, height / 2 + Math.round(25 * S), "[ Respawn ]", {
         fontSize: `${Math.round(12 * S)}px`,
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -1451,8 +1439,7 @@ export class HUD {
   }
 
   showXpGain(x: number, y: number, amount: number): void {
-    const text = this.scene.add
-      .text(x, y - 20, `+${amount} XP`, {
+    const text = addText(this.scene, x, y - 20, `+${amount} XP`, {
         fontSize: "12px",
         color: "#44ffaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -1473,8 +1460,7 @@ export class HUD {
   }
 
   showLevelUp(x: number, y: number, level: number): void {
-    const text = this.scene.add
-      .text(x, y - 30, `LEVEL ${level}!`, {
+    const text = addText(this.scene, x, y - 30, `LEVEL ${level}!`, {
         fontSize: "11px",
         color: "#ffdd44",
         fontFamily: "'Press Start 2P', monospace",

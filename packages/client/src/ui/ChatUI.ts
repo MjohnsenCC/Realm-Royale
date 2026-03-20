@@ -1,8 +1,10 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
 import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX } from "@rotmg-lite/shared";
-import { getUIScale } from "./UIScale";
+import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 import { UI_PANEL_CORNER } from "./UITextures";
+import { addFriend, removeFriend, isFriendByCharacterName, getFriendAccountIdByCharacterName, isAuthenticated } from "./FriendStore";
+import { addText } from "./TextFactory";
 
 interface ChatEntry {
   playerName: string;
@@ -26,6 +28,18 @@ export class ChatUI {
   private channel: ChatChannel = "global";
   private inputEl: HTMLInputElement;
   private _isTyping = false;
+  private linePlayerNames: string[] = [];
+
+  // Client-side tracking of names we've blocked (mirrors server blockedDMs)
+  private blockedNames = new Set<string>();
+
+  // Context menu state
+  private ctxMenu: {
+    bg: Phaser.GameObjects.NineSlice;
+    menuTexts: Phaser.GameObjects.Text[];
+    menuZones: Phaser.GameObjects.Zone[];
+  } | null = null;
+  private ctxDismissListener: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
   // Layout cache
   private panelX = 0;
@@ -48,8 +62,7 @@ export class ChatUI {
 
     // Pre-create text objects for visible lines
     for (let i = 0; i < VISIBLE_LINES; i++) {
-      const t = scene.add
-        .text(0, 0, "", {
+      const t = addText(scene, 0, 0, "", {
           fontFamily: "'Press Start 2P', monospace",
           fontSize: "7px",
           color: "#cccccc",
@@ -63,8 +76,7 @@ export class ChatUI {
     }
 
     // Channel indicator (shown when typing)
-    this.channelLabel = scene.add
-      .text(0, 0, "", {
+    this.channelLabel = addText(scene, 0, 0, "", {
         fontFamily: "'Press Start 2P', monospace",
         fontSize: "7px",
         color: "#ffcc44",
@@ -114,6 +126,20 @@ export class ChatUI {
       // Re-focus if still in typing mode (handles fullscreen focus quirks)
       if (this._isTyping) {
         setTimeout(() => this.inputEl.focus(), 0);
+      }
+    });
+
+    // Right-click on chat lines to open context menu
+    scene.input.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
+      if (!pointer.rightButtonDown()) return;
+      for (let i = 0; i < VISIBLE_LINES; i++) {
+        const t = this.lineTexts[i];
+        if (!t.visible || !this.linePlayerNames[i]) continue;
+        const bounds = t.getBounds();
+        if (bounds.contains(pointer.x, pointer.y)) {
+          this.showContextMenu(this.linePlayerNames[i], pointer.x, pointer.y);
+          return;
+        }
       }
     });
 
@@ -179,38 +205,71 @@ export class ChatUI {
     this.inputEl.style.fontSize = `${Math.max(8, Math.round(FONT_SIZE_REF * getUIScale()))}px`;
   }
 
-  /** Character-level word wrap callback – fills each line fully before breaking. */
+  /** Hybrid word wrap: breaks at word boundaries, falls back to character-level for long words. */
   private charWrap(text: string, textObject: Phaser.GameObjects.Text): string {
     const ctx = textObject.context;
     const wrapWidth = (textObject.style.wordWrapWidth as number) || 200;
-    let result = "";
-    let lineWidth = 0;
+    const lines: string[] = [];
 
-    for (let i = 0; i < text.length; i++) {
-      const char = text[i];
-      if (char === "\n") {
-        result += "\n";
-        lineWidth = 0;
-        continue;
+    for (const paragraph of text.split("\n")) {
+      const words = paragraph.split(" ");
+      let line = "";
+      let lineWidth = 0;
+
+      for (let w = 0; w < words.length; w++) {
+        const word = words[w];
+        const wordWidth = ctx.measureText(word).width;
+        const spaceWidth = line.length > 0 ? ctx.measureText(" ").width : 0;
+
+        if (lineWidth + spaceWidth + wordWidth <= wrapWidth || lineWidth === 0 && wordWidth <= wrapWidth) {
+          // Word fits on current line
+          if (line.length > 0) {
+            line += " ";
+            lineWidth += spaceWidth;
+          }
+          line += word;
+          lineWidth += wordWidth;
+        } else if (wordWidth > wrapWidth) {
+          // Word is too long for any line – character-break it
+          for (let i = 0; i < word.length; i++) {
+            const ch = word[i];
+            const cw = ctx.measureText(ch).width;
+            if (lineWidth + (line.length > 0 && i === 0 ? spaceWidth : 0) + cw > wrapWidth && lineWidth > 0) {
+              lines.push(line);
+              line = "";
+              lineWidth = 0;
+            }
+            if (i === 0 && line.length > 0) {
+              line += " ";
+              lineWidth += spaceWidth;
+            }
+            line += ch;
+            lineWidth += cw;
+          }
+        } else {
+          // Word doesn't fit – start a new line
+          lines.push(line);
+          line = word;
+          lineWidth = wordWidth;
+        }
       }
-      const cw = ctx.measureText(char).width;
-      if (lineWidth + cw > wrapWidth && lineWidth > 0) {
-        result += "\n";
-        lineWidth = 0;
-      }
-      result += char;
-      lineWidth += cw;
+      lines.push(line);
     }
-    return result;
+
+    return lines.join("\n");
   }
 
   private drawLog(): void {
+    this.hideContextMenu();
     this.bg.setPosition(this.panelX, this.panelY);
     this.bg.setSize(this.panelW, this.panelH);
 
     const S = getUIScale();
     const pad = Math.round(PANEL_PADDING * S);
     const gap = Math.round(2 * S);
+
+    // Reset player name tracking
+    this.linePlayerNames = new Array(VISIBLE_LINES).fill("");
 
     // Hide all text objects first
     for (const t of this.lineTexts) {
@@ -229,9 +288,13 @@ export class ChatUI {
     while (slot >= 0 && msgIdx >= 0) {
       const m = this.messages[msgIdx];
       const t = this.lineTexts[slot];
-      const prefix = m.channel === "global" ? "[G]" : "[L]";
-      t.setText(`${prefix} ${m.playerName}: ${m.text}`);
-      t.setColor(m.channel === "global" ? "#ffcc44" : "#44ccff");
+      if (m.playerName) {
+        t.setText(`${m.playerName}: ${m.text}`);
+        t.setColor(m.channel === "global" ? "#ffcc44" : m.channel === "dm" ? "#cc66ff" : "#44ccff");
+      } else {
+        t.setText(m.text);
+        t.setColor("#cccccc");
+      }
 
       const h = t.height;
       const top = curBottom - h;
@@ -245,6 +308,7 @@ export class ChatUI {
 
       t.setPosition(this.panelX + pad, top);
       t.setVisible(true);
+      this.linePlayerNames[slot] = m.playerName;
       curBottom = top - gap;
       slot--;
       msgIdx--;
@@ -264,6 +328,7 @@ export class ChatUI {
   }
 
   openInput(): void {
+    this.hideContextMenu();
     if (this._isTyping) return;
     this._isTyping = true;
     this.updateChannelLabel();
@@ -285,6 +350,7 @@ export class ChatUI {
   }
 
   openInputWithText(text: string): void {
+    this.hideContextMenu();
     if (this._isTyping) return;
     this._isTyping = true;
     this.updateChannelLabel();
@@ -340,11 +406,156 @@ export class ChatUI {
   }
 
   relayout(): void {
+    this.hideContextMenu();
     this.computeLayout();
     this.drawLog();
   }
 
+  // ---- Context menu ----
+
+  private showContextMenu(playerName: string, screenX: number, screenY: number): void {
+    this.hideContextMenu();
+    if (!isAuthenticated()) return;
+
+    const S = getUIScale();
+    const menuW = Math.round(100 * S);
+    const itemH = Math.round(16 * S);
+    const pad = Math.round(6 * S);
+    const fontSize = `${Math.round(6 * S)}px`;
+
+    const menuItems: { label: string; action: () => void }[] = [];
+
+    // Check if this is our own name
+    const room = this.network.getRoom();
+    const localPlayer = room?.state.players.get(this.network.getSessionId()) as any;
+    const isOwnName = localPlayer && localPlayer.name === playerName;
+
+    // DM (skip for own name)
+    if (!isOwnName) {
+      menuItems.push({
+        label: "DM",
+        action: () => this.openInputWithText(`/dm ${playerName} `),
+      });
+    }
+
+    // Block / Unblock (skip for own name)
+    if (!isOwnName) {
+      const isBlocked = this.blockedNames.has(playerName);
+      menuItems.push({
+        label: isBlocked ? "Unblock" : "Block",
+        action: () => {
+          if (isBlocked) {
+            this.blockedNames.delete(playerName);
+            this.network.sendChatMessage(`/unblock ${playerName}`, "global");
+          } else {
+            this.blockedNames.add(playerName);
+            this.network.sendChatMessage(`/block ${playerName}`, "global");
+          }
+        },
+      });
+    }
+
+    // Add Friend / Remove Friend (skip for own name)
+    if (!isOwnName) {
+      if (isFriendByCharacterName(playerName)) {
+        menuItems.push({
+          label: "Remove Friend",
+          action: () => {
+            const accountId = getFriendAccountIdByCharacterName(playerName);
+            if (accountId) removeFriend(accountId);
+          },
+        });
+      } else {
+        menuItems.push({
+          label: "Add Friend",
+          action: () => addFriend(playerName),
+        });
+      }
+    }
+
+    if (menuItems.length === 0) return;
+
+    const gaps = Math.max(0, menuItems.length - 1) * Math.round(4 * S);
+    const menuH = pad * 2 + itemH * menuItems.length + gaps;
+
+    const C = UI_PANEL_CORNER;
+    const bg = this.scene.add
+      .nineslice(screenX, screenY, "ui-panel-dark", undefined, menuW, menuH, C, C, C, C)
+      .setOrigin(0, 0)
+      .setScrollFactor(0)
+      .setDepth(310);
+
+    // Clamp to screen
+    const screenW = getScreenWidth();
+    const screenH = getScreenHeight();
+    if (screenX + menuW > screenW - 4) bg.setX(screenW - 4 - menuW);
+    if (screenY + menuH > screenH - 4) bg.setY(screenH - 4 - menuH);
+    const mx = bg.x;
+    const my = bg.y;
+
+    const menuTexts: Phaser.GameObjects.Text[] = [];
+    const menuZones: Phaser.GameObjects.Zone[] = [];
+
+    for (let i = 0; i < menuItems.length; i++) {
+      const item = menuItems[i];
+      const itemY = my + pad + i * (itemH + Math.round(4 * S));
+
+      const text = addText(this.scene, mx + pad, itemY, item.label, {
+          fontSize,
+          color: "#cccccc",
+          fontFamily: "'Press Start 2P', monospace",
+          stroke: "#000000",
+          strokeThickness: 2,
+        })
+        .setScrollFactor(0)
+        .setDepth(311);
+
+      const zone = this.scene.add
+        .zone(mx + menuW / 2, itemY + itemH / 2, menuW, itemH)
+        .setScrollFactor(0)
+        .setDepth(312)
+        .setInteractive({ useHandCursor: true });
+      zone.on("pointerover", () => text.setColor("#44ffaa"));
+      zone.on("pointerout", () => text.setColor("#cccccc"));
+      zone.on("pointerdown", () => {
+        item.action();
+        this.hideContextMenu();
+      });
+
+      menuTexts.push(text);
+      menuZones.push(zone);
+    }
+
+    this.ctxMenu = { bg, menuTexts, menuZones };
+
+    // Dismiss on any left-click outside
+    this.scene.time.delayedCall(0, () => {
+      if (this.ctxDismissListener) {
+        this.scene.input.off("pointerdown", this.ctxDismissListener);
+      }
+      this.ctxDismissListener = (pointer: Phaser.Input.Pointer) => {
+        if (!pointer.rightButtonDown()) {
+          this.hideContextMenu();
+        }
+      };
+      this.scene.input.on("pointerdown", this.ctxDismissListener);
+    });
+  }
+
+  private hideContextMenu(): void {
+    if (this.ctxDismissListener) {
+      this.scene.input.off("pointerdown", this.ctxDismissListener);
+      this.ctxDismissListener = null;
+    }
+    if (!this.ctxMenu) return;
+    this.ctxMenu.bg.destroy();
+    for (const t of this.ctxMenu.menuTexts) t.destroy();
+    for (const z of this.ctxMenu.menuZones) z.destroy();
+    this.ctxMenu = null;
+  }
+
   destroy(): void {
+    this.hideContextMenu();
     this.bg.destroy();
     for (const t of this.lineTexts) t.destroy();
     this.channelLabel.destroy();

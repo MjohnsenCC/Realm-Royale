@@ -116,6 +116,28 @@ export async function saveAccountVault(
 }
 
 /**
+ * Find an account by account_name (case-insensitive). Returns id + account_name, or null.
+ */
+export async function findAccountByName(
+  name: string,
+): Promise<{ id: string; accountName: string } | null> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("accounts")
+    .select("id, account_name")
+    .ilike("account_name", name)
+    .limit(1)
+    .single();
+
+  if (error || !data) {
+    return null;
+  }
+
+  return { id: data.id as string, accountName: (data.account_name as string) ?? "" };
+}
+
+/**
  * Mark an account as online with character and server info.
  */
 export async function setAccountOnline(

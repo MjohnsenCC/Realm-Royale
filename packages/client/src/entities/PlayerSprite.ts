@@ -1,7 +1,8 @@
 import Phaser from "phaser";
-import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS } from "@rotmg-lite/shared";
+import { PLAYER_RADIUS, PLAYER_MAX_HP, CHAT_BUBBLE_DURATION_MS, CLASS_NAMES } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
-import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
+import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE, hasWalkTileset, WalkDirection } from "../ui/EntityTextures";
+import { addText } from "../ui/TextFactory";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -12,9 +13,12 @@ interface DamageText {
 const DAMAGE_TEXT_DURATION = 800;
 const DAMAGE_TEXT_FLOAT = 30;
 
+/** Direction names matching WalkDirection enum order. */
+const DIRECTION_NAMES = ["right", "down", "up", "left"] as const;
+
 export class PlayerSprite {
   private scene: Phaser.Scene;
-  private bodyImage: Phaser.GameObjects.Image;
+  private bodyImage: Phaser.GameObjects.Image | Phaser.GameObjects.Sprite;
   private nameText: Phaser.GameObjects.Text;
   private hpBarBorder: Phaser.GameObjects.Image;
   private hpBarBg: Phaser.GameObjects.Image;
@@ -33,6 +37,15 @@ export class PlayerSprite {
   private currentTextureKey: string;
   private damageTexts: DamageText[] = [];
   private chatBubble: { text: Phaser.GameObjects.Text; elapsed: number } | null = null;
+  private hasWalkAnim: boolean = false;
+  private className: string = "";
+  private lastDirection: WalkDirection = WalkDirection.Down;
+  private wasMoving: boolean = false;
+  private prevX: number = 0;
+  private prevY: number = 0;
+  private inputMX: number = 0;
+  private inputMY: number = 0;
+  private stopFrameCount: number = 0;
 
   // True predicted/reconciled position (used by prediction, reconciliation, aim)
   public x: number = 0;
@@ -73,14 +86,26 @@ export class PlayerSprite {
     this.snapshots = new SnapshotBuffer();
     this.snapshots.push(x, y);
 
-    // Body — use loaded 12×12 class sprite (scaled with PIXEL_SCALE for uniform pixel size)
+    // Body — use walk animation sprite if tileset exists, otherwise static image
     this.normalTextureKey = getPlayerSpriteKey(characterClass);
     this.currentTextureKey = this.normalTextureKey;
-    this.bodyImage = scene.add.image(x, y, this.normalTextureKey);
-    this.bodyImage.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+    this.hasWalkAnim = hasWalkTileset(characterClass);
+    this.className = CLASS_NAMES[characterClass]?.toLowerCase() ?? "";
+    this.prevX = x;
+    this.prevY = y;
+
+    if (this.hasWalkAnim) {
+      const sprite = scene.add.sprite(x, y, this.normalTextureKey);
+      sprite.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+      sprite.play(`idle-${this.className}-down`);
+      this.bodyImage = sprite;
+    } else {
+      this.bodyImage = scene.add.image(x, y, this.normalTextureKey);
+      this.bodyImage.setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
+    }
 
     // Name label (hidden for local player)
-    this.nameText = scene.add.text(x, y - PLAYER_RADIUS - 20, name, {
+    this.nameText = addText(scene, x, y - PLAYER_RADIUS - 20, name, {
       fontFamily: "'Press Start 2P', monospace",
       fontSize: "7px",
       color: isLocal ? "#88aaff" : "#66cc66",
@@ -131,7 +156,7 @@ export class PlayerSprite {
     }
     const dx = this._isLocal ? this.displayX : this.x;
     const dy = this._isLocal ? this.displayY : this.y;
-    const text = this.scene.add.text(dx, dy - PLAYER_RADIUS - 38, msg, {
+    const text = addText(this.scene, dx, dy - PLAYER_RADIUS - 38, msg, {
       fontFamily: "'Press Start 2P', monospace",
       fontSize: "8px",
       color: "#ffffff",
@@ -150,7 +175,7 @@ export class PlayerSprite {
     const dy = this._isLocal ? this.displayY : this.y;
     const startY = -PLAYER_RADIUS - 30;
     const color = isMagic ? "#4488ff" : "#ff4444";
-    const text = this.scene.add.text(dx, dy + startY, `-${Math.round(amount)}`, {
+    const text = addText(this.scene, dx, dy + startY, `-${Math.round(amount)}`, {
       fontFamily: "'Press Start 2P', monospace",
       fontSize: "12px",
       fontStyle: "bold",
@@ -161,6 +186,11 @@ export class PlayerSprite {
     text.setOrigin(0.5, 1);
     text.setDepth(1000);
     this.damageTexts.push({ text, elapsed: 0, startY });
+  }
+
+  setInputDirection(mx: number, my: number): void {
+    this.inputMX = mx;
+    this.inputMY = my;
   }
 
   setLocalAimAngle(_angle: number): void {
@@ -215,6 +245,58 @@ export class PlayerSprite {
     // Use display position (with correction offset) for all visuals
     const dx = this._isLocal ? this.displayX : this.x;
     const dy = this._isLocal ? this.displayY : this.y;
+
+    // Walk animation
+    if (this.hasWalkAnim && this.bodyImage instanceof Phaser.GameObjects.Sprite) {
+      if (this._isLocal) {
+        // Local player: use keyboard input for direction (immune to reconciliation jitter)
+        const isMoving = this.inputMX !== 0 || this.inputMY !== 0;
+        if (isMoving) {
+          if (Math.abs(this.inputMX) >= Math.abs(this.inputMY)) {
+            this.lastDirection = this.inputMX > 0 ? WalkDirection.Right : WalkDirection.Left;
+          } else {
+            this.lastDirection = this.inputMY > 0 ? WalkDirection.Down : WalkDirection.Up;
+          }
+          const animKey = `walk-${this.className}-${DIRECTION_NAMES[this.lastDirection]}`;
+          if (this.bodyImage.anims.currentAnim?.key !== animKey) {
+            this.bodyImage.play(animKey);
+          }
+          this.wasMoving = true;
+        } else if (this.wasMoving) {
+          const idleKey = `idle-${this.className}-${DIRECTION_NAMES[this.lastDirection]}`;
+          this.bodyImage.play(idleKey);
+          this.wasMoving = false;
+        }
+      } else {
+        // Remote player: use position delta with higher threshold + stop delay
+        const moveX = this.x - this.prevX;
+        const moveY = this.y - this.prevY;
+        const isMoving = Math.abs(moveX) > 0.5 || Math.abs(moveY) > 0.5;
+
+        if (isMoving) {
+          this.stopFrameCount = 0;
+          if (Math.abs(moveX) >= Math.abs(moveY)) {
+            this.lastDirection = moveX > 0 ? WalkDirection.Right : WalkDirection.Left;
+          } else {
+            this.lastDirection = moveY > 0 ? WalkDirection.Down : WalkDirection.Up;
+          }
+          const animKey = `walk-${this.className}-${DIRECTION_NAMES[this.lastDirection]}`;
+          if (this.bodyImage.anims.currentAnim?.key !== animKey) {
+            this.bodyImage.play(animKey);
+          }
+          this.wasMoving = true;
+        } else {
+          this.stopFrameCount++;
+          if (this.wasMoving && this.stopFrameCount >= 3) {
+            const idleKey = `idle-${this.className}-${DIRECTION_NAMES[this.lastDirection]}`;
+            this.bodyImage.play(idleKey);
+            this.wasMoving = false;
+          }
+        }
+        this.prevX = this.x;
+        this.prevY = this.y;
+      }
+    }
 
     this.bodyImage.setPosition(dx, dy);
     this.nameText.setPosition(dx, dy - PLAYER_RADIUS - 20);

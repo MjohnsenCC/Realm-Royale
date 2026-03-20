@@ -15,6 +15,7 @@ import { getUIScale } from "./UIScale";
 import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { UI_PANEL_CORNER } from "./UITextures";
+import { addText } from "./TextFactory";
 import type { DragManager } from "./DragManager";
 
 const BASE_SLOT_GAP = 4;
@@ -119,8 +120,8 @@ export class LootBagUI {
       .setOrigin(0, 0);
     this.container.add(this.panelBg);
 
-    this.headerText = scene.add
-      .text(0, 0, "Loot Bag", {
+    this.headerText = addText(scene,
+      0, 0, "Loot Bag", {
         fontSize: headerFontSize,
         color: "#44aa44",
         fontFamily: "'Press Start 2P', monospace",
@@ -188,8 +189,8 @@ export class LootBagUI {
 
       this.slotZones.push(zone);
 
-      const text = scene.add
-        .text(0, 0, "", {
+      const text = addText(scene,
+        0, 0, "", {
           fontSize: slotFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -203,8 +204,8 @@ export class LootBagUI {
         .setWordWrapWidth(this.slotSize - 4);
       this.itemTexts.push(text);
 
-      const tierText = scene.add
-        .text(0, 0, "", {
+      const tierText = addText(scene,
+        0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -216,8 +217,8 @@ export class LootBagUI {
         .setDepth(102);
       this.tierTexts.push(tierText);
 
-      const qtyText = scene.add
-        .text(0, 0, "", {
+      const qtyText = addText(scene,
+        0, 0, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",

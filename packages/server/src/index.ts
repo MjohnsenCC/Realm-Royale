@@ -119,6 +119,11 @@ app.post("/api/characters", authMiddleware, async (req: AuthRequest, res) => {
       return;
     }
 
+    if (/\s/.test(name.trim())) {
+      res.status(400).json({ error: "Name cannot contain spaces" });
+      return;
+    }
+
     const validClasses: number[] = [CharacterClass.Archer, CharacterClass.Warrior, CharacterClass.Arcanist];
     const cls = typeof characterClass === "number" && validClasses.includes(characterClass)
       ? (characterClass as CharacterClass)

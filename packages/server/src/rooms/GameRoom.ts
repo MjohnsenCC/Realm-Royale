@@ -115,7 +115,7 @@ import {
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
-import { getAccountVault, saveAccountVault, getAccountName, setAccountOnline, setAccountOffline } from "../db/accounts";
+import { getAccountVault, saveAccountVault, getAccountName, findAccountByName, setAccountOnline, setAccountOffline } from "../db/accounts";
 import { getAccountFriends, removeAccountFriend, getExistingRelationship, createFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, getPendingRequests } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
@@ -176,6 +176,12 @@ export class GameRoom extends Room<GameState> {
   private tickCount = 0;
   private filterFlip = false;
   private accountToSession = new Map<string, string>();
+  /** Cached friend account IDs per player – avoids DB hit on zone/status notifications. */
+  private friendCache = new Map<string, string[]>();
+  /** Per-player cooldown timestamps for friend operations (rate limiting). */
+  private friendActionCooldowns = new Map<string, number>();
+  /** Per-player DM block list – accountId → Set of blocked accountIds. */
+  private blockedDMs = new Map<string, Set<string>>();
   private globalTick = 0;
   private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
 
@@ -1097,6 +1103,20 @@ export class GameRoom extends Room<GameState> {
         if (now - player.lastChatTime < CHAT_RATE_LIMIT_MS) return;
         player.lastChatTime = now;
 
+        // Intercept slash commands
+        if (text.startsWith("/dm ")) {
+          this.handleDirectMessage(client, player, text);
+          return;
+        }
+        if (text.startsWith("/block ")) {
+          this.handleBlockCommand(client, player, text);
+          return;
+        }
+        if (text.startsWith("/unblock ")) {
+          this.handleUnblockCommand(client, player, text);
+          return;
+        }
+
         const payload = {
           playerId: player.id,
           playerName: player.name,
@@ -1122,6 +1142,7 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.GetFriendsList, async (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.accountId) return;
+      if (this.isFriendActionThrottled(player.accountId)) return;
       try {
         const friendRecords = await getAccountFriends(player.accountId);
         const friends = friendRecords.map((fr) => ({
@@ -1149,6 +1170,7 @@ export class GameRoom extends Room<GameState> {
         if (!player || !player.accountId) return;
         const name = typeof data.name === "string" ? data.name.trim() : "";
         if (name.length === 0) return;
+        if (this.isFriendActionThrottled(player.accountId)) return;
 
         // Find the target player in the room by character name or account name
         let targetAccountId = "";
@@ -1160,6 +1182,15 @@ export class GameRoom extends Room<GameState> {
           }
         });
 
+        // Fallback: look up by account name in DB (supports cross-room friend requests)
+        if (!targetAccountId) {
+          const dbAccount = await findAccountByName(name);
+          if (dbAccount) {
+            targetAccountId = dbAccount.id;
+            targetAccountName = dbAccount.accountName;
+          }
+        }
+
         if (!targetAccountId || targetAccountId === player.accountId) return;
 
         try {
@@ -1169,6 +1200,8 @@ export class GameRoom extends Room<GameState> {
           // If target already sent us a request, auto-accept (mutual request)
           if (relationship === "pending_incoming") {
             await acceptFriendRequest(targetAccountId, player.accountId);
+            this.invalidateFriendCache(player.accountId);
+            this.invalidateFriendCache(targetAccountId);
             client.send(ServerMessage.FriendAdded, { accountId: targetAccountId, accountName: targetAccountName });
             // Notify the original requester if online
             const targetSessionId = this.accountToSession.get(targetAccountId);
@@ -1211,6 +1244,8 @@ export class GameRoom extends Room<GameState> {
 
         try {
           await acceptFriendRequest(requesterAccountId, player.accountId);
+          this.invalidateFriendCache(player.accountId);
+          this.invalidateFriendCache(requesterAccountId);
 
           // Find requester's account name (check local players first, then DB)
           let requesterAccountName = "";
@@ -1299,6 +1334,7 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.GetFriendRequests, async (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.accountId) return;
+      if (this.isFriendActionThrottled(player.accountId)) return;
       try {
         const requests = await getPendingRequests(player.accountId);
         client.send(ServerMessage.FriendRequestsList, requests);
@@ -1318,6 +1354,8 @@ export class GameRoom extends Room<GameState> {
         if (friendAccountId.length === 0) return;
         try {
           await removeAccountFriend(player.accountId, friendAccountId);
+          this.invalidateFriendCache(player.accountId);
+          this.invalidateFriendCache(friendAccountId);
           client.send(ServerMessage.FriendRemoved, { accountId: friendAccountId });
 
           // Notify the other party if online
@@ -1418,6 +1456,9 @@ export class GameRoom extends Room<GameState> {
         character.level
       ).catch((err) => console.error("Failed to set account online:", err));
 
+      // Pre-populate friend cache so zone/status notifications skip DB
+      this.populateFriendCache(payload.accountId);
+
       // Notify friends in this room that this player came online
       this.notifyFriendsOfStatusChange(payload.accountId, true, {
         name: character.name,
@@ -1491,6 +1532,9 @@ export class GameRoom extends Room<GameState> {
     if (player?.accountId) {
       this.notifyFriendsOfStatusChange(player.accountId, false);
       this.accountToSession.delete(player.accountId);
+      this.friendCache.delete(player.accountId);
+      this.friendActionCooldowns.delete(player.accountId);
+      this.blockedDMs.delete(player.accountId);
       setAccountOffline(player.accountId).catch((err) =>
         console.error("Failed to set account offline:", err)
       );
@@ -1546,15 +1590,160 @@ export class GameRoom extends Room<GameState> {
   /**
    * Notify friends in this room when a player comes online or goes offline.
    */
+  /** Populate the friend cache for an account from DB (called once on join). */
+  private async populateFriendCache(accountId: string): Promise<void> {
+    try {
+      const friendRecords = await getAccountFriends(accountId);
+      this.friendCache.set(accountId, friendRecords.map((f) => f.accountId));
+    } catch (err) {
+      console.error("Failed to populate friend cache:", err);
+    }
+  }
+
+  /** Get cached friend IDs, falling back to DB if not cached yet. */
+  private async getFriendIds(accountId: string): Promise<string[]> {
+    const cached = this.friendCache.get(accountId);
+    if (cached) return cached;
+    // Fallback: populate cache from DB
+    await this.populateFriendCache(accountId);
+    return this.friendCache.get(accountId) ?? [];
+  }
+
+  /** Invalidate the friend cache for an account (call after add/remove/accept). */
+  private invalidateFriendCache(accountId: string): void {
+    this.friendCache.delete(accountId);
+  }
+
+  /** Rate-limit check: returns true if the action should be rejected. */
+  private isFriendActionThrottled(accountId: string): boolean {
+    const now = Date.now();
+    const last = this.friendActionCooldowns.get(accountId) ?? 0;
+    if (now - last < 1000) return true;
+    this.friendActionCooldowns.set(accountId, now);
+    return false;
+  }
+
+  private handleDirectMessage(client: Client, sender: { id: string; name: string; accountId: string }, text: string): void {
+    const rest = text.substring(4); // strip "/dm "
+    const spaceIdx = rest.indexOf(" ");
+    if (spaceIdx === -1 || rest.substring(spaceIdx + 1).trim().length === 0) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: "Usage: /dm [name] [message]", channel: "dm",
+      });
+      return;
+    }
+
+    const targetName = rest.substring(0, spaceIdx);
+    const messageBody = rest.substring(spaceIdx + 1).trim();
+
+    // Find target player in room
+    let targetPlayer: { id: string; name: string; accountId: string } | null = null;
+    this.state.players.forEach((p) => {
+      if (p.name.toLowerCase() === targetName.toLowerCase()) {
+        targetPlayer = p;
+      }
+    });
+
+    if (!targetPlayer) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: `Player "${targetName}" not found.`, channel: "dm",
+      });
+      return;
+    }
+
+    if (targetPlayer.id === sender.id) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: "You cannot DM yourself.", channel: "dm",
+      });
+      return;
+    }
+
+    // Check if sender is blocked by target
+    const targetBlocks = this.blockedDMs.get(targetPlayer.accountId);
+    if (targetBlocks?.has(sender.accountId)) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: "Cannot send DM: you are blocked.", channel: "dm",
+      });
+      return;
+    }
+
+    // Send to recipient
+    const targetClient = this.clients.getById(targetPlayer.id);
+    if (targetClient) {
+      targetClient.send(ServerMessage.ChatMessage, {
+        playerId: sender.id,
+        playerName: sender.name,
+        text: messageBody,
+        channel: "dm",
+      });
+    }
+
+    // Echo to sender
+    client.send(ServerMessage.ChatMessage, {
+      playerId: sender.id,
+      playerName: `To ${targetPlayer.name}`,
+      text: messageBody,
+      channel: "dm",
+    });
+  }
+
+  private handleBlockCommand(client: Client, player: { id: string; name: string; accountId: string }, text: string): void {
+    const targetName = text.substring(7).trim();
+    if (!targetName || !player.accountId) return;
+
+    let targetAccountId = "";
+    this.state.players.forEach((p) => {
+      if (p.name.toLowerCase() === targetName.toLowerCase() && p.accountId) {
+        targetAccountId = p.accountId;
+      }
+    });
+
+    if (!targetAccountId) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: `Player "${targetName}" not found.`, channel: "dm",
+      });
+      return;
+    }
+
+    if (!this.blockedDMs.has(player.accountId)) {
+      this.blockedDMs.set(player.accountId, new Set());
+    }
+    this.blockedDMs.get(player.accountId)!.add(targetAccountId);
+
+    client.send(ServerMessage.ChatMessage, {
+      playerName: "", text: `Blocked DMs from ${targetName}.`, channel: "dm",
+    });
+  }
+
+  private handleUnblockCommand(client: Client, player: { id: string; name: string; accountId: string }, text: string): void {
+    const targetName = text.substring(9).trim();
+    if (!targetName || !player.accountId) return;
+
+    let targetAccountId = "";
+    this.state.players.forEach((p) => {
+      if (p.name.toLowerCase() === targetName.toLowerCase() && p.accountId) {
+        targetAccountId = p.accountId;
+      }
+    });
+
+    if (targetAccountId) {
+      this.blockedDMs.get(player.accountId)?.delete(targetAccountId);
+    }
+
+    client.send(ServerMessage.ChatMessage, {
+      playerName: "", text: `Unblocked DMs from ${targetName}.`, channel: "dm",
+    });
+  }
+
   private async notifyFriendsOfStatusChange(
     accountId: string,
     online: boolean,
     playerData?: { name: string; characterClass: number; level: number; zone?: string },
   ): Promise<void> {
     try {
-      const friendRecords = await getAccountFriends(accountId);
-      for (const friend of friendRecords) {
-        const friendSessionId = this.accountToSession.get(friend.accountId);
+      const friendIds = await this.getFriendIds(accountId);
+      for (const friendAccountId of friendIds) {
+        const friendSessionId = this.accountToSession.get(friendAccountId);
         if (!friendSessionId) continue;
         const friendClient = this.clients.getById(friendSessionId);
         if (!friendClient) continue;
@@ -1578,9 +1767,9 @@ export class GameRoom extends Room<GameState> {
    */
   private async notifyFriendsOfZoneChange(accountId: string, zone: string): Promise<void> {
     try {
-      const friendRecords = await getAccountFriends(accountId);
-      for (const friend of friendRecords) {
-        const friendSessionId = this.accountToSession.get(friend.accountId);
+      const friendIds = await this.getFriendIds(accountId);
+      for (const friendAccountId of friendIds) {
+        const friendSessionId = this.accountToSession.get(friendAccountId);
         if (!friendSessionId) continue;
         const friendClient = this.clients.getById(friendSessionId);
         if (!friendClient) continue;

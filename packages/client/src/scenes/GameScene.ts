@@ -10,7 +10,7 @@ import { CraftingUI } from "../ui/CraftingUI";
 import { StatsPanel } from "../ui/StatsPanel";
 import { SocialPanel, NearbyPlayerInfo } from "../ui/SocialPanel";
 import { PlayerTooltip } from "../ui/PlayerTooltip";
-import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, initRequestsFromServer, onFriendRequestReceived, onFriendRequestDeclined, onFriendRequestCancelled, getIncomingRequests, getOutgoingRequests, hasPendingRequestToByName, hasPendingRequestFromByName, acceptRequest, declineRequest, cancelRequest, updateFriendStatus, type FriendEntry, type FriendRequestEntry } from "../ui/FriendStore";
+import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, initRequestsFromServer, onFriendRequestReceived, onFriendRequestDeclined, onFriendRequestCancelled, getIncomingRequests, getOutgoingRequests, hasPendingRequestToByName, hasPendingRequestFromByName, acceptRequest, declineRequest, cancelRequest, updateFriendStatus, isRecentlyRefreshed, type FriendEntry, type FriendRequestEntry } from "../ui/FriendStore";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
@@ -18,6 +18,7 @@ import { OptionsUI } from "../ui/OptionsUI";
 import { generateEntityTextures, addOutlineToImageData, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
 import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
+import { addText } from "../ui/TextFactory";
 import {
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
@@ -600,6 +601,9 @@ export class GameScene extends Phaser.Scene {
         this.socialPanel.hide();
         this.chatUI.openInputWithText(`/dm ${name} `);
       },
+      (name: string, block: boolean) => {
+        this.network.sendChatMessage(`/${block ? "block" : "unblock"} ${name}`, "global");
+      },
       (nameOrAccount: string) => {
         if (!isFriendsAuthenticated()) return;
         const visiblePlayers = this.gatherSocialData();
@@ -676,9 +680,11 @@ export class GameScene extends Phaser.Scene {
     // Listen for chat messages
     room.onMessage(ServerMessage.ChatMessage, (data: { playerId: string; playerName: string; text: string; channel: ChatChannel }) => {
       this.chatUI.addMessage(data);
-      const sprite = this.playerSprites.get(data.playerId);
-      if (sprite) {
-        sprite.showChatMessage(data.text);
+      if (data.channel !== "dm") {
+        const sprite = this.playerSprites.get(data.playerId);
+        if (sprite) {
+          sprite.showChatMessage(data.text);
+        }
       }
     });
 
@@ -1952,6 +1958,7 @@ export class GameScene extends Phaser.Scene {
       const config = REALM_TIER_CONFIG[tier];
       return {
         x: p.x, y: p.y,
+        tier,
         label: config?.name ?? `Realm ${tier}`,
         levelReq: config?.requiredLevel ?? 1,
         color: config?.color ?? "#aa66ff",
@@ -1965,22 +1972,25 @@ export class GameScene extends Phaser.Scene {
 
       // Realm name label (offset from top of 16x16 sprite: 16*5/2 + 2 = 42px half-height)
       const spriteHalfH = 42;
-      const lbl = this.add.text(p.x, p.y - spriteHalfH - 12, p.label, {
-        fontSize: "9px",
+      const isDevineHell = p.tier === 3;
+      const nameFontSize = isDevineHell ? 18 : 14;
+      const lvlFontSize = isDevineHell ? 12 : 10;
+      const lbl = addText(this, p.x, p.y - spriteHalfH - 22, p.label, {
+        fontSize: `${nameFontSize}px`,
         color: p.color,
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
-        strokeThickness: 1,
+        strokeThickness: 2,
       }).setOrigin(0.5).setDepth(-0.2);
       this.realmPortalLabels.push(lbl);
 
       // Level requirement label
-      const lvlLbl = this.add.text(p.x, p.y - spriteHalfH - 1, `Lvl ${p.levelReq}+`, {
-        fontSize: "7px",
-        color: "#aaaaaa",
+      const lvlLbl = addText(this, p.x, p.y - spriteHalfH - 3, `Lvl ${p.levelReq}+`, {
+        fontSize: `${lvlFontSize}px`,
+        color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
-        strokeThickness: 1,
+        strokeThickness: 2,
       }).setOrigin(0.5).setDepth(-0.2);
       this.realmPortalLabels.push(lvlLbl);
     }
@@ -1992,7 +2002,7 @@ export class GameScene extends Phaser.Scene {
     const vaultPortalImg = this.add.image(vpx, vpy, "portal-vault").setDepth(-0.3);
     this.realmPortalImages.push(vaultPortalImg);
 
-    const vaultLbl = this.add.text(vpx, vpy - 31 - 6, "Vault", {
+    const vaultLbl = addText(this, vpx, vpy - 31 - 6, "Vault", {
       fontSize: "9px",
       color: "#ddaa55",
       fontFamily: "'Press Start 2P', monospace",
@@ -2718,6 +2728,7 @@ export class GameScene extends Phaser.Scene {
     // Client-side prediction — runs EVERY FRAME for smooth visuals
     if (localSprite) {
       this.accumulatedDt += delta;
+      localSprite.setInputDirection(mx, my);
 
       if (mx !== 0 || my !== 0) {
         // Terrain speed modifiers in hostile zone
@@ -3527,9 +3538,11 @@ export class GameScene extends Phaser.Scene {
         this.closeLeftPanels("social");
         this.socialPanel.setSide("left");
       }
-      // Refresh friends data from server to catch cross-server status changes
-      this.network.sendGetFriendsList();
-      this.network.sendGetFriendRequests();
+      // Refresh friends data from server to catch cross-server status changes (skip if recent)
+      if (!isRecentlyRefreshed()) {
+        this.network.sendGetFriendsList();
+        this.network.sendGetFriendRequests();
+      }
       { const d = this.gatherSocialData(); this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests); }
       this.socialPanel.show();
     }

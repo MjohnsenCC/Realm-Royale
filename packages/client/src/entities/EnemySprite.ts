@@ -2,6 +2,7 @@ import Phaser from "phaser";
 import { ENEMY_DEFS } from "@rotmg-lite/shared";
 import { SnapshotBuffer } from "./SnapshotBuffer";
 import { getEnemySpriteKey, getEnemyDisplaySize } from "../ui/EntityTextures";
+import { addText } from "../ui/TextFactory";
 
 interface DamageText {
   text: Phaser.GameObjects.Text;
@@ -101,7 +102,7 @@ export class EnemySprite {
   showPredictedDamage(damage: number, isCrit: boolean = false): void {
     const startX = (Math.random() - 0.5) * 20;
     const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
-    const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(damage)}`, {
+    const text = addText(this.scene, this.x + startX, this.y + startY, `-${Math.round(damage)}`, {
       fontFamily: "'Press Start 2P', monospace",
       fontSize: isCrit ? "16px" : "12px",
       fontStyle: "bold",
@@ -130,7 +131,7 @@ export class EnemySprite {
         if (remainder > 1) {
           const startX = (Math.random() - 0.5) * 20;
           const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
-          const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(remainder)}`, {
+          const text = addText(this.scene, this.x + startX, this.y + startY, `-${Math.round(remainder)}`, {
             fontFamily: "'Press Start 2P', monospace",
             fontSize: "12px",
             fontStyle: "bold",
@@ -146,7 +147,7 @@ export class EnemySprite {
         // No prediction pending — show normally
         const startX = (Math.random() - 0.5) * 20;
         const startY = -this.radius - 10 + (Math.random() - 0.5) * 8;
-        const text = this.scene.add.text(this.x + startX, this.y + startY, `-${Math.round(serverDamage)}`, {
+        const text = addText(this.scene, this.x + startX, this.y + startY, `-${Math.round(serverDamage)}`, {
           fontFamily: "'Press Start 2P', monospace",
           fontSize: "12px",
           fontStyle: "bold",

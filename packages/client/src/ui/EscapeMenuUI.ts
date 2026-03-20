@@ -45,7 +45,7 @@ export class EscapeMenuUI {
       fontStyle: "bold",
       stroke: "#000000",
       strokeThickness: 2,
-    });
+    }).setResolution(2);
     this.titleText.setOrigin(0.5, 0.5).setDepth(301).setScrollFactor(0).setVisible(false);
     scene.add.existing(this.titleText);
   }
@@ -87,7 +87,7 @@ export class EscapeMenuUI {
         fontFamily: "'Press Start 2P', monospace",
         stroke: "#000000",
         strokeThickness: 2,
-      });
+      }).setResolution(2);
       text.setOrigin(0.5, 0.5).setDepth(302).setScrollFactor(0).setVisible(false);
       this.scene.add.existing(text);
       this.buttonTexts.push(text);

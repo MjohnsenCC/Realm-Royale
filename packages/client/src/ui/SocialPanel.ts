@@ -13,6 +13,7 @@ import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { isFriendByAccountName, hasPendingRequestToByName, hasPendingRequestFromByName, type FriendRequestEntry } from "./FriendStore";
 import { getPlayerSpriteKey } from "./EntityTextures";
 import { ItemTooltip } from "./ItemTooltip";
+import { addText } from "./TextFactory";
 
 export interface NearbyPlayerInfo {
   sessionId: string;
@@ -136,10 +137,14 @@ export class SocialPanel {
 
   // Callbacks
   private onDM: ((name: string) => void) | null = null;
+  private onBlock: ((name: string, block: boolean) => void) | null = null;
   private onToggleFriend: ((name: string) => void) | null = null;
   private onAcceptRequest: ((accountId: string) => void) | null = null;
   private onDeclineRequest: ((accountId: string) => void) | null = null;
   private onCancelRequest: ((accountId: string) => void) | null = null;
+
+  // Client-side tracking of blocked names
+  private blockedNames = new Set<string>();
 
   constructor(scene: Phaser.Scene) {
     this.scene = scene;
@@ -178,8 +183,8 @@ export class SocialPanel {
     const centerX = contentW / 2;
 
     // Title
-    this.titleText = scene.add
-      .text(centerX, this.pad, "SOCIAL", {
+    this.titleText = addText(scene,
+      centerX, this.pad, "SOCIAL", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily: "'Press Start 2P', monospace",
@@ -191,8 +196,8 @@ export class SocialPanel {
     this.contentContainer.add(this.titleText);
 
     // Hint
-    this.hintText = scene.add
-      .text(centerX, this.pad + Math.round(14 * S), "Press O to close", {
+    this.hintText = addText(scene,
+      centerX, this.pad + Math.round(14 * S), "Press O to close", {
         fontSize: hintFontSize,
         color: "#666666",
         fontFamily: "'Press Start 2P', monospace",
@@ -204,8 +209,8 @@ export class SocialPanel {
 
     // Tabs
     const tabBaseY = this.tabY;
-    this.nearbyTab = scene.add
-      .text(centerX - this.tabGap, tabBaseY, "NEARBY", {
+    this.nearbyTab = addText(scene,
+      centerX - this.tabGap, tabBaseY, "NEARBY", {
         fontSize: tabFontSize,
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -215,8 +220,8 @@ export class SocialPanel {
       .setOrigin(0.5, 0);
     this.contentContainer.add(this.nearbyTab);
 
-    this.friendsTab = scene.add
-      .text(centerX, tabBaseY, "FRIENDS", {
+    this.friendsTab = addText(scene,
+      centerX, tabBaseY, "FRIENDS", {
         fontSize: tabFontSize,
         color: "#888888",
         fontFamily: "'Press Start 2P', monospace",
@@ -226,8 +231,8 @@ export class SocialPanel {
       .setOrigin(0.5, 0);
     this.contentContainer.add(this.friendsTab);
 
-    this.requestsTab = scene.add
-      .text(centerX + this.tabGap, tabBaseY, "REQUESTS", {
+    this.requestsTab = addText(scene,
+      centerX + this.tabGap, tabBaseY, "REQUESTS", {
         fontSize: tabFontSize,
         color: "#888888",
         fontFamily: "'Press Start 2P', monospace",
@@ -268,7 +273,7 @@ export class SocialPanel {
       // Name text (top of row, inset by row padding)
       const rowPad = Math.round(4 * S);
       const textX = this.pad + rowPad;
-      const nameText = scene.add.text(textX, rowY + rowPad, "", {
+      const nameText = addText(scene, textX, rowY + rowPad, "", {
         fontSize: nameFontSize,
         color: "#66cc66",
         fontFamily: "'Press Start 2P', monospace",
@@ -277,7 +282,7 @@ export class SocialPanel {
       }).setOrigin(0, 0);
       this.contentContainer.add(nameText);
 
-      const levelText = scene.add.text(textX, rowY + rowPad + Math.round(10 * S), "", {
+      const levelText = addText(scene, textX, rowY + rowPad + Math.round(10 * S), "", {
         fontSize: smallFontSize,
         color: "#aaaaaa",
         fontFamily: "'Press Start 2P', monospace",
@@ -314,7 +319,7 @@ export class SocialPanel {
           .setVisible(false);
         this.contentContainer.add(img);
 
-        const tierText = scene.add.text(slotX + this.equipSize - 1, slotsRowCenterY + this.equipSize / 2 - 1, "", {
+        const tierText = addText(scene, slotX + this.equipSize - 1, slotsRowCenterY + this.equipSize / 2 - 1, "", {
           fontSize: tierFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -369,7 +374,7 @@ export class SocialPanel {
 
       // Inline action buttons for friend requests (positioned at bottom-right of row)
       const btnFontSize = `${Math.round(5 * S)}px`;
-      const actionBtn1 = scene.add.text(0, 0, "", {
+      const actionBtn1 = addText(scene, 0, 0, "", {
         fontSize: btnFontSize,
         color: "#44ff44",
         fontFamily: "'Press Start 2P', monospace",
@@ -378,7 +383,7 @@ export class SocialPanel {
       }).setOrigin(1, 0.5).setVisible(false);
       this.contentContainer.add(actionBtn1);
 
-      const actionBtn2 = scene.add.text(0, 0, "", {
+      const actionBtn2 = addText(scene, 0, 0, "", {
         fontSize: btnFontSize,
         color: "#ff4444",
         fontFamily: "'Press Start 2P', monospace",
@@ -437,12 +442,14 @@ export class SocialPanel {
 
   setCallbacks(
     onDM: (name: string) => void,
+    onBlock: (name: string, block: boolean) => void,
     onToggleFriend: (name: string) => void,
     onAcceptRequest: (accountId: string) => void,
     onDeclineRequest: (accountId: string) => void,
     onCancelRequest: (accountId: string) => void,
   ): void {
     this.onDM = onDM;
+    this.onBlock = onBlock;
     this.onToggleFriend = onToggleFriend;
     this.onAcceptRequest = onAcceptRequest;
     this.onDeclineRequest = onDeclineRequest;
@@ -908,6 +915,25 @@ export class SocialPanel {
         });
       }
 
+      // Block / Unblock
+      if (info.name) {
+        const isBlocked = this.blockedNames.has(info.name);
+        menuItems.push({
+          label: isBlocked ? "Unblock" : "Block",
+          action: () => {
+            if (!this.ctxTarget || !this.onBlock) return;
+            const name = this.ctxTarget.name;
+            if (isBlocked) {
+              this.blockedNames.delete(name);
+              this.onBlock(name, false);
+            } else {
+              this.blockedNames.add(name);
+              this.onBlock(name, true);
+            }
+          },
+        });
+      }
+
       // Friend/request option
       if (info.isFriend) {
         menuItems.push({
@@ -956,7 +982,7 @@ export class SocialPanel {
       const item = menuItems[i];
       const itemY = my + pad + i * (itemH + Math.round(4 * S));
 
-      const text = this.scene.add.text(mx + pad, itemY, item.label, {
+      const text = addText(this.scene, mx + pad, itemY, item.label, {
         fontSize,
         color: "#cccccc",
         fontFamily: "'Press Start 2P', monospace",

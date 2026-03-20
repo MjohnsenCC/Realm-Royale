@@ -1,5 +1,5 @@
 import Phaser from "phaser";
-import { CharacterClass, EnemyType, PIXEL_SCALE } from "@rotmg-lite/shared";
+import { CharacterClass, CLASS_NAMES, EnemyType, PIXEL_SCALE } from "@rotmg-lite/shared";
 
 const ENEMY_SPRITE_COUNT = 6;
 const SPRITE_SOURCE_SIZE = 12;
@@ -23,6 +23,34 @@ const CLASS_SPRITE_KEYS: Record<number, string> = {
   [CharacterClass.Warrior]: "sprite-player-warrior",
   [CharacterClass.Arcanist]: "sprite-player-arcanist",
 };
+
+/** Walk direction constants. */
+export enum WalkDirection {
+  Right = 0,
+  Down = 1,
+  Up = 2,
+  Left = 3,
+}
+
+/** Maps CharacterClass → tileset spritesheet key (if one exists). */
+const CLASS_TILESET_KEYS: Record<number, string> = {
+  [CharacterClass.Archer]: "tileset-player-archer",
+  [CharacterClass.Warrior]: "tileset-player-warrior",
+  [CharacterClass.Arcanist]: "tileset-player-arcanist",
+};
+
+const WALK_FRAMES_PER_DIR = 4;
+const WALK_FRAME_RATE = 8;
+
+/** Returns true if a walk animation tileset is loaded for this class. */
+export function hasWalkTileset(characterClass: number): boolean {
+  return characterClass in CLASS_TILESET_KEYS;
+}
+
+/** Returns the tileset key for a class (or undefined). */
+export function getPlayerTilesetKey(characterClass: number): string | undefined {
+  return CLASS_TILESET_KEYS[characterClass];
+}
 
 /** Returns the sprite texture key for a given character class. */
 export function getPlayerSpriteKey(characterClass: number): string {
@@ -58,6 +86,12 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
   // Upscale sprites to display resolution and add 1px outline
   for (const key of Object.values(CLASS_SPRITE_KEYS)) {
     upscaleAndOutline(scene, key);
+  }
+
+  // Upscale walk animation tilesets and create Phaser animations
+  for (const [classId, tilesetKey] of Object.entries(CLASS_TILESET_KEYS)) {
+    upscaleAndOutlineSpritesheet(scene, tilesetKey);
+    createWalkAnimations(scene, Number(classId), tilesetKey);
   }
   for (let i = 1; i <= ENEMY_SPRITE_COUNT; i++) {
     upscaleAndOutline(scene, `sprite-enemy-${i}`);
@@ -209,4 +243,106 @@ export function addOutlineToImageData(
   }
 
   ctx.putImageData(imageData, 0, 0);
+}
+
+/**
+ * Upscales each frame of a spritesheet individually (nearest-neighbor + outline),
+ * then packs them into a new spritesheet texture with the same key.
+ * Each frame becomes (8 * PIXEL_SCALE + 2) × (8 * PIXEL_SCALE + 2).
+ */
+function upscaleAndOutlineSpritesheet(scene: Phaser.Scene, key: string): void {
+  if (processedKeys.has(key)) return;
+  const tex = scene.textures.get(key);
+  if (!tex || tex.key === "__MISSING") return;
+
+  const frameKeys = tex.getFrameNames();
+  // Phaser spritesheet frames are numbered 0..N (stored under __BASE)
+  const totalFrames = frameKeys.length > 0 ? frameKeys.length : Object.keys(tex.frames).length - 1;
+  if (totalFrames <= 0) return;
+
+  const frameW = 8;
+  const frameH = 8;
+  const outW = frameW * PIXEL_SCALE + 2;
+  const outH = frameH * PIXEL_SCALE + 2;
+
+  // Create a horizontal strip of upscaled+outlined frames
+  const canvas = document.createElement("canvas");
+  canvas.width = outW * totalFrames;
+  canvas.height = outH;
+  const ctx = canvas.getContext("2d", { willReadFrequently: true })!;
+  ctx.imageSmoothingEnabled = false;
+
+  const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
+
+  for (let i = 0; i < totalFrames; i++) {
+    const frame = tex.get(i);
+    if (!frame) continue;
+
+    // Create a temp canvas for this single frame
+    const tmpCanvas = document.createElement("canvas");
+    tmpCanvas.width = outW;
+    tmpCanvas.height = outH;
+    const tmpCtx = tmpCanvas.getContext("2d", { willReadFrequently: true })!;
+    tmpCtx.imageSmoothingEnabled = false;
+
+    // Draw source frame upscaled into temp canvas at offset (1,1)
+    tmpCtx.drawImage(
+      src,
+      frame.cutX, frame.cutY, frame.cutWidth, frame.cutHeight,
+      1, 1, frameW * PIXEL_SCALE, frameH * PIXEL_SCALE
+    );
+
+    // Add outline to this frame
+    addOutlineToImageData(tmpCtx, outW, outH);
+
+    // Copy into the strip
+    ctx.drawImage(tmpCanvas, i * outW, 0);
+  }
+
+  // Replace the texture with the upscaled strip — use addCanvas then manually add frames
+  scene.textures.remove(key);
+  const newTex = scene.textures.addCanvas(key, canvas)!;
+  newTex.setFilter(Phaser.Textures.FilterMode.NEAREST);
+  // Add numbered frames matching spritesheet convention
+  for (let i = 0; i < totalFrames; i++) {
+    newTex.add(i, 0, i * outW, 0, outW, outH);
+  }
+  processedKeys.add(key);
+}
+
+/** Direction names matching WalkDirection enum order. */
+const DIRECTION_NAMES = ["right", "down", "up", "left"] as const;
+
+/**
+ * Creates Phaser walk animations for a character class from its tileset.
+ * Animation keys: "walk-{className}-{direction}" e.g. "walk-arcanist-down"
+ * Also creates idle keys: "idle-{className}-{direction}" (single frame)
+ */
+function createWalkAnimations(scene: Phaser.Scene, classId: number, tilesetKey: string): void {
+  const className = CLASS_NAMES[classId]?.toLowerCase();
+  if (!className) return;
+
+  for (let dir = 0; dir < 4; dir++) {
+    const startFrame = dir * WALK_FRAMES_PER_DIR;
+    const dirName = DIRECTION_NAMES[dir];
+
+    // Walk animation (4 frames looping)
+    scene.anims.create({
+      key: `walk-${className}-${dirName}`,
+      frames: scene.anims.generateFrameNumbers(tilesetKey, {
+        start: startFrame,
+        end: startFrame + WALK_FRAMES_PER_DIR - 1,
+      }),
+      frameRate: WALK_FRAME_RATE,
+      repeat: -1,
+    });
+
+    // Idle pose (first frame of each direction)
+    scene.anims.create({
+      key: `idle-${className}-${dirName}`,
+      frames: [{ key: tilesetKey, frame: startFrame }],
+      frameRate: 1,
+      repeat: 0,
+    });
+  }
 }

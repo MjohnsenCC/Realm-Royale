@@ -551,7 +551,7 @@ export const ClientMessage = {
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
-export type ChatChannel = "global" | "local";
+export type ChatChannel = "global" | "local" | "dm";
 
 // --- Character Classes ---
 

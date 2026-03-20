@@ -23,6 +23,8 @@ let friendAccountIds = new Set<string>();
 let incomingRequests: FriendRequestEntry[] = [];
 let outgoingRequests: FriendRequestEntry[] = [];
 let authenticated = false;
+let lastRefreshTime = 0;
+const REFRESH_COOLDOWN_MS = 10_000; // 10 seconds
 
 /**
  * Initialize the friend store with data from the server.
@@ -32,6 +34,7 @@ export function initFriendsFromServer(friends: FriendEntry[]): void {
   friendsCache = [...friends];
   friendAccountIds = new Set(friends.map((f) => f.accountId));
   authenticated = true;
+  lastRefreshTime = Date.now();
 }
 
 /**
@@ -40,6 +43,12 @@ export function initFriendsFromServer(friends: FriendEntry[]): void {
 export function initRequestsFromServer(incoming: FriendRequestEntry[], outgoing: FriendRequestEntry[]): void {
   incomingRequests = [...incoming];
   outgoingRequests = [...outgoing];
+  lastRefreshTime = Date.now();
+}
+
+/** Returns true if the friend data was refreshed recently and doesn't need a server fetch. */
+export function isRecentlyRefreshed(): boolean {
+  return Date.now() - lastRefreshTime < REFRESH_COOLDOWN_MS;
 }
 
 /**
@@ -99,6 +108,17 @@ export function cancelRequest(accountId: string): void {
 export function isFriendByAccountName(accountName: string): boolean {
   if (!accountName) return false;
   return friendsCache.some((f) => f.accountName === accountName);
+}
+
+export function isFriendByCharacterName(characterName: string): boolean {
+  if (!characterName) return false;
+  return friendsCache.some((f) => f.characterName === characterName);
+}
+
+export function getFriendAccountIdByCharacterName(characterName: string): string | null {
+  if (!characterName) return null;
+  const friend = friendsCache.find((f) => f.characterName === characterName);
+  return friend?.accountId ?? null;
 }
 
 export function hasPendingRequestTo(accountId: string): boolean {

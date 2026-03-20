@@ -6,6 +6,7 @@ import {
   getModifierTierValue,
 } from "@rotmg-lite/shared";
 import { getUIScale } from "./UIScale";
+import { addText } from "./TextFactory";
 
 export class DungeonTooltip {
   private scene: Phaser.Scene;
@@ -47,8 +48,7 @@ export class DungeonTooltip {
     this.container.add(this.bg);
 
     // Dungeon name
-    this.nameText = scene.add
-      .text(this.padding, this.padding, "", {
+    this.nameText = addText(scene, this.padding, this.padding, "", {
         fontSize: nameFontSize,
         color: "#ffffff",
         fontFamily: "'Press Start 2P', monospace",
@@ -60,7 +60,7 @@ export class DungeonTooltip {
     this.container.add(this.nameText);
 
     // Difficulty rating
-    this.difficultyText = scene.add.text(
+    this.difficultyText = addText(scene,
       this.padding,
       this.padding + Math.round(18 * S),
       "",
@@ -76,7 +76,7 @@ export class DungeonTooltip {
     this.container.add(this.difficultyText);
 
     // Loot rarity boost
-    this.rarityText = scene.add.text(
+    this.rarityText = addText(scene,
       this.padding,
       this.padding + Math.round(32 * S),
       "",
@@ -91,7 +91,7 @@ export class DungeonTooltip {
     this.container.add(this.rarityText);
 
     // Loot quantity boost
-    this.quantityText = scene.add.text(
+    this.quantityText = addText(scene,
       this.padding,
       this.padding + Math.round(47 * S),
       "",
@@ -111,8 +111,7 @@ export class DungeonTooltip {
 
     // Pre-allocate 5 modifier text objects (max possible)
     for (let i = 0; i < 5; i++) {
-      const t = scene.add
-        .text(this.padding, 0, "", {
+      const t = addText(scene, this.padding, 0, "", {
           fontSize: modFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -125,7 +124,7 @@ export class DungeonTooltip {
     }
 
     // "[SHIFT] for more info" hint
-    this.shiftHintText = scene.add.text(this.padding, 0, "[SHIFT] for more info", {
+    this.shiftHintText = addText(scene, this.padding, 0, "[SHIFT] for more info", {
       fontSize: `${Math.round(6 * S)}px`,
       color: "#888888",
       fontFamily: "'Press Start 2P', monospace",

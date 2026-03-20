@@ -709,6 +709,10 @@ export class CharacterSelectScene extends Phaser.Scene {
         errorText.setText(`Name must be at least ${CHARACTER_NAME_MIN_LENGTH} characters`);
         return;
       }
+      if (/\s/.test(name)) {
+        errorText.setText("Name cannot contain spaces");
+        return;
+      }
 
       confirmBtn.disableInteractive();
       errorText.setText("");

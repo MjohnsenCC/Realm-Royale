@@ -18,6 +18,7 @@ import {
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
 import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
+import { addText } from "./TextFactory";
 
 // Stat row definitions
 const STAT_ROWS: { label: string; section: "offensive" | "defensive" | "utility" }[] = [
@@ -150,8 +151,7 @@ export class StatsPanel {
     const centerX = contentW / 2;
 
     // --- Title ---
-    this.titleText = scene.add
-      .text(centerX, this.pad, "CHARACTER STATS", {
+    this.titleText = addText(scene, centerX, this.pad, "CHARACTER STATS", {
         fontSize: titleFontSize,
         color: "#aaaaff",
         fontFamily: "'Press Start 2P', monospace",
@@ -163,8 +163,7 @@ export class StatsPanel {
     this.contentContainer.add(this.titleText);
 
     // --- Hint ---
-    this.hintText = scene.add
-      .text(centerX, this.pad + this.headerH, "Press P to close", {
+    this.hintText = addText(scene, centerX, this.pad + this.headerH, "Press P to close", {
         fontSize: hintFontSize,
         color: "#666666",
         fontFamily: "'Press Start 2P', monospace",
@@ -196,8 +195,7 @@ export class StatsPanel {
         currentSection = row.section;
         curY += this.sectionGap;
 
-        const header = scene.add
-          .text(labelX, curY, sectionNames[row.section], {
+        const header = addText(scene, labelX, curY, sectionNames[row.section], {
             fontSize: headerFontSize,
             color: "#ffcc44",
             fontFamily: "'Press Start 2P', monospace",
@@ -215,8 +213,7 @@ export class StatsPanel {
       }
 
       // Label
-      const label = scene.add
-        .text(labelX, curY, row.label, {
+      const label = addText(scene, labelX, curY, row.label, {
           fontSize: labelFontSize,
           color: "#bbbbbb",
           fontFamily: "'Press Start 2P', monospace",
@@ -229,8 +226,7 @@ export class StatsPanel {
       this.statLabelTexts.push(label);
 
       // Value (right-aligned, leave room for bonus)
-      const value = scene.add
-        .text(valueX - bonusOffsetX, curY, "", {
+      const value = addText(scene, valueX - bonusOffsetX, curY, "", {
           fontSize: valueFontSize,
           color: "#ffffff",
           fontFamily: "'Press Start 2P', monospace",
@@ -242,8 +238,7 @@ export class StatsPanel {
       this.statValueTexts.push(value);
 
       // Bonus (right of value)
-      const bonus = scene.add
-        .text(valueX, curY, "", {
+      const bonus = addText(scene, valueX, curY, "", {
           fontSize: valueFontSize,
           color: "#88ccff",
           fontFamily: "'Press Start 2P', monospace",
