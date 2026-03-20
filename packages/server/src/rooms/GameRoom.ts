@@ -1637,12 +1637,13 @@ export class GameRoom extends Room<GameState> {
     const messageBody = rest.substring(spaceIdx + 1).trim();
 
     // Find target player in room
-    let targetPlayer: { id: string; name: string; accountId: string } | null = null;
-    this.state.players.forEach((p) => {
+    let targetPlayer: { id: string; name: string; accountId: string } | undefined;
+    for (const [, p] of this.state.players) {
       if (p.name.toLowerCase() === targetName.toLowerCase()) {
         targetPlayer = p;
+        break;
       }
-    });
+    }
 
     if (!targetPlayer) {
       client.send(ServerMessage.ChatMessage, {

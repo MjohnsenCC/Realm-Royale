@@ -11,7 +11,7 @@ import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./
 import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { isFriendByAccountName, hasPendingRequestToByName, hasPendingRequestFromByName, type FriendRequestEntry } from "./FriendStore";
-import { getPlayerSpriteKey } from "./EntityTextures";
+import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "./EntityTextures";
 import { ItemTooltip } from "./ItemTooltip";
 import { addText } from "./TextFactory";
 
@@ -295,7 +295,7 @@ export class SocialPanel {
       const slotsRowCenterY = rowY + this.lineH - this.equipSize / 2 - rowPad;
       const spriteX = this.pad + rowPad + this.equipSize / 2;
       const charSprite = scene.add.image(spriteX, slotsRowCenterY, "sprite-player-archer")
-        .setDisplaySize(this.equipSize, this.equipSize);
+        .setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
       this.contentContainer.add(charSprite);
 
       // Equipment slots (bottom row, after sprite)
@@ -571,7 +571,7 @@ export class SocialPanel {
       // Character sprite (bottom row, inline with equip slots)
       const slotsRowCenterY = rowY + this.lineH - this.equipSize / 2 - rowPad;
       const spriteX = this.pad + rowPad + this.equipSize / 2;
-      row.charSprite.setPosition(spriteX, slotsRowCenterY).setDisplaySize(this.equipSize, this.equipSize);
+      row.charSprite.setPosition(spriteX, slotsRowCenterY).setDisplaySize(OUTLINED_DISPLAY_SIZE, OUTLINED_DISPLAY_SIZE);
 
       // Equipment slots (bottom row, after sprite)
       const eqGap = Math.round(2 * S);

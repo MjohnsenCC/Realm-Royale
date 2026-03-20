@@ -223,13 +223,18 @@ for (const p of possiblePaths) {
 
 // HTML: no-cache (always revalidate to get latest version)
 // Hashed assets (JS/CSS): long-term cache (Vite adds content hashes)
+// Sprites/images: short cache with revalidation so updates are picked up
 app.use(
   express.static(clientBuildPath, {
     setHeaders: (res, filePath) => {
       if (filePath.endsWith(".html")) {
         res.setHeader("Cache-Control", "no-cache");
-      } else if (filePath.includes("/assets/")) {
+      } else if (filePath.match(/\.[a-f0-9]{8}\.(js|css)$/)) {
+        // Only Vite-hashed files get immutable long-term cache
         res.setHeader("Cache-Control", "public, max-age=31536000, immutable");
+      } else if (filePath.includes("/assets/")) {
+        // Sprites and other non-hashed assets: cache briefly, always revalidate
+        res.setHeader("Cache-Control", "no-cache");
       }
     },
   })
