@@ -158,6 +158,7 @@ export async function setAccountOffline(accountId: string): Promise<void> {
       online_character_name: null,
       online_character_class: null,
       online_character_level: null,
+      last_online_at: new Date().toISOString(),
       updated_at: new Date().toISOString(),
     })
     .eq("id", accountId);

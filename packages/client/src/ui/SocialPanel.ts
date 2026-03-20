@@ -4,6 +4,7 @@ import {
   getItemCategory,
   getItemSubtype,
   CLASS_NAMES,
+  getZoneDisplayName,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
@@ -25,6 +26,21 @@ export interface NearbyPlayerInfo {
   isFriend: boolean;
   online: boolean;
   serverRegion?: string;
+  zone?: string;
+  lastOnlineAt?: string;
+}
+
+function formatTimeAgo(iso: string): string {
+  const diff = Date.now() - new Date(iso).getTime();
+  if (diff < 0) return "just now";
+  const minutes = Math.floor(diff / 60000);
+  if (minutes < 1) return "just now";
+  if (minutes < 60) return `${minutes}m ago`;
+  const hours = Math.floor(minutes / 60);
+  if (hours < 24) return `${hours}h ago`;
+  const days = Math.floor(hours / 24);
+  if (days < 30) return `${days}d ago`;
+  return "over a month ago";
 }
 
 const MAX_ROWS = 30;
@@ -320,12 +336,14 @@ export class SocialPanel {
           .setScrollFactor(0).setDepth(255).setInteractive();
         const slotIdx = j;
         eqZone.on("pointerover", (pointer: Phaser.Input.Pointer) => {
+          if (this.ctxMenu) return;
           const info = this.getVisiblePlayers()[rowIdx];
           if (info && info.online && slotIdx < info.equipment.length && !isEmptyItem(info.equipment[slotIdx])) {
             this.tooltip.show(info.equipment[slotIdx], pointer.x, pointer.y);
           }
         });
         eqZone.on("pointermove", (pointer: Phaser.Input.Pointer) => {
+          if (this.ctxMenu) return;
           const info = this.getVisiblePlayers()[rowIdx];
           if (info && info.online && slotIdx < info.equipment.length && !isEmptyItem(info.equipment[slotIdx])) {
             this.tooltip.show(info.equipment[slotIdx], pointer.x, pointer.y);
@@ -480,6 +498,16 @@ export class SocialPanel {
 
   isVisible(): boolean {
     return this.visible;
+  }
+
+  isOverPanel(x: number, y: number): boolean {
+    if (!this.visible) return false;
+    return (
+      x >= this.px &&
+      x <= this.px + this.panelWidth &&
+      y >= this.py &&
+      y <= this.py + this.viewHeight
+    );
   }
 
   setSide(side: "left" | "right"): void {
@@ -716,10 +744,12 @@ export class SocialPanel {
           }
           if (info.online) {
             row.nameText.setColor("#66cc66");
-            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
+            const zoneStr = info.zone ? ` - ${getZoneDisplayName(info.zone)}` : "";
+            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}${zoneStr}`);
           } else {
             row.nameText.setColor("#666666");
-            row.levelText.setText("");
+            row.levelText.setText(info.lastOnlineAt ? `Last seen: ${formatTimeAgo(info.lastOnlineAt)}` : "");
+            row.levelText.setColor("#555555");
           }
         } else {
           if (info.accountName && this.activeTab === "nearby") {
@@ -731,10 +761,12 @@ export class SocialPanel {
           }
           if (info.online) {
             row.nameText.setColor("#66cc66");
-            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}`);
+            const zoneStr = info.zone ? ` - ${getZoneDisplayName(info.zone)}` : "";
+            row.levelText.setText(`${CLASS_NAMES[info.characterClass] ?? "???"} Lv. ${info.level}${zoneStr}`);
           } else {
             row.nameText.setColor("#666666");
-            row.levelText.setText("");
+            row.levelText.setText(info.lastOnlineAt ? `Last seen: ${formatTimeAgo(info.lastOnlineAt)}` : "");
+            row.levelText.setColor("#555555");
           }
         }
         row.levelText.setScale(1).setVisible(true);

@@ -334,6 +334,21 @@ export function getRealmTierFromZone(zone: string): number {
   return RealmTier.Wild;
 }
 
+/** Convert a zone string to a human-readable display name. */
+export function getZoneDisplayName(zone: string): string {
+  if (!zone) return "Unknown";
+  const base = getZoneBase(zone);
+  if (base === PlayerZone.Nexus) return "Nexus";
+  if (base === PlayerZone.Vault) return "Vault";
+  if (base === PlayerZone.Hostile) {
+    const tier = getRealmTierFromZone(zone);
+    return REALM_TIER_CONFIG[tier]?.name ?? "The Wild";
+  }
+  if (base === PlayerZone.DungeonInfernal) return "The Infernal Pit";
+  if (base === PlayerZone.DungeonVoid) return "The Void Sanctum";
+  return "Unknown";
+}
+
 export const DungeonType = {
   InfernalPit: 0,
   VoidSanctum: 1,

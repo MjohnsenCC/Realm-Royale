@@ -267,6 +267,7 @@ export class GameRoom extends Room<GameState> {
             player.y = spawnPos.y;
             this.removePlayerProjectiles(player.id);
             client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+            if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, player.zone);
             return;
           }
         }
@@ -300,6 +301,7 @@ export class GameRoom extends Room<GameState> {
           player.y = vaultSpawn.y;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+          if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, player.zone);
           return;
         }
       }
@@ -326,6 +328,7 @@ export class GameRoom extends Room<GameState> {
               ? this.dungeonSystem.getDungeonSeed(returnZone)
               : undefined;
             client.send(ServerMessage.ZoneChanged, { zone: returnZone, dungeonSeed });
+            if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, returnZone);
             client.send(ServerMessage.VaultPortalClosed);
             return;
           }
@@ -385,6 +388,7 @@ export class GameRoom extends Room<GameState> {
           this.removePlayerProjectiles(player.id);
           const dungeonSeed = this.dungeonSystem.getDungeonSeed(dungeonZone);
           client.send(ServerMessage.ZoneChanged, { zone: dungeonZone, dungeonSeed });
+          if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, dungeonZone);
           handled = true;
         } else if (portal.portalType === PortalType.DungeonExit) {
           // Exit dungeon: return to the zone the player entered from
@@ -398,6 +402,7 @@ export class GameRoom extends Room<GameState> {
           player.mana = player.maxMana;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: returnZone });
+          if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, returnZone);
           handled = true;
         }
       });
@@ -430,6 +435,7 @@ export class GameRoom extends Room<GameState> {
           player.y = vaultSpawn2.y;
           this.removePlayerProjectiles(player.id);
           client.send(ServerMessage.ZoneChanged, { zone: player.zone });
+          if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, player.zone);
           return;
         }
       }
@@ -1126,6 +1132,7 @@ export class GameRoom extends Room<GameState> {
           characterClass: fr.characterClass ?? undefined,
           level: fr.characterLevel ?? undefined,
           serverRegion: fr.serverRegion ?? undefined,
+          lastOnlineAt: fr.lastOnlineAt ?? undefined,
         }));
         client.send(ServerMessage.FriendsList, { friends });
       } catch (err) {
@@ -1205,15 +1212,19 @@ export class GameRoom extends Room<GameState> {
         try {
           await acceptFriendRequest(requesterAccountId, player.accountId);
 
-          // Find requester's account name
+          // Find requester's account name (check local players first, then DB)
           let requesterAccountName = "";
           this.state.players.forEach((p) => {
             if (p.accountId === requesterAccountId) {
               requesterAccountName = p.accountName;
             }
           });
+          if (!requesterAccountName) {
+            requesterAccountName = (await getAccountName(requesterAccountId)) ?? "";
+          }
 
-          client.send(ServerMessage.FriendAdded, { accountId: requesterAccountId, accountName: requesterAccountName });
+          const requesterOnline = this.accountToSession.has(requesterAccountId);
+          client.send(ServerMessage.FriendAdded, { accountId: requesterAccountId, accountName: requesterAccountName, online: requesterOnline });
 
           // Notify requester if online
           const requesterSessionId = this.accountToSession.get(requesterAccountId);
@@ -1412,6 +1423,7 @@ export class GameRoom extends Room<GameState> {
         name: character.name,
         characterClass: character.characterClass,
         level: character.level,
+        zone: "nexus",
       });
 
       player.characterClass = character.characterClass;
@@ -1537,7 +1549,7 @@ export class GameRoom extends Room<GameState> {
   private async notifyFriendsOfStatusChange(
     accountId: string,
     online: boolean,
-    playerData?: { name: string; characterClass: number; level: number },
+    playerData?: { name: string; characterClass: number; level: number; zone?: string },
   ): Promise<void> {
     try {
       const friendRecords = await getAccountFriends(accountId);
@@ -1553,10 +1565,33 @@ export class GameRoom extends Room<GameState> {
           characterClass: online ? playerData?.characterClass : undefined,
           level: online ? playerData?.level : undefined,
           serverRegion: online ? config.serverRegion : undefined,
+          zone: online ? playerData?.zone : undefined,
         });
       }
     } catch (err) {
       console.error("Failed to notify friends of status change:", err);
+    }
+  }
+
+  /**
+   * Notify friends when a player changes zone (lightweight update).
+   */
+  private async notifyFriendsOfZoneChange(accountId: string, zone: string): Promise<void> {
+    try {
+      const friendRecords = await getAccountFriends(accountId);
+      for (const friend of friendRecords) {
+        const friendSessionId = this.accountToSession.get(friend.accountId);
+        if (!friendSessionId) continue;
+        const friendClient = this.clients.getById(friendSessionId);
+        if (!friendClient) continue;
+        friendClient.send(ServerMessage.FriendStatusUpdate, {
+          accountId,
+          online: true,
+          zone,
+        });
+      }
+    } catch (err) {
+      console.error("Failed to notify friends of zone change:", err);
     }
   }
 
@@ -1692,6 +1727,7 @@ export class GameRoom extends Room<GameState> {
     player.mana = player.maxMana;
     this.removePlayerProjectiles(player.id);
     client.send(ServerMessage.ZoneChanged, { zone: "nexus" });
+    if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, "nexus");
   }
 
   private loadRealmMap(): void {

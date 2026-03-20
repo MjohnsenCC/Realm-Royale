@@ -401,7 +401,7 @@ export class GameScene extends Phaser.Scene {
         this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
       }
     });
-    room.onMessage(ServerMessage.FriendAdded, (data: { accountId: string; accountName: string }) => {
+    room.onMessage(ServerMessage.FriendAdded, (data: { accountId: string; accountName: string; online?: boolean }) => {
       onFriendAdded(data);
       if (this.chatUI) {
         const displayName = data.accountName || "Friend";
@@ -465,8 +465,8 @@ export class GameScene extends Phaser.Scene {
         this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
       }
     });
-    room.onMessage(ServerMessage.FriendStatusUpdate, (data: { accountId: string; online: boolean; characterName?: string; characterClass?: number; level?: number; serverRegion?: string }) => {
-      updateFriendStatus(data.accountId, data.online, data.characterName, data.characterClass, data.level, data.serverRegion);
+    room.onMessage(ServerMessage.FriendStatusUpdate, (data: { accountId: string; online: boolean; characterName?: string; characterClass?: number; level?: number; serverRegion?: string; zone?: string }) => {
+      updateFriendStatus(data.accountId, data.online, data.characterName, data.characterClass, data.level, data.serverRegion, data.zone);
       if (this.socialPanel?.isVisible()) {
         const d = this.gatherSocialData();
         this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests);
@@ -702,6 +702,8 @@ export class GameScene extends Phaser.Scene {
       this.hud.hideDeathScreen();
       this.hud.vaultUI.hide();
       this.hud.lootBagUI.hide();
+      this.statsPanel.hide();
+      this.socialPanel.hide();
       // Clear stale bag sprites from previous zone
       this.bagSprites.forEach((sprite) => sprite.destroy());
       this.bagSprites.clear();
@@ -2507,7 +2509,10 @@ export class GameScene extends Phaser.Scene {
 
         // Only shoot if not clicking on UI panels and not dragging items
         const pointer = this.input.activePointer;
-        const overUI = this.hud.isOverPanel(pointer.x, pointer.y) || this.craftingUI.isVisible();
+        const overUI =
+          this.hud.isOverPanel(pointer.x, pointer.y) ||
+          this.craftingUI.isVisible() ||
+          this.socialPanel?.isOverPanel(pointer.x, pointer.y);
         const isDragging = this.hud.dragManager.isDragging();
         shooting = pointer.isDown && !overUI && !isDragging;
       }
@@ -3595,6 +3600,7 @@ export class GameScene extends Phaser.Scene {
           equipment: readEquipmentData(local.schema),
           isFriend: true,
           online: true,
+          zone: (local.schema.zone as string) || undefined,
         });
       } else if (friend.online) {
         // Friend is online on a different server (cross-server presence from DB)
@@ -3610,6 +3616,7 @@ export class GameScene extends Phaser.Scene {
           isFriend: true,
           online: true,
           serverRegion: friend.serverRegion,
+          zone: friend.zone,
         });
       } else {
         offlineFriends.push({
@@ -3623,6 +3630,7 @@ export class GameScene extends Phaser.Scene {
           equipment: [],
           isFriend: true,
           online: false,
+          lastOnlineAt: friend.lastOnlineAt,
         });
       }
     }

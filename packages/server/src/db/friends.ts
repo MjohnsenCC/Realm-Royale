@@ -8,6 +8,7 @@ export interface FriendRecord {
   characterName: string | null;
   characterClass: number | null;
   characterLevel: number | null;
+  lastOnlineAt: string | null;
 }
 
 export interface FriendRequestRecord {
@@ -23,7 +24,7 @@ export async function getAccountFriends(accountId: string): Promise<FriendRecord
 
   const { data, error } = await supabase
     .from("friends")
-    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name, is_online, server_region, online_character_name, online_character_class, online_character_level)")
+    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name, is_online, server_region, online_character_name, online_character_class, online_character_level, last_online_at)")
     .eq("account_id", accountId)
     .eq("status", "accepted");
 
@@ -39,6 +40,7 @@ export async function getAccountFriends(accountId: string): Promise<FriendRecord
     characterName: row.accounts?.online_character_name ?? null,
     characterClass: row.accounts?.online_character_class ?? null,
     characterLevel: row.accounts?.online_character_level ?? null,
+    lastOnlineAt: row.accounts?.last_online_at ?? null,
   }));
 }
 

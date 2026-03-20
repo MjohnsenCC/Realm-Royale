@@ -8,6 +8,8 @@ export interface FriendEntry {
   characterClass?: number;
   level?: number;
   serverRegion?: string;
+  zone?: string;
+  lastOnlineAt?: string;
 }
 
 export interface FriendRequestEntry {
@@ -120,12 +122,12 @@ export function hasPendingRequestFromByName(accountName: string): boolean {
 /**
  * Called when server confirms a friend was added.
  */
-export function onFriendAdded(entry: { accountId: string; accountName: string }): void {
+export function onFriendAdded(entry: { accountId: string; accountName: string; online?: boolean }): void {
   if (!friendAccountIds.has(entry.accountId)) {
     friendsCache.push({
       accountId: entry.accountId,
       accountName: entry.accountName,
-      online: true,
+      online: entry.online ?? true,
     });
     friendAccountIds.add(entry.accountId);
   }
@@ -144,14 +146,26 @@ export function updateFriendStatus(
   characterClass?: number,
   level?: number,
   serverRegion?: string,
+  zone?: string,
 ): void {
   const friend = friendsCache.find((f) => f.accountId === accountId);
   if (!friend) return;
   friend.online = online;
-  friend.characterName = online ? characterName : undefined;
-  friend.characterClass = online ? characterClass : undefined;
-  friend.level = online ? level : undefined;
-  friend.serverRegion = online ? serverRegion : undefined;
+  if (!online) {
+    friend.characterName = undefined;
+    friend.characterClass = undefined;
+    friend.level = undefined;
+    friend.serverRegion = undefined;
+    friend.zone = undefined;
+    friend.lastOnlineAt = new Date().toISOString();
+  } else {
+    // Only overwrite fields that were provided (allows partial zone-only updates)
+    if (characterName !== undefined) friend.characterName = characterName;
+    if (characterClass !== undefined) friend.characterClass = characterClass;
+    if (level !== undefined) friend.level = level;
+    if (serverRegion !== undefined) friend.serverRegion = serverRegion;
+    if (zone !== undefined) friend.zone = zone;
+  }
 }
 
 /**
