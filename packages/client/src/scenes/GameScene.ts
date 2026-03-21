@@ -11,6 +11,7 @@ import { StatsPanel } from "../ui/StatsPanel";
 import { SocialPanel, NearbyPlayerInfo } from "../ui/SocialPanel";
 import { PlayerTooltip } from "../ui/PlayerTooltip";
 import { isFriendByAccountName, addFriend, removeFriend, getFriends, isAuthenticated as isFriendsAuthenticated, initFriendsFromServer, initFriendsDisabled, onFriendAdded, onFriendRemoved, initRequestsFromServer, onFriendRequestReceived, onFriendRequestDeclined, onFriendRequestCancelled, getIncomingRequests, getOutgoingRequests, hasPendingRequestToByName, hasPendingRequestFromByName, acceptRequest, declineRequest, cancelRequest, updateFriendStatus, isRecentlyRefreshed, type FriendEntry, type FriendRequestEntry } from "../ui/FriendStore";
+import { onPlayerZoneChanged, clearPlayerTracking } from "../ui/TeleportHelper";
 import { DungeonTooltip } from "../ui/DungeonTooltip";
 import { ChatUI } from "../ui/ChatUI";
 import { EscapeMenuUI } from "../ui/EscapeMenuUI";
@@ -89,6 +90,7 @@ import {
   setActiveRealmTier,
   getActiveRealmTier,
   isWaterBiome,
+  DungeonType,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData, ItemInstanceData } from "@rotmg-lite/shared";
 
@@ -631,6 +633,9 @@ export class GameScene extends Phaser.Scene {
         if (!isFriendsAuthenticated()) return;
         cancelRequest(accountId);
       },
+      (name: string) => {
+        this.network.sendTeleportToPlayer(name);
+      },
     );
     this.hud.setSocialButtonCallback(() => this.toggleSocialPanel());
 
@@ -697,7 +702,7 @@ export class GameScene extends Phaser.Scene {
     this.setupStateListeners(state);
 
     // Listen for zone change
-    room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string; dungeonSeed?: number }) => {
+    room.onMessage(ServerMessage.ZoneChanged, (data: { zone: string; dungeonSeed?: number; dungeonStats?: { modifierIds: number[]; modifierTiers: number[]; lootRarityBoost: number; lootQuantityBoost: number } }) => {
       this.localZone = data.zone;
       // Set active biome layer based on realm tier
       if (isHostileZone(data.zone)) {
@@ -729,6 +734,19 @@ export class GameScene extends Phaser.Scene {
       if (isDungeonZone(data.zone) && data.dungeonSeed !== undefined) {
         this.dungeonSeed = data.dungeonSeed;
         this.currentDungeonMap = generateDungeonMap(data.dungeonSeed, getDungeonTypeFromZone(data.zone)!);
+        // Cache dungeon stats for Shift tooltip display
+        if (data.dungeonStats) {
+          const dt = getDungeonTypeFromZone(data.zone);
+          this.cachedDungeonStats = {
+            portalType: dt === DungeonType.InfernalPit
+              ? PortalType.InfernalPitEntrance
+              : PortalType.VoidSanctumEntrance,
+            modifierIds: data.dungeonStats.modifierIds,
+            modifierTiers: data.dungeonStats.modifierTiers,
+            lootRarityBoost: data.dungeonStats.lootRarityBoost,
+            lootQuantityBoost: data.dungeonStats.lootQuantityBoost,
+          };
+        }
       } else if (data.zone === "nexus") {
         this.currentDungeonMap = this.nexusMap;
       } else if (isVaultZone(data.zone)) {
@@ -2037,6 +2055,10 @@ export class GameScene extends Phaser.Scene {
           s.setZone(newZone as string);
           s.setVisible((newZone as string) === this.localZone);
         }
+        // Track dungeon entry times for teleport eligibility
+        if (!isLocal) {
+          onPlayerZoneChanged(player.name as string, newZone as string);
+        }
       });
 
       // Listen for property changes
@@ -2165,6 +2187,7 @@ export class GameScene extends Phaser.Scene {
     state.players.onRemove((_player, sessionId) => {
       const sprite = this.playerSprites.get(sessionId);
       if (sprite) {
+        clearPlayerTracking(_player.name as string);
         sprite.destroy();
         this.playerSprites.delete(sessionId);
       }

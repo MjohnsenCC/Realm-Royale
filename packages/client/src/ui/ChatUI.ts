@@ -4,6 +4,7 @@ import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
 import { UI_PANEL_CORNER } from "./UITextures";
 import { addFriend, removeFriend, isFriendByCharacterName, getFriendAccountIdByCharacterName, isAuthenticated } from "./FriendStore";
+import { canTeleportTo } from "./TeleportHelper";
 import { addText } from "./TextFactory";
 
 interface ChatEntry {
@@ -38,6 +39,7 @@ export class ChatUI {
     bg: Phaser.GameObjects.NineSlice;
     menuTexts: Phaser.GameObjects.Text[];
     menuZones: Phaser.GameObjects.Zone[];
+    menuIcons: Phaser.GameObjects.Image[];
   } | null = null;
   private ctxDismissListener: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
@@ -423,7 +425,7 @@ export class ChatUI {
     const pad = Math.round(6 * S);
     const fontSize = `${Math.round(6 * S)}px`;
 
-    const menuItems: { label: string; action: () => void }[] = [];
+    const menuItems: { label: string; action: () => void; icon?: string }[] = [];
 
     // Check if this is our own name
     const room = this.network.getRoom();
@@ -432,9 +434,10 @@ export class ChatUI {
 
     // DM (skip for own name)
     if (!isOwnName) {
+      const dmName = playerName.startsWith("To ") ? playerName.substring(3) : playerName;
       menuItems.push({
         label: "DM",
-        action: () => this.openInputWithText(`/dm ${playerName} `),
+        action: () => this.openInputWithText(`/dm ${dmName} `),
       });
     }
 
@@ -473,6 +476,22 @@ export class ChatUI {
       }
     }
 
+    // Teleport To (any player in the room, costs portal gem)
+    if (!isOwnName) {
+      // Look up the target player's zone from room state
+      let targetZone: string | undefined;
+      room?.state.players.forEach((p: any) => {
+        if (p.name === playerName) targetZone = p.zone as string;
+      });
+      if (targetZone && canTeleportTo(playerName, targetZone)) {
+        menuItems.push({
+          label: "Teleport To",
+          action: () => this.network.sendTeleportToPlayer(playerName),
+          icon: "item-portal-gem",
+        });
+      }
+    }
+
     if (menuItems.length === 0) return;
 
     const gaps = Math.max(0, menuItems.length - 1) * Math.round(4 * S);
@@ -495,12 +514,23 @@ export class ChatUI {
 
     const menuTexts: Phaser.GameObjects.Text[] = [];
     const menuZones: Phaser.GameObjects.Zone[] = [];
+    const menuIcons: Phaser.GameObjects.Image[] = [];
 
     for (let i = 0; i < menuItems.length; i++) {
       const item = menuItems[i];
       const itemY = my + pad + i * (itemH + Math.round(4 * S));
 
-      const text = addText(this.scene, mx + pad, itemY, item.label, {
+      let iconOffset = 0;
+      if (item.icon) {
+        const iconSize = itemH - 2;
+        const icon = this.scene.add.image(mx + pad + iconSize / 2, itemY + itemH / 2, item.icon)
+          .setDisplaySize(iconSize, iconSize)
+          .setScrollFactor(0).setDepth(311);
+        menuIcons.push(icon);
+        iconOffset = itemH;
+      }
+
+      const text = addText(this.scene, mx + pad + iconOffset, itemY, item.label, {
           fontSize,
           color: "#cccccc",
           fontFamily: "'Press Start 2P', monospace",
@@ -526,7 +556,7 @@ export class ChatUI {
       menuZones.push(zone);
     }
 
-    this.ctxMenu = { bg, menuTexts, menuZones };
+    this.ctxMenu = { bg, menuTexts, menuZones, menuIcons };
 
     // Dismiss on any left-click outside
     this.scene.time.delayedCall(0, () => {
@@ -551,6 +581,7 @@ export class ChatUI {
     this.ctxMenu.bg.destroy();
     for (const t of this.ctxMenu.menuTexts) t.destroy();
     for (const z of this.ctxMenu.menuZones) z.destroy();
+    for (const ic of this.ctxMenu.menuIcons) ic.destroy();
     this.ctxMenu = null;
   }
 

@@ -83,6 +83,8 @@ import {
   HOSTILE_WIDTH,
   HOSTILE_HEIGHT,
   PORTAL_GEM_INVULN_MS,
+  DUNGEON_TELEPORT_WINDOW_MS,
+  getRealmTierFromZone,
   generateItemInstance,
   generateConsumableInstance,
   generateOrbInstance,
@@ -184,6 +186,8 @@ export class GameRoom extends Room<GameState> {
   private blockedDMs = new Map<string, Set<string>>();
   private globalTick = 0;
   private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
+  /** Tracks when each player entered a dungeon (sessionId → timestamp). */
+  private dungeonEntryTimes = new Map<string, number>();
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
@@ -258,9 +262,10 @@ export class GameRoom extends Room<GameState> {
               const playerLevel = getPlayerLevel(player.xp);
               if (playerLevel < tierConfig.requiredLevel) {
                 client.send(ServerMessage.ChatMessage, {
+                  playerId: player.id,
+                  playerName: "",
+                  text: `You need level ${tierConfig.requiredLevel} to enter ${tierConfig.name}. You are level ${playerLevel}.`,
                   channel: "local" as ChatChannel,
-                  sender: "",
-                  message: `You need level ${tierConfig.requiredLevel} to enter ${tierConfig.name}. You are level ${playerLevel}.`,
                 });
                 return;
               }
@@ -392,8 +397,10 @@ export class GameRoom extends Room<GameState> {
             player.y = spawnPos.y;
           }
           this.removePlayerProjectiles(player.id);
+          this.dungeonEntryTimes.set(client.sessionId, Date.now());
           const dungeonSeed = this.dungeonSystem.getDungeonSeed(dungeonZone);
-          client.send(ServerMessage.ZoneChanged, { zone: dungeonZone, dungeonSeed });
+          const dungeonStats = this.dungeonSystem.getDungeonStats(dungeonZone);
+          client.send(ServerMessage.ZoneChanged, { zone: dungeonZone, dungeonSeed, dungeonStats });
           if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, dungeonZone);
           handled = true;
         } else if (portal.portalType === PortalType.DungeonExit) {
@@ -407,6 +414,7 @@ export class GameRoom extends Room<GameState> {
           player.hp = player.maxHp;
           player.mana = player.maxMana;
           this.removePlayerProjectiles(player.id);
+          this.dungeonEntryTimes.delete(client.sessionId);
           client.send(ServerMessage.ZoneChanged, { zone: returnZone });
           if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, returnZone);
           handled = true;
@@ -760,6 +768,119 @@ export class GameRoom extends Room<GameState> {
       player.portalGemPortalActive = true;
       client.send(ServerMessage.VaultPortalCreated, { x: player.x, y: player.y });
     });
+
+    // Listen for teleport-to-player requests (context menu on friend / chat name)
+    this.onMessage(
+      ClientMessage.TeleportToPlayer,
+      (client, data: { targetName: string }) => {
+        const player = this.state.players.get(client.sessionId);
+        if (!player || !player.alive) return;
+
+        const targetName = data?.targetName;
+        if (typeof targetName !== "string" || !targetName) return;
+
+        // Find target player by character name
+        let targetPlayer: Player | undefined;
+        let targetSessionId: string | undefined;
+        this.state.players.forEach((p, sid) => {
+          if (p.name === targetName) {
+            targetPlayer = p;
+            targetSessionId = sid;
+          }
+        });
+
+        const sendError = (message: string) => {
+          client.send(ServerMessage.ChatMessage, {
+            channel: "local" as ChatChannel,
+            sender: "",
+            message,
+          });
+        };
+
+        if (!targetPlayer || !targetSessionId) {
+          sendError("Player not found or offline.");
+          return;
+        }
+        if (targetSessionId === client.sessionId) return;
+        if (!targetPlayer.alive) {
+          sendError("That player is dead.");
+          return;
+        }
+
+        // Vault: cannot teleport to
+        if (isVaultZone(targetPlayer.zone)) {
+          sendError("Cannot teleport to a player in their vault.");
+          return;
+        }
+
+        // Dungeon: 20s window from when target entered
+        if (isDungeonZone(targetPlayer.zone)) {
+          const entryTime = this.dungeonEntryTimes.get(targetSessionId);
+          if (!entryTime || Date.now() - entryTime > DUNGEON_TELEPORT_WINDOW_MS) {
+            sendError("That player has been in the dungeon too long to teleport to.");
+            return;
+          }
+        }
+
+        // Level requirement for hostile zones
+        if (isHostileZone(targetPlayer.zone)) {
+          const tier = getRealmTierFromZone(targetPlayer.zone);
+          const tierConfig = REALM_TIER_CONFIG[tier];
+          if (tierConfig) {
+            const playerLevel = getPlayerLevel(player.xp);
+            if (playerLevel < tierConfig.requiredLevel) {
+              sendError(`You need level ${tierConfig.requiredLevel} to enter ${tierConfig.name}. You are level ${playerLevel}.`);
+              return;
+            }
+          }
+        }
+
+        // Consume portal gem
+        if (!this.consumePortalGem(player)) {
+          sendError("You need a Portal Gem to teleport.");
+          return;
+        }
+
+        // Execute teleport
+        player.invulnerable = true;
+        player.invulnerableSince = Date.now();
+        player.invulnerableUntil = Date.now() + PORTAL_GEM_INVULN_MS;
+        this.removePlayerProjectiles(player.id);
+
+        // Clear vault portal if active
+        if (player.portalGemPortalActive) {
+          player.portalGemPortalActive = false;
+          player.portalGemReturnZone = "";
+          client.send(ServerMessage.VaultPortalClosed);
+        }
+
+        player.x = targetPlayer.x;
+        player.y = targetPlayer.y;
+
+        if (player.zone !== targetPlayer.zone) {
+          player.zone = targetPlayer.zone;
+
+          // If entering a dungeon, copy return data and set entry time
+          if (isDungeonZone(targetPlayer.zone)) {
+            player.dungeonReturnX = targetPlayer.dungeonReturnX;
+            player.dungeonReturnY = targetPlayer.dungeonReturnY;
+            player.dungeonReturnZone = targetPlayer.dungeonReturnZone;
+            this.dungeonEntryTimes.set(client.sessionId, Date.now());
+          } else {
+            this.dungeonEntryTimes.delete(client.sessionId);
+          }
+
+          const dungeonSeed = isDungeonZone(targetPlayer.zone)
+            ? this.dungeonSystem.getDungeonSeed(targetPlayer.zone)
+            : undefined;
+          const dungeonStats = isDungeonZone(targetPlayer.zone)
+            ? this.dungeonSystem.getDungeonStats(targetPlayer.zone)
+            : undefined;
+          client.send(ServerMessage.ZoneChanged, { zone: player.zone, dungeonSeed, dungeonStats });
+          if (player.accountId) this.notifyFriendsOfZoneChange(player.accountId, player.zone);
+        }
+      }
+    );
 
     // Listen for crafting orb use
     this.onMessage(
@@ -1527,6 +1648,7 @@ export class GameRoom extends Room<GameState> {
 
   async onLeave(client: Client, _consented: boolean) {
     const player = this.state.players.get(client.sessionId);
+    this.dungeonEntryTimes.delete(client.sessionId);
 
     // Notify friends in this room that this player went offline, then clean up
     if (player?.accountId) {
@@ -1904,6 +2026,7 @@ export class GameRoom extends Room<GameState> {
     player.invulnerable = true;
     player.invulnerableSince = Date.now();
     player.nearVaultChest = false;
+    this.dungeonEntryTimes.delete(client.sessionId);
     // Clear any active portal gem vault portal
     if (player.portalGemPortalActive) {
       player.portalGemPortalActive = false;

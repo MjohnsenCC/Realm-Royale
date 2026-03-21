@@ -1,4 +1,5 @@
 import { NetworkManager } from "../network/NetworkManager";
+import { onPlayerZoneChanged } from "./TeleportHelper";
 
 export interface FriendEntry {
   accountId: string;
@@ -184,7 +185,10 @@ export function updateFriendStatus(
     if (characterClass !== undefined) friend.characterClass = characterClass;
     if (level !== undefined) friend.level = level;
     if (serverRegion !== undefined) friend.serverRegion = serverRegion;
-    if (zone !== undefined) friend.zone = zone;
+    if (zone !== undefined) {
+      friend.zone = zone;
+      if (friend.characterName) onPlayerZoneChanged(friend.characterName, zone);
+    }
   }
 }
 

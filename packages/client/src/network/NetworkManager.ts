@@ -90,6 +90,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.UsePortalGemVault);
   }
 
+  sendTeleportToPlayer(targetName: string): void {
+    this.room?.send(ClientMessage.TeleportToPlayer, { targetName });
+  }
+
   sendOpenCraftingTable(): void {
     this.room?.send(ClientMessage.OpenCraftingTable);
   }

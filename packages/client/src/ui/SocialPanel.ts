@@ -11,6 +11,7 @@ import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./
 import { UI_PANEL_CORNER, UI_SCROLLBAR_CORNER } from "./UITextures";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { isFriendByAccountName, hasPendingRequestToByName, hasPendingRequestFromByName, type FriendRequestEntry } from "./FriendStore";
+import { canTeleportTo } from "./TeleportHelper";
 import { getPlayerSpriteKey, OUTLINED_DISPLAY_SIZE } from "./EntityTextures";
 import { ItemTooltip } from "./ItemTooltip";
 import { addText } from "./TextFactory";
@@ -68,6 +69,7 @@ interface ContextMenuObjects {
   bg: Phaser.GameObjects.NineSlice;
   menuTexts: Phaser.GameObjects.Text[];
   menuZones: Phaser.GameObjects.Zone[];
+  menuIcons: Phaser.GameObjects.Image[];
 }
 
 export class SocialPanel {
@@ -142,6 +144,7 @@ export class SocialPanel {
   private onAcceptRequest: ((accountId: string) => void) | null = null;
   private onDeclineRequest: ((accountId: string) => void) | null = null;
   private onCancelRequest: ((accountId: string) => void) | null = null;
+  private onTeleportTo: ((name: string) => void) | null = null;
 
   // Client-side tracking of blocked names
   private blockedNames = new Set<string>();
@@ -447,6 +450,7 @@ export class SocialPanel {
     onAcceptRequest: (accountId: string) => void,
     onDeclineRequest: (accountId: string) => void,
     onCancelRequest: (accountId: string) => void,
+    onTeleportTo: (name: string) => void,
   ): void {
     this.onDM = onDM;
     this.onBlock = onBlock;
@@ -454,6 +458,7 @@ export class SocialPanel {
     this.onAcceptRequest = onAcceptRequest;
     this.onDeclineRequest = onDeclineRequest;
     this.onCancelRequest = onCancelRequest;
+    this.onTeleportTo = onTeleportTo;
   }
 
   populate(players: NearbyPlayerInfo[], allFriends: NearbyPlayerInfo[], incomingRequests: FriendRequestEntry[] = [], outgoingRequests: FriendRequestEntry[] = []): void {
@@ -887,7 +892,7 @@ export class SocialPanel {
     const fontSize = `${Math.round(6 * S)}px`;
 
     // Build menu items based on context
-    const menuItems: { label: string; action: () => void }[] = [];
+    const menuItems: { label: string; action: () => void; icon?: string }[] = [];
 
     if (this.activeTab === "requests") {
       const isIncoming = info.serverRegion === "incoming";
@@ -912,6 +917,15 @@ export class SocialPanel {
         menuItems.push({
           label: "DM",
           action: () => { if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget!.name); },
+        });
+      }
+
+      // Teleport To (online friends only, eligible zone)
+      if (info.isFriend && info.online && info.name && canTeleportTo(info.name, info.zone)) {
+        menuItems.push({
+          label: "Teleport To",
+          action: () => { if (this.ctxTarget && this.onTeleportTo) this.onTeleportTo(this.ctxTarget.name); },
+          icon: "item-portal-gem",
         });
       }
 
@@ -977,12 +991,23 @@ export class SocialPanel {
 
     const menuTexts: Phaser.GameObjects.Text[] = [];
     const menuZones: Phaser.GameObjects.Zone[] = [];
+    const menuIcons: Phaser.GameObjects.Image[] = [];
 
     for (let i = 0; i < menuItems.length; i++) {
       const item = menuItems[i];
       const itemY = my + pad + i * (itemH + Math.round(4 * S));
 
-      const text = addText(this.scene, mx + pad, itemY, item.label, {
+      let iconOffset = 0;
+      if (item.icon) {
+        const iconSize = itemH - 2;
+        const icon = this.scene.add.image(mx + pad + iconSize / 2, itemY + itemH / 2, item.icon)
+          .setDisplaySize(iconSize, iconSize)
+          .setScrollFactor(0).setDepth(311);
+        menuIcons.push(icon);
+        iconOffset = itemH;
+      }
+
+      const text = addText(this.scene, mx + pad + iconOffset, itemY, item.label, {
         fontSize,
         color: "#cccccc",
         fontFamily: "'Press Start 2P', monospace",
@@ -1003,7 +1028,7 @@ export class SocialPanel {
       menuZones.push(zone);
     }
 
-    this.ctxMenu = { bg, menuTexts, menuZones };
+    this.ctxMenu = { bg, menuTexts, menuZones, menuIcons };
 
     // Close on any left click outside the menu (delayed so the current right-click doesn't consume it)
     this.scene.time.delayedCall(0, () => {
@@ -1028,6 +1053,7 @@ export class SocialPanel {
     this.ctxMenu.bg.destroy();
     for (const t of this.ctxMenu.menuTexts) t.destroy();
     for (const z of this.ctxMenu.menuZones) z.destroy();
+    for (const ic of this.ctxMenu.menuIcons) ic.destroy();
     this.ctxMenu = null;
     this.ctxTarget = null;
   }

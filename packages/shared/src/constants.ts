@@ -125,6 +125,7 @@ export const VAULT_CHEST_INTERACT_RADIUS = 60;
 export const PORTAL_GEM_MAX_STACK = 20;
 export const PORTAL_GEM_ID = 4201; // makeItemId(4, 2, 1): category=4, subtype=2, tier=1
 export const PORTAL_GEM_INVULN_MS = 2000; // 2s invulnerability after portal gem teleport
+export const DUNGEON_TELEPORT_WINDOW_MS = 20_000; // 20s window to teleport to a player in a dungeon
 
 // Chat
 export const CHAT_MAX_LENGTH = 150;

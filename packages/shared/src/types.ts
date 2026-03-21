@@ -548,6 +548,7 @@ export const ClientMessage = {
   CancelFriendRequest: "cancelFriendRequest",
   GetFriendRequests: "getFriendRequests",
   RefreshAccountName: "refreshAccountName",
+  TeleportToPlayer: "teleportToPlayer",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 
