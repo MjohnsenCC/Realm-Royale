@@ -515,6 +515,13 @@ export const ServerMessage = {
   FriendRequestCancelled: "friendRequestCancelled",
   FriendRequestsList: "friendRequestsList",
   FriendStatusUpdate: "friendStatusUpdate",
+  TradeRequested: "tradeRequested",
+  TradeStarted: "tradeStarted",
+  TradeDeclined: "tradeDeclined",
+  TradeCancelled: "tradeCancelled",
+  TradePartnerUpdate: "tradePartnerUpdate",
+  TradeCompleted: "tradeCompleted",
+  BlockList: "blockList",
 } as const;
 export type ServerMessage = (typeof ServerMessage)[keyof typeof ServerMessage];
 
@@ -549,6 +556,15 @@ export const ClientMessage = {
   GetFriendRequests: "getFriendRequests",
   RefreshAccountName: "refreshAccountName",
   TeleportToPlayer: "teleportToPlayer",
+  TradeRequest: "tradeRequest",
+  TradeAccept: "tradeAccept",
+  TradeDecline: "tradeDecline",
+  TradeSelectSlot: "tradeSelectSlot",
+  TradeDeselectSlot: "tradeDeselectSlot",
+  TradeConfirm: "tradeConfirm",
+  TradeUnconfirm: "tradeUnconfirm",
+  TradeExit: "tradeExit",
+  GetBlockList: "getBlockList",
 } as const;
 export type ClientMessage = (typeof ClientMessage)[keyof typeof ClientMessage];
 

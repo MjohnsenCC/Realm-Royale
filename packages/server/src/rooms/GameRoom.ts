@@ -113,12 +113,13 @@ import {
   ENEMY_SYNC_RADIUS,
   REALM_TIER_CONFIG,
   getPlayerLevel,
+  TRADE_REQUEST_TTL_MS,
 } from "@rotmg-lite/shared";
 import type { DungeonMapData } from "@rotmg-lite/shared";
 import { validateSessionToken } from "../auth/session";
 import { getCharacter, saveCharacter, CharacterSaveData } from "../db/characters";
 import { getAccountVault, saveAccountVault, getAccountName, findAccountByName, setAccountOnline, setAccountOffline } from "../db/accounts";
-import { getAccountFriends, removeAccountFriend, getExistingRelationship, createFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, getPendingRequests } from "../db/friends";
+import { getAccountFriends, removeAccountFriend, getExistingRelationship, createFriendRequest, acceptFriendRequest, declineFriendRequest, cancelFriendRequest, getPendingRequests, getBlockedAccounts, blockAccount, unblockAccount } from "../db/friends";
 import * as fs from "fs";
 import * as path from "path";
 import { ArraySchema } from "@colyseus/schema";
@@ -188,6 +189,19 @@ export class GameRoom extends Room<GameState> {
   private autoSaveInterval: ReturnType<typeof setInterval> | null = null;
   /** Tracks when each player entered a dungeon (sessionId → timestamp). */
   private dungeonEntryTimes = new Map<string, number>();
+  /** Pending trade requests: key = "fromSession:toSession" */
+  private pendingTradeRequests = new Map<string, { fromSessionId: string; toSessionId: string; timestamp: number }>();
+  /** Active trades: tradeId → trade state */
+  private activeTrades = new Map<string, {
+    p1Session: string;
+    p2Session: string;
+    p1Selected: { index: number; source: "inventory" | "equipment" }[];
+    p2Selected: { index: number; source: "inventory" | "equipment" }[];
+    p1Confirmed: boolean;
+    p2Confirmed: boolean;
+  }>();
+  /** Reverse lookup: sessionId → tradeId */
+  private sessionToTrade = new Map<string, string>();
 
   onCreate(_options: Record<string, unknown>) {
     this.setState(new GameState());
@@ -229,6 +243,9 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.ReturnToNexus, (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive || player.zone === "nexus") return;
+      if (this.sessionToTrade.has(client.sessionId)) {
+        this.cancelTrade(client.sessionId, "Trade cancelled: player changed zone.");
+      }
       this.teleportPlayerToNexus(player, client);
     });
 
@@ -246,6 +263,11 @@ export class GameRoom extends Room<GameState> {
     this.onMessage(ClientMessage.InteractPortal, async (client) => {
       const player = this.state.players.get(client.sessionId);
       if (!player || !player.alive) return;
+
+      // Cancel active trade on zone change
+      if (this.sessionToTrade.has(client.sessionId)) {
+        this.cancelTrade(client.sessionId, "Trade cancelled: player changed zone.");
+      }
 
       // Check nexus realm portals
       if (player.zone === "nexus") {
@@ -468,6 +490,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { bagId: string; slotIndex: number; targetConsumableSlot?: number; targetSlot?: number; targetEquipmentSlot?: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const bag = this.state.lootBags.get(data.bagId);
         if (!bag) return;
@@ -593,6 +616,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { slotIndex: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const slotIndex = data.slotIndex;
         if (slotIndex < 0 || slotIndex >= INVENTORY_SIZE) return;
@@ -623,6 +647,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { inventorySlot: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const slot = data.inventorySlot;
         if (slot < 0 || slot >= INVENTORY_SIZE) return;
@@ -657,6 +682,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { fromSlot: number; toSlot: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const { fromSlot, toSlot } = data;
         if (fromSlot < 0 || fromSlot >= INVENTORY_SIZE) return;
@@ -676,6 +702,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { equipmentSlot: number; inventorySlot?: number; dropOnGround?: boolean }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const eqSlot = data.equipmentSlot;
         if (eqSlot < 0 || eqSlot >= EQUIPMENT_SLOTS) return;
@@ -802,6 +829,19 @@ export class GameRoom extends Room<GameState> {
           return;
         }
         if (targetSessionId === client.sessionId) return;
+
+        // Check if either player has blocked the other
+        const targetTeleportBlocks = this.blockedDMs.get(targetPlayer.accountId);
+        if (targetTeleportBlocks?.has(player.accountId)) {
+          sendError("You are blocked.");
+          return;
+        }
+        const senderTeleportBlocks = this.blockedDMs.get(player.accountId);
+        if (senderTeleportBlocks?.has(targetPlayer.accountId)) {
+          sendError("You are blocked.");
+          return;
+        }
+
         if (!targetPlayer.alive) {
           sendError("That player is dead.");
           return;
@@ -1052,6 +1092,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { fromSource: string; fromSlot: number; toSource: string; toSlot: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
         if (!isVaultZone(player.zone)) return;
         if (!player.vaultItems) return;
 
@@ -1133,6 +1174,7 @@ export class GameRoom extends Room<GameState> {
       (client, data: { fromSource: string; fromSlot: number; toSource: string; toSlot: number }) => {
         const player = this.state.players.get(client.sessionId);
         if (!player || !player.alive) return;
+        if (this.sessionToTrade.has(client.sessionId)) return;
 
         const { fromSource, fromSlot, toSource, toSlot } = data;
 
@@ -1283,6 +1325,19 @@ export class GameRoom extends Room<GameState> {
       }
     });
 
+    // Get block list (client requests after handlers are ready)
+    this.onMessage(ClientMessage.GetBlockList, async (client) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.accountId) return;
+      try {
+        const blocked = await getBlockedAccounts(player.accountId);
+        client.send(ServerMessage.BlockList, { blocks: blocked.map((b) => ({ accountName: b.accountName })) });
+      } catch (err) {
+        console.error("Failed to load block list:", err);
+        client.send(ServerMessage.BlockList, { blocks: [] });
+      }
+    });
+
     // Send friend request (client sends character name; server resolves to account)
     this.onMessage(
       ClientMessage.AddFriend,
@@ -1317,6 +1372,7 @@ export class GameRoom extends Room<GameState> {
         try {
           const relationship = await getExistingRelationship(player.accountId, targetAccountId);
           if (relationship === "accepted" || relationship === "pending_outgoing") return;
+          if (relationship === "blocked_outgoing" || relationship === "blocked_incoming") return;
 
           // If target already sent us a request, auto-accept (mutual request)
           if (relationship === "pending_incoming") {
@@ -1501,6 +1557,242 @@ export class GameRoom extends Room<GameState> {
       player.accountName = acctName ?? "";
     });
 
+    // ─── Trading ───────────────────────────────────────────────────────
+
+    this.onMessage(ClientMessage.TradeRequest, (client, data: { targetName: string }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (this.sessionToTrade.has(client.sessionId)) return;
+
+      const targetName = (data.targetName ?? "").trim();
+      if (!targetName) return;
+
+      // Find target player in the room
+      let targetSession: string | null = null;
+      let foundTarget: Player | null = null;
+      this.state.players.forEach((p, sid) => {
+        if (p.name.toLowerCase() === targetName.toLowerCase() && sid !== client.sessionId) {
+          targetSession = sid;
+          foundTarget = p;
+        }
+      });
+      if (!targetSession || !foundTarget) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `Player "${targetName}" not found.`, channel: "global" });
+        return;
+      }
+      const targetPlayer = foundTarget as Player;
+
+      // Check if either player has blocked the other
+      const targetTradeBlocks = this.blockedDMs.get(targetPlayer.accountId);
+      if (targetTradeBlocks?.has(player.accountId)) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: "You are blocked.", channel: "global" });
+        return;
+      }
+      const senderTradeBlocks = this.blockedDMs.get(player.accountId);
+      if (senderTradeBlocks?.has(targetPlayer.accountId)) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: "You are blocked.", channel: "global" });
+        return;
+      }
+
+      if (!targetPlayer.alive) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `${targetName} is not available for trading.`, channel: "global" });
+        return;
+      }
+      if (this.sessionToTrade.has(targetSession)) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `${targetName} is already in a trade.`, channel: "global" });
+        return;
+      }
+
+      // Must be in the same zone
+      if (player.zone !== targetPlayer.zone) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `${targetName} is not in your zone.`, channel: "global" });
+        return;
+      }
+
+      // Must be within sync radius to initiate
+      const dx = player.x - targetPlayer.x;
+      const dy = player.y - targetPlayer.y;
+      const dist = Math.sqrt(dx * dx + dy * dy);
+      if (dist > ENEMY_SYNC_RADIUS) {
+        client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `${targetName} is too far away.`, channel: "global" });
+        return;
+      }
+
+      // Check for duplicate pending request
+      const key = `${client.sessionId}:${targetSession}`;
+      if (this.pendingTradeRequests.has(key)) return;
+
+      this.pendingTradeRequests.set(key, { fromSessionId: client.sessionId, toSessionId: targetSession, timestamp: Date.now() });
+
+      const targetClient = this.clients.getById(targetSession);
+      if (targetClient) {
+        targetClient.send(ServerMessage.TradeRequested, { fromName: player.name, fromSessionId: client.sessionId });
+      }
+
+      client.send(ServerMessage.ChatMessage, { playerId: player.id, playerName: "", text: `Trade request sent to ${targetName}.`, channel: "global" });
+    });
+
+    this.onMessage(ClientMessage.TradeAccept, (client, data: { requesterSessionId: string }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player || !player.alive) return;
+      if (this.sessionToTrade.has(client.sessionId)) return;
+
+      const key = `${data.requesterSessionId}:${client.sessionId}`;
+      const req = this.pendingTradeRequests.get(key);
+      if (!req) return;
+
+      // Check TTL
+      if (Date.now() - req.timestamp > TRADE_REQUEST_TTL_MS) {
+        this.pendingTradeRequests.delete(key);
+        return;
+      }
+      this.pendingTradeRequests.delete(key);
+
+      const requester = this.state.players.get(data.requesterSessionId);
+      if (!requester || !requester.alive) return;
+      if (this.sessionToTrade.has(data.requesterSessionId)) return;
+
+      // Create active trade
+      const tradeId = generateId("trade");
+      this.activeTrades.set(tradeId, {
+        p1Session: data.requesterSessionId,
+        p2Session: client.sessionId,
+        p1Selected: [],
+        p2Selected: [],
+        p1Confirmed: false,
+        p2Confirmed: false,
+      });
+      this.sessionToTrade.set(data.requesterSessionId, tradeId);
+      this.sessionToTrade.set(client.sessionId, tradeId);
+
+      // Send TradeStarted to both with partner inventory snapshots
+      const requesterClient = this.clients.getById(data.requesterSessionId);
+      const p1Inv = this.getPlayerInventorySnapshot(requester);
+      const p1Eq = this.getPlayerEquipmentSnapshot(requester);
+      const p2Inv = this.getPlayerInventorySnapshot(player);
+      const p2Eq = this.getPlayerEquipmentSnapshot(player);
+
+      if (requesterClient) {
+        requesterClient.send(ServerMessage.TradeStarted, {
+          partnerName: player.name,
+          partnerInventory: p2Inv,
+          partnerEquipment: p2Eq,
+        });
+      }
+      client.send(ServerMessage.TradeStarted, {
+        partnerName: requester.name,
+        partnerInventory: p1Inv,
+        partnerEquipment: p1Eq,
+      });
+    });
+
+    this.onMessage(ClientMessage.TradeDecline, (client, data: { requesterSessionId: string }) => {
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+
+      const key = `${data.requesterSessionId}:${client.sessionId}`;
+      const req = this.pendingTradeRequests.get(key);
+      if (!req) return;
+      this.pendingTradeRequests.delete(key);
+
+      const requesterClient = this.clients.getById(data.requesterSessionId);
+      if (requesterClient) {
+        requesterClient.send(ServerMessage.TradeDeclined, { byName: player.name });
+      }
+    });
+
+    this.onMessage(ClientMessage.TradeSelectSlot, (client, data: { slotIndex: number; source: "inventory" | "equipment" }) => {
+      const tradeId = this.sessionToTrade.get(client.sessionId);
+      if (!tradeId) return;
+      const trade = this.activeTrades.get(tradeId);
+      if (!trade) return;
+
+      const { slotIndex, source } = data;
+      if (source === "inventory" && (slotIndex < 0 || slotIndex >= INVENTORY_SIZE)) return;
+      if (source === "equipment" && (slotIndex < 0 || slotIndex >= EQUIPMENT_SLOTS)) return;
+
+      const isP1 = client.sessionId === trade.p1Session;
+      const selected = isP1 ? trade.p1Selected : trade.p2Selected;
+
+      // Don't add duplicates
+      if (selected.some(s => s.index === slotIndex && s.source === source)) return;
+
+      // Verify slot has an item
+      const player = this.state.players.get(client.sessionId);
+      if (!player) return;
+      const item = source === "inventory" ? player.inventory[slotIndex] : player.equipment[slotIndex];
+      if (!item || item.baseItemId === -1) return;
+
+      selected.push({ index: slotIndex, source });
+
+      // Reset confirmations on selection change
+      if (trade.p1Confirmed || trade.p2Confirmed) {
+        trade.p1Confirmed = false;
+        trade.p2Confirmed = false;
+      }
+
+      this.sendTradePartnerUpdate(trade, client.sessionId);
+    });
+
+    this.onMessage(ClientMessage.TradeDeselectSlot, (client, data: { slotIndex: number; source: "inventory" | "equipment" }) => {
+      const tradeId = this.sessionToTrade.get(client.sessionId);
+      if (!tradeId) return;
+      const trade = this.activeTrades.get(tradeId);
+      if (!trade) return;
+
+      const { slotIndex, source } = data;
+      const isP1 = client.sessionId === trade.p1Session;
+      const selected = isP1 ? trade.p1Selected : trade.p2Selected;
+
+      const idx = selected.findIndex(s => s.index === slotIndex && s.source === source);
+      if (idx === -1) return;
+      selected.splice(idx, 1);
+
+      // Reset confirmations on selection change
+      if (trade.p1Confirmed || trade.p2Confirmed) {
+        trade.p1Confirmed = false;
+        trade.p2Confirmed = false;
+      }
+
+      this.sendTradePartnerUpdate(trade, client.sessionId);
+    });
+
+    this.onMessage(ClientMessage.TradeConfirm, (client) => {
+      const tradeId = this.sessionToTrade.get(client.sessionId);
+      if (!tradeId) return;
+      const trade = this.activeTrades.get(tradeId);
+      if (!trade) return;
+
+      const isP1 = client.sessionId === trade.p1Session;
+      if (isP1) trade.p1Confirmed = true;
+      else trade.p2Confirmed = true;
+
+      // Notify partner of confirmation
+      this.sendTradePartnerUpdate(trade, client.sessionId);
+
+      // If both confirmed, execute the trade
+      if (trade.p1Confirmed && trade.p2Confirmed) {
+        this.executeTrade(tradeId);
+      }
+    });
+
+    this.onMessage(ClientMessage.TradeUnconfirm, (client) => {
+      const tradeId = this.sessionToTrade.get(client.sessionId);
+      if (!tradeId) return;
+      const trade = this.activeTrades.get(tradeId);
+      if (!trade) return;
+
+      const isP1 = client.sessionId === trade.p1Session;
+      if (isP1) trade.p1Confirmed = false;
+      else trade.p2Confirmed = false;
+
+      this.sendTradePartnerUpdate(trade, client.sessionId);
+    });
+
+    this.onMessage(ClientMessage.TradeExit, (client) => {
+      this.cancelTrade(client.sessionId, "Trade cancelled.");
+    });
+
     // Ping/pong for latency measurement
     this.onMessage(ClientMessage.Ping, (client, data: { t: number }) => {
       client.send(ServerMessage.Pong, { t: data.t });
@@ -1580,6 +1872,13 @@ export class GameRoom extends Room<GameState> {
       // Pre-populate friend cache so zone/status notifications skip DB
       this.populateFriendCache(payload.accountId);
 
+      // Load persisted block list into in-memory cache
+      getBlockedAccounts(payload.accountId).then((blocked) => {
+        if (blocked.length > 0) {
+          this.blockedDMs.set(payload.accountId, new Set(blocked.map((b) => b.accountId)));
+        }
+      }).catch((err) => console.error("Failed to load block list:", err));
+
       // Notify friends in this room that this player came online
       this.notifyFriendsOfStatusChange(payload.accountId, true, {
         name: character.name,
@@ -1649,6 +1948,17 @@ export class GameRoom extends Room<GameState> {
   async onLeave(client: Client, _consented: boolean) {
     const player = this.state.players.get(client.sessionId);
     this.dungeonEntryTimes.delete(client.sessionId);
+
+    // Cancel any active trade
+    if (this.sessionToTrade.has(client.sessionId)) {
+      this.cancelTrade(client.sessionId, "Trade cancelled: player disconnected.");
+    }
+    // Clean up pending trade requests involving this player
+    for (const [key, req] of this.pendingTradeRequests) {
+      if (req.fromSessionId === client.sessionId || req.toSessionId === client.sessionId) {
+        this.pendingTradeRequests.delete(key);
+      }
+    }
 
     // Notify friends in this room that this player went offline, then clean up
     if (player?.accountId) {
@@ -1745,6 +2055,199 @@ export class GameRoom extends Room<GameState> {
     return false;
   }
 
+  // ─── Trade helpers ──────────────────────────────────────────────────
+
+  private getPlayerInventorySnapshot(player: Player): ItemInstanceData[] {
+    const items: ItemInstanceData[] = [];
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      const slot = player.inventory[i];
+      items.push(slot ? schemaToItemData(slot) : createEmptyItemInstance());
+    }
+    return items;
+  }
+
+  private getPlayerEquipmentSnapshot(player: Player): ItemInstanceData[] {
+    const items: ItemInstanceData[] = [];
+    for (let i = 0; i < EQUIPMENT_SLOTS; i++) {
+      const slot = player.equipment[i];
+      items.push(slot ? schemaToItemData(slot) : createEmptyItemInstance());
+    }
+    return items;
+  }
+
+  private sendTradePartnerUpdate(
+    trade: { p1Session: string; p2Session: string; p1Selected: { index: number; source: string }[]; p2Selected: { index: number; source: string }[]; p1Confirmed: boolean; p2Confirmed: boolean },
+    senderSessionId: string,
+  ): void {
+    const isP1 = senderSessionId === trade.p1Session;
+    const partnerSessionId = isP1 ? trade.p2Session : trade.p1Session;
+    const senderSelected = isP1 ? trade.p1Selected : trade.p2Selected;
+    const senderConfirmed = isP1 ? trade.p1Confirmed : trade.p2Confirmed;
+
+    const sender = this.state.players.get(senderSessionId);
+    if (!sender) return;
+
+    const partnerClient = this.clients.getById(partnerSessionId);
+    if (partnerClient) {
+      partnerClient.send(ServerMessage.TradePartnerUpdate, {
+        selectedSlots: senderSelected,
+        confirmed: senderConfirmed,
+        inventory: this.getPlayerInventorySnapshot(sender),
+        equipment: this.getPlayerEquipmentSnapshot(sender),
+      });
+    }
+
+    // Also send back to the sender so they know about confirmation resets
+    const senderClient = this.clients.getById(senderSessionId);
+    if (senderClient) {
+      const partnerPlayer = this.state.players.get(partnerSessionId);
+      if (partnerPlayer) {
+        const partnerSelected = isP1 ? trade.p2Selected : trade.p1Selected;
+        const partnerConfirmed = isP1 ? trade.p2Confirmed : trade.p1Confirmed;
+        senderClient.send(ServerMessage.TradePartnerUpdate, {
+          selectedSlots: partnerSelected,
+          confirmed: partnerConfirmed,
+          inventory: this.getPlayerInventorySnapshot(partnerPlayer),
+          equipment: this.getPlayerEquipmentSnapshot(partnerPlayer),
+        });
+      }
+    }
+  }
+
+  private executeTrade(tradeId: string): void {
+    const trade = this.activeTrades.get(tradeId);
+    if (!trade) return;
+
+    const p1 = this.state.players.get(trade.p1Session);
+    const p2 = this.state.players.get(trade.p2Session);
+    if (!p1 || !p2) {
+      this.cleanupTrade(tradeId);
+      return;
+    }
+
+    // Collect items from p1's selections (going to p2)
+    const p1Items: ItemInstanceData[] = [];
+    for (const sel of trade.p1Selected) {
+      const slot = sel.source === "inventory" ? p1.inventory[sel.index] : p1.equipment[sel.index];
+      if (!slot || slot.baseItemId === -1) {
+        this.cancelTrade(trade.p1Session, "Trade failed: an item is no longer available.");
+        return;
+      }
+      p1Items.push(schemaToItemData(slot));
+    }
+
+    // Collect items from p2's selections (going to p1)
+    const p2Items: ItemInstanceData[] = [];
+    for (const sel of trade.p2Selected) {
+      const slot = sel.source === "inventory" ? p2.inventory[sel.index] : p2.equipment[sel.index];
+      if (!slot || slot.baseItemId === -1) {
+        this.cancelTrade(trade.p2Session, "Trade failed: an item is no longer available.");
+        return;
+      }
+      p2Items.push(schemaToItemData(slot));
+    }
+
+    // Count empty inventory slots each player will have after removing their items
+    const p1InvSlotsFreed = trade.p1Selected.filter(s => s.source === "inventory").length;
+    const p1EqSlotsFreed = trade.p1Selected.filter(s => s.source === "equipment").length;
+    const p2InvSlotsFreed = trade.p2Selected.filter(s => s.source === "inventory").length;
+    const p2EqSlotsFreed = trade.p2Selected.filter(s => s.source === "equipment").length;
+
+    // Current empty inv slots
+    let p1EmptyInv = 0;
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      const s = p1.inventory[i];
+      if (s && s.baseItemId === -1) p1EmptyInv++;
+    }
+    let p2EmptyInv = 0;
+    for (let i = 0; i < INVENTORY_SIZE; i++) {
+      const s = p2.inventory[i];
+      if (s && s.baseItemId === -1) p2EmptyInv++;
+    }
+
+    // After removing traded items, available slots = current empty + freed
+    const p1AvailableSlots = p1EmptyInv + p1InvSlotsFreed + p1EqSlotsFreed;
+    const p2AvailableSlots = p2EmptyInv + p2InvSlotsFreed + p2EqSlotsFreed;
+
+    // Items received go into inventory only
+    if (p2Items.length > p1AvailableSlots) {
+      this.cancelTrade(trade.p1Session, "Trade failed: not enough inventory space.");
+      return;
+    }
+    if (p1Items.length > p2AvailableSlots) {
+      this.cancelTrade(trade.p2Session, "Trade failed: not enough inventory space.");
+      return;
+    }
+
+    // Clear selected slots on p1
+    for (const sel of trade.p1Selected) {
+      const slot = sel.source === "inventory" ? p1.inventory[sel.index] : p1.equipment[sel.index];
+      if (slot) updateSchemaFromData(slot, createEmptyItemInstance());
+    }
+
+    // Clear selected slots on p2
+    for (const sel of trade.p2Selected) {
+      const slot = sel.source === "inventory" ? p2.inventory[sel.index] : p2.equipment[sel.index];
+      if (slot) updateSchemaFromData(slot, createEmptyItemInstance());
+    }
+
+    // Place p2's items into p1's inventory
+    for (const item of p2Items) {
+      for (let i = 0; i < INVENTORY_SIZE; i++) {
+        const s = p1.inventory[i];
+        if (s && s.baseItemId === -1) {
+          updateSchemaFromData(s, item);
+          break;
+        }
+      }
+    }
+
+    // Place p1's items into p2's inventory
+    for (const item of p1Items) {
+      for (let i = 0; i < INVENTORY_SIZE; i++) {
+        const s = p2.inventory[i];
+        if (s && s.baseItemId === -1) {
+          updateSchemaFromData(s, item);
+          break;
+        }
+      }
+    }
+
+    // Recalculate stats if equipment was traded
+    if (trade.p1Selected.some(s => s.source === "equipment")) recalcPlayerStats(p1);
+    if (trade.p2Selected.some(s => s.source === "equipment")) recalcPlayerStats(p2);
+
+    // Notify both
+    const c1 = this.clients.getById(trade.p1Session);
+    const c2 = this.clients.getById(trade.p2Session);
+    if (c1) c1.send(ServerMessage.TradeCompleted, {});
+    if (c2) c2.send(ServerMessage.TradeCompleted, {});
+
+    this.cleanupTrade(tradeId);
+  }
+
+  private cancelTrade(sessionId: string, reason: string): void {
+    const tradeId = this.sessionToTrade.get(sessionId);
+    if (!tradeId) return;
+    const trade = this.activeTrades.get(tradeId);
+    if (!trade) return;
+
+    const c1 = this.clients.getById(trade.p1Session);
+    const c2 = this.clients.getById(trade.p2Session);
+    if (c1) c1.send(ServerMessage.TradeCancelled, { reason });
+    if (c2) c2.send(ServerMessage.TradeCancelled, { reason });
+
+    this.cleanupTrade(tradeId);
+  }
+
+  private cleanupTrade(tradeId: string): void {
+    const trade = this.activeTrades.get(tradeId);
+    if (!trade) return;
+    this.sessionToTrade.delete(trade.p1Session);
+    this.sessionToTrade.delete(trade.p2Session);
+    this.activeTrades.delete(tradeId);
+  }
+
   private handleDirectMessage(client: Client, sender: { id: string; name: string; accountId: string }, text: string): void {
     const rest = text.substring(4); // strip "/dm "
     const spaceIdx = rest.indexOf(" ");
@@ -1781,11 +2284,18 @@ export class GameRoom extends Room<GameState> {
       return;
     }
 
-    // Check if sender is blocked by target
+    // Check if either player has blocked the other
     const targetBlocks = this.blockedDMs.get(targetPlayer.accountId);
     if (targetBlocks?.has(sender.accountId)) {
       client.send(ServerMessage.ChatMessage, {
-        playerName: "", text: "Cannot send DM: you are blocked.", channel: "dm",
+        playerName: "", text: "You are blocked.", channel: "dm",
+      });
+      return;
+    }
+    const senderBlocks = this.blockedDMs.get(sender.accountId);
+    if (senderBlocks?.has(targetPlayer.accountId)) {
+      client.send(ServerMessage.ChatMessage, {
+        playerName: "", text: "You are blocked.", channel: "dm",
       });
       return;
     }
@@ -1828,13 +2338,31 @@ export class GameRoom extends Room<GameState> {
       return;
     }
 
+    // Update in-memory block list
     if (!this.blockedDMs.has(player.accountId)) {
       this.blockedDMs.set(player.accountId, new Set());
     }
     this.blockedDMs.get(player.accountId)!.add(targetAccountId);
 
+    // Persist to DB (removes any existing friendship/pending requests, inserts blocked row)
+    blockAccount(player.accountId, targetAccountId).then(() => {
+      // Invalidate friend caches since friendship may have been removed
+      this.invalidateFriendCache(player.accountId);
+      this.invalidateFriendCache(targetAccountId);
+
+      // Notify both clients that the friendship was removed (if they were friends)
+      const targetSessionId = this.accountToSession.get(targetAccountId);
+      if (targetSessionId) {
+        const targetClient = this.clients.getById(targetSessionId);
+        if (targetClient) {
+          targetClient.send(ServerMessage.FriendRemoved, { accountId: player.accountId });
+        }
+      }
+      client.send(ServerMessage.FriendRemoved, { accountId: targetAccountId });
+    }).catch((err) => console.error("Failed to persist block:", err));
+
     client.send(ServerMessage.ChatMessage, {
-      playerName: "", text: `Blocked DMs from ${targetName}.`, channel: "dm",
+      playerName: "", text: `Blocked ${targetName}.`, channel: "dm",
     });
   }
 
@@ -1851,10 +2379,14 @@ export class GameRoom extends Room<GameState> {
 
     if (targetAccountId) {
       this.blockedDMs.get(player.accountId)?.delete(targetAccountId);
+
+      // Persist to DB
+      unblockAccount(player.accountId, targetAccountId)
+        .catch((err) => console.error("Failed to persist unblock:", err));
     }
 
     client.send(ServerMessage.ChatMessage, {
-      playerName: "", text: `Unblocked DMs from ${targetName}.`, channel: "dm",
+      playerName: "", text: `Unblocked ${targetName}.`, channel: "dm",
     });
   }
 
@@ -2103,6 +2635,15 @@ export class GameRoom extends Room<GameState> {
   private gameLoop(deltaTime: number): void {
     this.globalTick++;
     const tickNow = Date.now();
+
+    // Expire stale trade requests every 100 ticks (~5s at 20Hz)
+    if (this.globalTick % 100 === 0 && this.pendingTradeRequests.size > 0) {
+      for (const [key, req] of this.pendingTradeRequests) {
+        if (tickNow - req.timestamp > TRADE_REQUEST_TTL_MS) {
+          this.pendingTradeRequests.delete(key);
+        }
+      }
+    }
 
     // 1. Process player movement and shooting
     this.state.players.forEach((player) => {
@@ -2499,6 +3040,11 @@ export class GameRoom extends Room<GameState> {
           (c) => c.sessionId === event.playerId
         );
         if (player && client) {
+          // Cancel any active trade on death
+          if (this.sessionToTrade.has(event.playerId)) {
+            this.cancelTrade(event.playerId, "Trade cancelled: player died.");
+          }
+
           client.send(ServerMessage.PlayerDied, {});
 
           // Spawn a gravestone at the death location (cap at 200 to bound memory)

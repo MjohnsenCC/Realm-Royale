@@ -1,8 +1,8 @@
 import Phaser from "phaser";
 import { NetworkManager } from "../network/NetworkManager";
-import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX } from "@rotmg-lite/shared";
+import { ChatChannel, CHAT_MAX_LENGTH, CHAT_LOG_MAX, ENEMY_SYNC_RADIUS } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight } from "./UIScale";
-import { UI_PANEL_CORNER } from "./UITextures";
+import { UI_PANEL_CORNER, UI_BTN_CORNER } from "./UITextures";
 import { addFriend, removeFriend, isFriendByCharacterName, getFriendAccountIdByCharacterName, isAuthenticated } from "./FriendStore";
 import { canTeleportTo } from "./TeleportHelper";
 import { addText } from "./TextFactory";
@@ -11,6 +11,8 @@ interface ChatEntry {
   playerName: string;
   text: string;
   channel: ChatChannel;
+  actions?: { label: string; callback: () => void }[];
+  actionId?: string;
 }
 
 const VISIBLE_LINES = 8;
@@ -43,11 +45,18 @@ export class ChatUI {
   } | null = null;
   private ctxDismissListener: ((pointer: Phaser.Input.Pointer) => void) | null = null;
 
+  // Action button elements (for trade request accept/decline)
+  private actionBgs: Phaser.GameObjects.NineSlice[] = [];
+  private actionTexts: Phaser.GameObjects.Text[] = [];
+  private actionZones: Phaser.GameObjects.Zone[] = [];
+
   // Layout cache
   private panelX = 0;
   private panelY = 0;
   private panelW = 0;
   private panelH = 0;
+  private _offsetX = 0;
+  private _offsetY = 0;
 
   get isTyping(): boolean {
     return this._isTyping;
@@ -154,7 +163,7 @@ export class ChatUI {
     const H = this.scene.scale.height;
 
     this.panelW = Math.round(PANEL_WIDTH_REF * S);
-    this.panelX = Math.round(8 * S);
+    this.panelX = Math.round(8 * S) + this._offsetX;
 
     const fontSize = Math.max(8, Math.round(FONT_SIZE_REF * S));
     const lineH = Math.round(LINE_HEIGHT_REF * S);
@@ -165,7 +174,7 @@ export class ChatUI {
 
     // Build layout bottom-up from screen edge:
     // margin -> input -> gap -> label -> gap -> message lines
-    const inputTop = H - margin - inputH;
+    const inputTop = H - margin - inputH + this._offsetY;
     const labelTop = inputTop - gap - lineH;
     const messagesBottom = labelTop - gap;
     this.panelH = VISIBLE_LINES * lineH + pad * 2;
@@ -261,14 +270,25 @@ export class ChatUI {
     return lines.join("\n");
   }
 
+  private clearActionElements(): void {
+    for (const bg of this.actionBgs) bg.destroy();
+    for (const t of this.actionTexts) t.destroy();
+    for (const z of this.actionZones) z.destroy();
+    this.actionBgs = [];
+    this.actionTexts = [];
+    this.actionZones = [];
+  }
+
   private drawLog(): void {
     this.hideContextMenu();
+    this.clearActionElements();
     this.bg.setPosition(this.panelX, this.panelY);
     this.bg.setSize(this.panelW, this.panelH);
 
     const S = getUIScale();
     const pad = Math.round(PANEL_PADDING * S);
     const gap = Math.round(2 * S);
+    const fontSize = Math.max(8, Math.round(FONT_SIZE_REF * S));
 
     // Reset player name tracking
     this.linePlayerNames = new Array(VISIBLE_LINES).fill("");
@@ -290,6 +310,66 @@ export class ChatUI {
     while (slot >= 0 && msgIdx >= 0) {
       const m = this.messages[msgIdx];
       const t = this.lineTexts[slot];
+
+      // If this message has action buttons, render them first (below the text)
+      if (m.actions && m.actions.length > 0) {
+        const btnH = Math.round(12 * S);
+        const btnGap = Math.round(8 * S);
+        const btnY = curBottom - btnH;
+
+        if (btnY < topLimit) { msgIdx--; continue; }
+
+        let btnX = this.panelX + pad;
+        const BC = UI_BTN_CORNER;
+        for (const act of m.actions) {
+          const btnText = addText(this.scene, btnX, btnY, act.label, {
+            fontFamily: "'Press Start 2P', monospace",
+            fontSize: `${fontSize}px`,
+            color: act.label === "ACCEPT" ? "#44ff44" : "#ff4444",
+            stroke: "#000000",
+            strokeThickness: 2,
+          }).setScrollFactor(0).setDepth(92);
+
+          const btnW = btnText.width + Math.round(8 * S);
+          const btnBg = this.scene.add.nineslice(
+            btnX + btnW / 2, btnY + btnH / 2,
+            "ui-btn-default", undefined, btnW, btnH, BC, BC, BC, BC,
+          ).setOrigin(0.5, 0.5).setScrollFactor(0).setDepth(91);
+
+          // Center text on the background
+          btnText.setPosition(btnX + btnW / 2, btnY + btnH / 2).setOrigin(0.5, 0.5);
+
+          const zone = this.scene.add.zone(btnX + btnW / 2, btnY + btnH / 2, btnW, btnH)
+            .setScrollFactor(0).setDepth(93).setInteractive({ useHandCursor: true });
+
+          const origColor = act.label === "ACCEPT" ? "#44ff44" : "#ff4444";
+          zone.on("pointerover", () => {
+            btnText.setColor("#ffffff");
+            btnBg.setTexture("ui-btn-hover");
+          });
+          zone.on("pointerout", () => {
+            btnText.setColor(origColor);
+            btnBg.setTexture("ui-btn-default");
+          });
+
+          const callback = act.callback;
+          const actionId = m.actionId;
+          zone.on("pointerdown", () => {
+            btnBg.setTexture("ui-btn-pressed");
+            callback();
+            // Remove the action buttons from this message
+            if (actionId) this.removeActionMessage(actionId);
+          });
+
+          this.actionBgs.push(btnBg);
+          this.actionTexts.push(btnText);
+          this.actionZones.push(zone);
+          btnX += btnW + btnGap;
+        }
+
+        curBottom = btnY - gap;
+      }
+
       if (m.playerName) {
         t.setText(`${m.playerName}: ${m.text}`);
         t.setColor(m.channel === "global" ? "#ffcc44" : m.channel === "dm" ? "#cc66ff" : "#44ccff");
@@ -325,6 +405,30 @@ export class ChatUI {
     });
     if (this.messages.length > CHAT_LOG_MAX) {
       this.messages.shift();
+    }
+    this.drawLog();
+  }
+
+  addActionMessage(text: string, actions: { label: string; callback: () => void }[], actionId: string): void {
+    this.messages.push({
+      playerName: "",
+      text,
+      channel: "global" as ChatChannel,
+      actions,
+      actionId,
+    });
+    if (this.messages.length > CHAT_LOG_MAX) {
+      this.messages.shift();
+    }
+    this.drawLog();
+  }
+
+  removeActionMessage(actionId: string): void {
+    for (const m of this.messages) {
+      if (m.actionId === actionId) {
+        m.actions = undefined;
+        m.actionId = undefined;
+      }
     }
     this.drawLog();
   }
@@ -407,6 +511,14 @@ export class ChatUI {
     }
   }
 
+  setOffset(offsetX: number, offsetY: number): void {
+    if (this._offsetX === offsetX && this._offsetY === offsetY) return;
+    this._offsetX = offsetX;
+    this._offsetY = offsetY;
+    this.computeLayout();
+    this.drawLog();
+  }
+
   relayout(): void {
     this.hideContextMenu();
     this.computeLayout();
@@ -432,53 +544,51 @@ export class ChatUI {
     const localPlayer = room?.state.players.get(this.network.getSessionId()) as any;
     const isOwnName = localPlayer && localPlayer.name === playerName;
 
-    // DM (skip for own name)
-    if (!isOwnName) {
+    // Resolve account name for block checks
+    let accountName: string | null = null;
+    room?.state.players.forEach((p: any) => {
+      if (p.name === playerName && p.accountName) accountName = p.accountName as string;
+    });
+    const isBlocked = accountName ? this.blockedNames.has(accountName) : false;
+
+    if (!isOwnName && isBlocked) {
+      // Blocked players: only show Unblock
+      menuItems.push({
+        label: "Unblock",
+        action: () => {
+          if (accountName) this.blockedNames.delete(accountName);
+          this.network.sendChatMessage(`/unblock ${playerName}`, "global");
+        },
+      });
+    } else if (!isOwnName) {
+      // DM
       const dmName = playerName.startsWith("To ") ? playerName.substring(3) : playerName;
       menuItems.push({
         label: "DM",
         action: () => this.openInputWithText(`/dm ${dmName} `),
       });
-    }
 
-    // Block / Unblock (skip for own name)
-    if (!isOwnName) {
-      const isBlocked = this.blockedNames.has(playerName);
-      menuItems.push({
-        label: isBlocked ? "Unblock" : "Block",
-        action: () => {
-          if (isBlocked) {
-            this.blockedNames.delete(playerName);
-            this.network.sendChatMessage(`/unblock ${playerName}`, "global");
-          } else {
-            this.blockedNames.add(playerName);
-            this.network.sendChatMessage(`/block ${playerName}`, "global");
+      // Trade (nearby players within sync radius)
+      if (localPlayer) {
+        let targetNearby = false;
+        room?.state.players.forEach((p: any) => {
+          if (p.name === playerName && p.zone === localPlayer.zone) {
+            const dx = p.x - localPlayer.x;
+            const dy = p.y - localPlayer.y;
+            if (Math.sqrt(dx * dx + dy * dy) <= ENEMY_SYNC_RADIUS) {
+              targetNearby = true;
+            }
           }
-        },
-      });
-    }
-
-    // Add Friend / Remove Friend (skip for own name)
-    if (!isOwnName) {
-      if (isFriendByCharacterName(playerName)) {
-        menuItems.push({
-          label: "Remove Friend",
-          action: () => {
-            const accountId = getFriendAccountIdByCharacterName(playerName);
-            if (accountId) removeFriend(accountId);
-          },
         });
-      } else {
-        menuItems.push({
-          label: "Add Friend",
-          action: () => addFriend(playerName),
-        });
+        if (targetNearby) {
+          menuItems.push({
+            label: "Trade",
+            action: () => this.network.sendTradeRequest(playerName),
+          });
+        }
       }
-    }
 
-    // Teleport To (any player in the room, costs portal gem)
-    if (!isOwnName) {
-      // Look up the target player's zone from room state
+      // Teleport To
       let targetZone: string | undefined;
       room?.state.players.forEach((p: any) => {
         if (p.name === playerName) targetZone = p.zone as string;
@@ -488,6 +598,32 @@ export class ChatUI {
           label: "Teleport To",
           action: () => this.network.sendTeleportToPlayer(playerName),
           icon: "item-portal-gem",
+        });
+      }
+
+      // Block / Unfriend and Block
+      const isFriend = isFriendByCharacterName(playerName);
+      menuItems.push({
+        label: isFriend ? "Unfriend and Block" : "Block",
+        action: () => {
+          if (accountName) this.blockedNames.add(accountName);
+          this.network.sendChatMessage(`/block ${playerName}`, "global");
+        },
+      });
+
+      // Add Friend / Remove Friend
+      if (isFriend) {
+        menuItems.push({
+          label: "Remove Friend",
+          action: () => {
+            const accId = getFriendAccountIdByCharacterName(playerName);
+            if (accId) removeFriend(accId);
+          },
+        });
+      } else {
+        menuItems.push({
+          label: "Add Friend",
+          action: () => addFriend(playerName),
         });
       }
     }
@@ -583,6 +719,11 @@ export class ChatUI {
     for (const z of this.ctxMenu.menuZones) z.destroy();
     for (const ic of this.ctxMenu.menuIcons) ic.destroy();
     this.ctxMenu = null;
+  }
+
+  setBlockedNames(names: string[]): void {
+    this.blockedNames.clear();
+    for (const n of names) this.blockedNames.add(n);
   }
 
   destroy(): void {

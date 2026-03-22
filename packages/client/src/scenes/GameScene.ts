@@ -18,7 +18,7 @@ import { EscapeMenuUI } from "../ui/EscapeMenuUI";
 import { OptionsUI } from "../ui/OptionsUI";
 import { generateEntityTextures, addOutlineToImageData, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
-import { getUIScale, updateScreenDimensions } from "../ui/UIScale";
+import { getUIScale, updateScreenDimensions, HUD_REF_WIDTH } from "../ui/UIScale";
 import { addText } from "../ui/TextFactory";
 import {
   HOSTILE_WIDTH,
@@ -476,9 +476,60 @@ export class GameScene extends Phaser.Scene {
       }
     });
 
-    // Request friends list and pending requests from server (handlers are now registered)
+    // --- Trade message handlers ---
+
+    room.onMessage(ServerMessage.TradeRequested, (data: { fromName: string; fromSessionId: string }) => {
+      const actionId = `trade-${data.fromSessionId}-${Date.now()}`;
+      this.chatUI.addActionMessage(
+        `${data.fromName} wants to trade with you`,
+        [
+          { label: "ACCEPT", callback: () => this.network.sendTradeAccept(data.fromSessionId) },
+          { label: "DECLINE", callback: () => this.network.sendTradeDecline(data.fromSessionId) },
+        ],
+        actionId,
+      );
+    });
+
+    room.onMessage(ServerMessage.TradeStarted, (data: { partnerName: string; partnerInventory: ItemInstanceData[]; partnerEquipment: ItemInstanceData[] }) => {
+      // Close other panels
+      if (this.statsPanel?.isVisible()) this.statsPanel.hide();
+      if (this.socialPanel?.isVisible()) this.socialPanel.hide();
+      this.hud.enterTradeMode(data.partnerName, data.partnerInventory, data.partnerEquipment);
+      this.updateChatOffset();
+    });
+
+    room.onMessage(ServerMessage.TradePartnerUpdate, (data: { selectedSlots: { index: number; source: string }[]; confirmed: boolean; inventory: ItemInstanceData[]; equipment: ItemInstanceData[] }) => {
+      if (this.hud.isInTradeMode()) {
+        this.hud.tradeUI.updatePartner(data.selectedSlots, data.confirmed, data.inventory, data.equipment);
+      }
+    });
+
+    room.onMessage(ServerMessage.TradeCompleted, () => {
+      this.hud.exitTradeMode();
+      this.updateChatOffset();
+      this.chatUI.addMessage({ playerName: "", text: "Trade completed!", channel: "global" as ChatChannel });
+    });
+
+    room.onMessage(ServerMessage.TradeCancelled, (data: { reason: string }) => {
+      this.hud.exitTradeMode();
+      this.updateChatOffset();
+      this.chatUI.addMessage({ playerName: "", text: data.reason, channel: "global" as ChatChannel });
+    });
+
+    room.onMessage(ServerMessage.TradeDeclined, (data: { byName: string }) => {
+      this.chatUI.addMessage({ playerName: "", text: `${data.byName} declined your trade request.`, channel: "global" as ChatChannel });
+    });
+
+    room.onMessage(ServerMessage.BlockList, (data: { blocks: { accountName: string }[] }) => {
+      const names = data.blocks.map((b) => b.accountName);
+      this.chatUI.setBlockedNames(names);
+      this.socialPanel?.setBlockedNames(names);
+    });
+
+    // Request friends list, pending requests, and block list from server (handlers are now registered)
     this.network.sendGetFriendsList();
     this.network.sendGetFriendRequests();
+    this.network.sendGetBlockList();
 
     // Pre-render all entity shapes into reusable textures (batched draw calls)
     generateEntityTextures(this);
@@ -636,6 +687,9 @@ export class GameScene extends Phaser.Scene {
       (name: string) => {
         this.network.sendTeleportToPlayer(name);
       },
+      (name: string) => {
+        this.network.sendTradeRequest(name);
+      },
     );
     this.hud.setSocialButtonCallback(() => this.toggleSocialPanel());
 
@@ -715,6 +769,7 @@ export class GameScene extends Phaser.Scene {
       this.hud.lootBagUI.hide();
       this.statsPanel.hide();
       this.socialPanel.hide();
+      this.updateChatOffset();
       // Clear stale bag sprites from previous zone
       this.bagSprites.forEach((sprite) => sprite.destroy());
       this.bagSprites.clear();
@@ -871,11 +926,13 @@ export class GameScene extends Phaser.Scene {
       this.hud.vaultUI.show(data.items);
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("right");
       if (this.socialPanel.isVisible()) this.socialPanel.setSide("right");
+      this.updateChatOffset();
     });
     room.onMessage(ServerMessage.VaultClosed, () => {
       this.hud.vaultUI.hide();
       if (this.statsPanel.isVisible()) this.statsPanel.setSide("left");
       if (this.socialPanel.isVisible()) this.socialPanel.setSide("left");
+      this.updateChatOffset();
     });
     room.onMessage(ServerMessage.VaultUpdated, (data: { items: ItemInstanceData[] }) => {
       this.hud.vaultUI.updateItems(data.items);
@@ -3518,6 +3575,28 @@ export class GameScene extends Phaser.Scene {
     this.optionsUI.relayout();
   }
 
+  private updateChatOffset(): void {
+    const leftPanelOpen =
+      this.socialPanel.isVisible() ||
+      this.statsPanel.isVisible() ||
+      this.hud.vaultUI.isVisible() ||
+      this.hud.isInTradeMode();
+    if (leftPanelOpen) {
+      const S = getUIScale();
+      const screenW = this.scale.width;
+      const screenH = this.scale.height;
+      const hudW = Math.min(Math.round(HUD_REF_WIDTH * S), Math.round(screenW * 0.4));
+      const hudX = Math.round(screenW / 2 - hudW / 2);
+      const defaultX = Math.round(8 * S);
+      const hudTop = this.hud.getPanelTop();
+      const defaultBottom = screenH - Math.round(8 * S);
+      const offsetY = -(defaultBottom - hudTop + Math.round(8 * S));
+      this.chatUI.setOffset(hudX - defaultX, offsetY);
+    } else {
+      this.chatUI.setOffset(0, 0);
+    }
+  }
+
   private closeLeftPanels(except?: "stats" | "vault" | "crafting" | "social"): void {
     if (except !== "vault" && this.hud.vaultUI.isVisible()) {
       this.hud.vaultUI.hide();
@@ -3535,6 +3614,7 @@ export class GameScene extends Phaser.Scene {
     if (except !== "stats" && except !== "vault" && except !== "crafting" && this.statsPanel.isVisible()) {
       this.statsPanel.hide();
     }
+    this.updateChatOffset();
   }
 
   private toggleStatsPanel(): void {
@@ -3549,6 +3629,7 @@ export class GameScene extends Phaser.Scene {
       }
       this.statsPanel.show();
     }
+    this.updateChatOffset();
   }
 
   private toggleSocialPanel(): void {
@@ -3569,6 +3650,7 @@ export class GameScene extends Phaser.Scene {
       { const d = this.gatherSocialData(); this.socialPanel.populate(d.nearby, d.friends, d.incomingRequests, d.outgoingRequests); }
       this.socialPanel.show();
     }
+    this.updateChatOffset();
   }
 
   private gatherSocialData(): { nearby: NearbyPlayerInfo[]; friends: NearbyPlayerInfo[]; incomingRequests: FriendRequestEntry[]; outgoingRequests: FriendRequestEntry[] } {
@@ -3754,7 +3836,6 @@ export class GameScene extends Phaser.Scene {
         foundModifierTiers,
         foundRarityBoost,
         foundQuantityBoost,
-        shiftHeld
       );
     } else if (shiftHeld && isDungeonZone(this.localZone) && this.cachedDungeonStats) {
       // Inside dungeon + Shift held: show cached tooltip
@@ -3765,7 +3846,6 @@ export class GameScene extends Phaser.Scene {
         c.modifierTiers,
         c.lootRarityBoost,
         c.lootQuantityBoost,
-        true
       );
     } else {
       this.dungeonTooltip.hide();

@@ -43,6 +43,13 @@ export class EnemyAI {
       // Performance: skip AI for enemies far from all players
       if (!this.isNearAnyPlayer(enemy, state, AI_UPDATE_RANGE)) return;
 
+      // Lag compensation: shift position history before AI moves the enemy
+      enemy.prevX2 = enemy.prevX1;
+      enemy.prevY2 = enemy.prevY1;
+      enemy.prevX1 = enemy.x;
+      enemy.prevY1 = enemy.y;
+      if (enemy.posHistoryReady < 2) enemy.posHistoryReady++;
+
       const prevX = enemy.x;
       const prevY = enemy.y;
 

@@ -19,6 +19,7 @@ const UI_SPRITE_KEYS = [
   "ui-slot-empty",
   "ui-slot-filled",
   "ui-slot-highlight",
+  "ui-slot-selected",
   // Bars
   "ui-bar-frame",
   "ui-bar-hp",

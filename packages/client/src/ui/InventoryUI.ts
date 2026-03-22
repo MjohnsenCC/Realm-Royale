@@ -18,6 +18,7 @@ import { drawItemIcon } from "./ItemIcons";
 import { getItemSpriteKey, getItemOutlinedSize } from "./ItemTextures";
 import { addText } from "./TextFactory";
 import type { DragManager } from "./DragManager";
+import { NetworkManager } from "../network/NetworkManager";
 
 const BASE_SLOT_SIZE = 36;
 const BASE_SLOT_GAP = 4;
@@ -80,6 +81,12 @@ export class InventoryUI {
 
   // Character class (for empty-slot placeholders)
   private characterClass: number = 0;
+
+  // Trade mode
+  private tradeMode = false;
+  private tradeSelectedInv = new Set<number>();
+  private tradeSelectedEq = new Set<number>();
+  private onTradeSelectionChange: (() => void) | null = null;
 
   // Scaled dimensions
   private S: number;
@@ -167,6 +174,10 @@ export class InventoryUI {
       });
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
         if (pointer.leftButtonDown()) {
+          if (this.tradeMode) {
+            this.toggleTradeSlot(i, "equipment");
+            return;
+          }
           const item = this.currentEquipment[i];
           if (item && item.baseItemId >= 0 && this.dragManager) {
             this.dragManager.onSlotPointerDown(
@@ -237,6 +248,10 @@ export class InventoryUI {
 
       zone.on("pointerdown", (pointer: Phaser.Input.Pointer) => {
         if (pointer.leftButtonDown()) {
+          if (this.tradeMode) {
+            this.toggleTradeSlot(i, "inventory");
+            return;
+          }
           const item = this.currentInventory[i];
           if (item && item.baseItemId >= 0 && this.dragManager) {
             this.dragManager.onSlotPointerDown(
@@ -462,6 +477,11 @@ export class InventoryUI {
         this.slotBgImages[i].clearTint();
       }
 
+      // Trade mode selection highlight
+      if (this.tradeMode && this.tradeSelectedInv.has(i)) {
+        this.slotBgImages[i].setTexture("ui-slot-selected");
+      }
+
       this.tierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
       this.qtyTexts[i].setPosition(sx + 2, sy + this.slotSize - 2);
       this.itemTexts[i].setPosition(sx + this.slotSize / 2, sy + this.slotSize / 2);
@@ -542,6 +562,11 @@ export class InventoryUI {
       } else {
         this.eqSlotBgImages[i].setAlpha(1);
         this.eqSlotBgImages[i].clearTint();
+      }
+
+      // Trade mode selection highlight
+      if (this.tradeMode && this.tradeSelectedEq.has(i)) {
+        this.eqSlotBgImages[i].setTexture("ui-slot-selected");
       }
 
       this.eqTierTexts[i].setPosition(sx + this.slotSize - 2, sy + this.slotSize - 2);
@@ -727,6 +752,61 @@ export class InventoryUI {
       });
     }
     return bounds;
+  }
+
+  // --- Trade mode ---
+
+  enterTradeMode(onSelectionChange?: () => void): void {
+    this.tradeMode = true;
+    this.tradeSelectedInv.clear();
+    this.tradeSelectedEq.clear();
+    this.onTradeSelectionChange = onSelectionChange ?? null;
+    this.drawSlots();
+    this.drawEquipmentSlots();
+  }
+
+  exitTradeMode(): void {
+    this.tradeMode = false;
+    this.tradeSelectedInv.clear();
+    this.tradeSelectedEq.clear();
+    this.onTradeSelectionChange = null;
+    this.drawSlots();
+    this.drawEquipmentSlots();
+  }
+
+  isInTradeMode(): boolean {
+    return this.tradeMode;
+  }
+
+  private toggleTradeSlot(index: number, source: "inventory" | "equipment"): void {
+    const set = source === "inventory" ? this.tradeSelectedInv : this.tradeSelectedEq;
+    const items = source === "inventory" ? this.currentInventory : this.currentEquipment;
+
+    if (set.has(index)) {
+      set.delete(index);
+      NetworkManager.getInstance().sendTradeDeselectSlot(index, source);
+    } else {
+      // Only select non-empty slots
+      if (items[index] && items[index].baseItemId >= 0) {
+        set.add(index);
+        NetworkManager.getInstance().sendTradeSelectSlot(index, source);
+      } else {
+        return; // Nothing to toggle
+      }
+    }
+
+    if (source === "inventory") this.drawSlots();
+    else this.drawEquipmentSlots();
+
+    // Notify that selection changed (resets own confirmation)
+    if (this.onTradeSelectionChange) this.onTradeSelectionChange();
+  }
+
+  clearTradeSelections(): void {
+    this.tradeSelectedInv.clear();
+    this.tradeSelectedEq.clear();
+    this.drawSlots();
+    this.drawEquipmentSlots();
   }
 }
 

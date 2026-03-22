@@ -45,13 +45,13 @@ export async function getAccountFriends(accountId: string): Promise<FriendRecord
 }
 
 /**
- * Check if any relationship (pending or accepted) exists between two accounts.
- * Returns: "accepted" | "pending_outgoing" | "pending_incoming" | null
+ * Check if any relationship (pending, accepted, or blocked) exists between two accounts.
+ * Returns: "accepted" | "pending_outgoing" | "pending_incoming" | "blocked_outgoing" | "blocked_incoming" | null
  */
 export async function getExistingRelationship(
   accountId: string,
   targetAccountId: string,
-): Promise<"accepted" | "pending_outgoing" | "pending_incoming" | null> {
+): Promise<"accepted" | "pending_outgoing" | "pending_incoming" | "blocked_outgoing" | "blocked_incoming" | null> {
   const supabase = getSupabase();
 
   const { data, error } = await supabase
@@ -67,6 +67,8 @@ export async function getExistingRelationship(
 
   for (const row of data) {
     if (row.status === "accepted") return "accepted";
+    if (row.status === "blocked" && row.account_id === accountId) return "blocked_outgoing";
+    if (row.status === "blocked" && row.account_id === targetAccountId) return "blocked_incoming";
     if (row.status === "pending" && row.account_id === accountId) return "pending_outgoing";
     if (row.status === "pending" && row.account_id === targetAccountId) return "pending_incoming";
   }
@@ -225,5 +227,82 @@ export async function removeAccountFriend(
 
   if (error) {
     throw new Error(`Failed to remove friend between ${accountId} and ${friendAccountId}: ${error.message}`);
+  }
+}
+
+/**
+ * Get all accounts blocked by the given account.
+ */
+export async function getBlockedAccounts(
+  accountId: string,
+): Promise<{ accountId: string; accountName: string }[]> {
+  const supabase = getSupabase();
+
+  const { data, error } = await supabase
+    .from("friends")
+    .select("friend_account_id, accounts!friends_friend_account_id_fkey(account_name)")
+    .eq("account_id", accountId)
+    .eq("status", "blocked");
+
+  if (error || !data) {
+    return [];
+  }
+
+  return data.map((row: any) => ({
+    accountId: row.friend_account_id as string,
+    accountName: (row.accounts?.account_name as string) ?? "",
+  }));
+}
+
+/**
+ * Block an account: removes any existing relationship (friendship, pending requests)
+ * between both accounts and inserts a single "blocked" row.
+ */
+export async function blockAccount(
+  accountId: string,
+  targetAccountId: string,
+): Promise<void> {
+  const supabase = getSupabase();
+
+  // Remove any existing rows between the two accounts (both directions)
+  const { error: deleteError } = await supabase
+    .from("friends")
+    .delete()
+    .or(
+      `and(account_id.eq.${accountId},friend_account_id.eq.${targetAccountId}),and(account_id.eq.${targetAccountId},friend_account_id.eq.${accountId})`,
+    );
+
+  if (deleteError) {
+    throw new Error(`Failed to clear existing relationship before blocking: ${deleteError.message}`);
+  }
+
+  // Insert the blocked row
+  const { error: insertError } = await supabase
+    .from("friends")
+    .insert({ account_id: accountId, friend_account_id: targetAccountId, status: "blocked" });
+
+  if (insertError) {
+    throw new Error(`Failed to block account: ${insertError.message}`);
+  }
+}
+
+/**
+ * Unblock an account: removes the "blocked" row.
+ */
+export async function unblockAccount(
+  accountId: string,
+  targetAccountId: string,
+): Promise<void> {
+  const supabase = getSupabase();
+
+  const { error } = await supabase
+    .from("friends")
+    .delete()
+    .eq("account_id", accountId)
+    .eq("friend_account_id", targetAccountId)
+    .eq("status", "blocked");
+
+  if (error) {
+    throw new Error(`Failed to unblock account: ${error.message}`);
   }
 }

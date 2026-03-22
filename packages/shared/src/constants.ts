@@ -72,6 +72,9 @@ export const CRAFTING_TABLE_INTERACT_RADIUS = 60;
 // Portal interaction radius
 export const PORTAL_RADIUS = 40;
 
+// Trading
+export const TRADE_REQUEST_TTL_MS = 30_000;
+
 // Inventory & Loot Bags
 export const INVENTORY_SIZE = 8;
 export const BAG_SIZE = 8;

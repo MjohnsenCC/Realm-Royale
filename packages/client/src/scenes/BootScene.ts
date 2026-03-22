@@ -120,6 +120,11 @@ export class BootScene extends Phaser.Scene {
     }
     this.load.image("ut-stat-icon", "assets/sprites/UI/stat_icons/ut_stat_icon_0.png");
 
+    // UI icons — per-tier dungeon modifier icons
+    for (let t = 1; t <= 5; t++) {
+      this.load.image(`dungeon-stat-icon-t${t}`, `assets/sprites/UI/stat_icons/dungeon_stat_icon_t${t}.png`);
+    }
+
     // Portal sprites
     this.load.image("portal-the-wild", "assets/sprites/decorations/portals/realm/the-wild_portal.png");
     this.load.image("portal-the-ruins", "assets/sprites/decorations/portals/realm/the-ruin_portal.png");
@@ -146,6 +151,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-slot-empty", "assets/sprites/UI/slots/ui-slot-empty.png");
     this.load.image("ui-slot-filled", "assets/sprites/UI/slots/ui-slot-filled.png");
     this.load.image("ui-slot-highlight", "assets/sprites/UI/slots/ui-slot-highlight.png");
+    this.load.image("ui-slot-selected", "assets/sprites/UI/slots/ui-slot-selected.png");
 
     // UI sprites — bars
     this.load.image("ui-bar-frame", "assets/sprites/UI/bars/ui-bar-frame.png");

@@ -5,6 +5,7 @@ import {
   getItemSubtype,
   CLASS_NAMES,
   getZoneDisplayName,
+  ENEMY_SYNC_RADIUS,
 } from "@rotmg-lite/shared";
 import type { ItemInstanceData } from "@rotmg-lite/shared";
 import { getUIScale, getScreenWidth, getScreenHeight, PANEL_REF_WIDTH } from "./UIScale";
@@ -145,6 +146,7 @@ export class SocialPanel {
   private onDeclineRequest: ((accountId: string) => void) | null = null;
   private onCancelRequest: ((accountId: string) => void) | null = null;
   private onTeleportTo: ((name: string) => void) | null = null;
+  private onTrade: ((name: string) => void) | null = null;
 
   // Client-side tracking of blocked names
   private blockedNames = new Set<string>();
@@ -451,6 +453,7 @@ export class SocialPanel {
     onDeclineRequest: (accountId: string) => void,
     onCancelRequest: (accountId: string) => void,
     onTeleportTo: (name: string) => void,
+    onTrade: (name: string) => void,
   ): void {
     this.onDM = onDM;
     this.onBlock = onBlock;
@@ -459,6 +462,12 @@ export class SocialPanel {
     this.onDeclineRequest = onDeclineRequest;
     this.onCancelRequest = onCancelRequest;
     this.onTeleportTo = onTeleportTo;
+    this.onTrade = onTrade;
+  }
+
+  setBlockedNames(names: string[]): void {
+    this.blockedNames.clear();
+    for (const n of names) this.blockedNames.add(n);
   }
 
   populate(players: NearbyPlayerInfo[], allFriends: NearbyPlayerInfo[], incomingRequests: FriendRequestEntry[] = [], outgoingRequests: FriendRequestEntry[] = []): void {
@@ -912,63 +921,78 @@ export class SocialPanel {
         });
       }
     } else {
-      // DM option (only for online players with a character name)
-      if (info.name) {
-        menuItems.push({
-          label: "DM",
-          action: () => { if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget!.name); },
-        });
-      }
+      const isBlocked = this.blockedNames.has(info.accountName);
 
-      // Teleport To (online friends only, eligible zone)
-      if (info.isFriend && info.online && info.name && canTeleportTo(info.name, info.zone)) {
+      if (isBlocked) {
+        // Blocked players: only show Unblock
         menuItems.push({
-          label: "Teleport To",
-          action: () => { if (this.ctxTarget && this.onTeleportTo) this.onTeleportTo(this.ctxTarget.name); },
-          icon: "item-portal-gem",
-        });
-      }
-
-      // Block / Unblock
-      if (info.name) {
-        const isBlocked = this.blockedNames.has(info.name);
-        menuItems.push({
-          label: isBlocked ? "Unblock" : "Block",
+          label: "Unblock",
           action: () => {
             if (!this.ctxTarget || !this.onBlock) return;
-            const name = this.ctxTarget.name;
-            if (isBlocked) {
-              this.blockedNames.delete(name);
-              this.onBlock(name, false);
-            } else {
-              this.blockedNames.add(name);
-              this.onBlock(name, true);
-            }
+            this.blockedNames.delete(this.ctxTarget.accountName);
+            this.onBlock(this.ctxTarget.name, false);
           },
         });
-      }
-
-      // Friend/request option
-      if (info.isFriend) {
-        menuItems.push({
-          label: "Remove Friend",
-          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
-        });
-      } else if (hasPendingRequestToByName(info.accountName)) {
-        menuItems.push({
-          label: "Cancel Request",
-          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
-        });
-      } else if (hasPendingRequestFromByName(info.accountName)) {
-        menuItems.push({
-          label: "Accept Request",
-          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
-        });
       } else {
-        menuItems.push({
-          label: "Send Request",
-          action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
-        });
+        // DM option (only for players with a character name)
+        if (info.name) {
+          menuItems.push({
+            label: "DM",
+            action: () => { if (this.ctxTarget && this.onDM) this.onDM(this.ctxTarget!.name); },
+          });
+        }
+
+        // Trade (nearby players only — must have distance within sync radius)
+        if (info.name && info.online && info.distance !== undefined && info.distance <= ENEMY_SYNC_RADIUS) {
+          menuItems.push({
+            label: "Trade",
+            action: () => { if (this.ctxTarget && this.onTrade) this.onTrade(this.ctxTarget!.name); },
+          });
+        }
+
+        // Teleport To (online friends only, eligible zone)
+        if (info.isFriend && info.online && info.name && canTeleportTo(info.name, info.zone)) {
+          menuItems.push({
+            label: "Teleport To",
+            action: () => { if (this.ctxTarget && this.onTeleportTo) this.onTeleportTo(this.ctxTarget.name); },
+            icon: "item-portal-gem",
+          });
+        }
+
+        // Block / Unfriend and Block
+        if (info.name) {
+          menuItems.push({
+            label: info.isFriend ? "Unfriend and Block" : "Block",
+            action: () => {
+              if (!this.ctxTarget || !this.onBlock) return;
+              this.blockedNames.add(this.ctxTarget.accountName);
+              this.onBlock(this.ctxTarget.name, true);
+            },
+          });
+        }
+
+        // Friend/request option
+        if (info.isFriend) {
+          menuItems.push({
+            label: "Remove Friend",
+            action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+          });
+        } else if (hasPendingRequestToByName(info.accountName)) {
+          menuItems.push({
+            label: "Cancel Request",
+            action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+          });
+        } else if (hasPendingRequestFromByName(info.accountName)) {
+          menuItems.push({
+            label: "Accept Request",
+            action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+          });
+        } else {
+          menuItems.push({
+            label: "Add Friend",
+            action: () => { if (this.ctxTarget && this.onToggleFriend) this.onToggleFriend(this.ctxTarget!.accountName || this.ctxTarget!.name); },
+          });
+        }
       }
     }
 

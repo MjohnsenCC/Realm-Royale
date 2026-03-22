@@ -96,6 +96,12 @@ export class ItemTooltip {
   // Divider Y positions (drawn each frame in drawBgAndPosition)
   private dividerYs: number[] = [];
 
+  // Hover delay: tooltip appears after a short pause
+  private static readonly HOVER_DELAY_MS = 100;
+  private _delayTimer: ReturnType<typeof setTimeout> | null = null;
+  private _shown = false;
+  private _pendingArgs: { item: ItemInstanceData; screenX: number; screenY: number; shiftHeld: boolean } | null = null;
+
   private S: number;
   private tooltipWidth: number;
   private tooltipPadding: number;
@@ -280,6 +286,26 @@ export class ItemTooltip {
       return;
     }
 
+    // If already visible, render immediately (position update).
+    // Otherwise, start a delay timer before first appearance.
+    if (!this._shown) {
+      this._pendingArgs = { item, screenX, screenY, shiftHeld };
+      if (this._delayTimer === null) {
+        this._delayTimer = setTimeout(() => {
+          this._delayTimer = null;
+          this._shown = true;
+          const args = this._pendingArgs!;
+          this._pendingArgs = null;
+          this._renderShow(args.item, args.screenX, args.screenY, args.shiftHeld);
+        }, ItemTooltip.HOVER_DELAY_MS);
+      }
+      return;
+    }
+
+    this._renderShow(item, screenX, screenY, shiftHeld);
+  }
+
+  private _renderShow(item: ItemInstanceData, screenX: number, screenY: number, shiftHeld: boolean): void {
     const category = getItemCategory(item.baseItemId);
     const subtype = getItemSubtype(item.baseItemId);
 
@@ -878,6 +904,12 @@ export class ItemTooltip {
   }
 
   hide(): void {
+    if (this._delayTimer !== null) {
+      clearTimeout(this._delayTimer);
+      this._delayTimer = null;
+    }
+    this._pendingArgs = null;
+    this._shown = false;
     this.container.setVisible(false);
   }
 

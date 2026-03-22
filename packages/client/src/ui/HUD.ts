@@ -9,8 +9,10 @@ import { getUIScale, getScreenWidth, getScreenHeight, HUD_REF_WIDTH } from "./UI
 import { generateItemTextures } from "./ItemTextures";
 import { isFpsVisible, isPingVisible } from "./OptionsUI";
 import { NetworkManager } from "../network/NetworkManager";
+import { getSelectedServerId, SERVERS } from "../network/ServerConfig";
 import { UI_PANEL_CORNER, UI_BAR_CORNER, UI_BTN_CORNER, UI_MINIMAP_CORNER } from "./UITextures";
 import { addText } from "./TextFactory";
+import { TradeUI } from "./TradeUI";
 import {
   MINIMAP_WIDTH,
   MINIMAP_HEIGHT,
@@ -142,10 +144,11 @@ export class HUD {
   private exploredTiles: Uint8Array | null = null;
   private exploredDungeonZone: string = "";
 
-  // Inventory & Loot Bag & Vault UI
+  // Inventory & Loot Bag & Vault & Trade UI
   inventoryUI: InventoryUI;
   lootBagUI: LootBagUI;
   vaultUI: VaultUI;
+  tradeUI: TradeUI;
   dragManager: DragManager;
 
   // Stats button
@@ -248,7 +251,8 @@ export class HUD {
       .setDepth(102);
 
     // --- Zone/Biome display (top-center) ---
-    this.zoneText = addText(scene, screenW / 2, 15, "Nexus (Safe Zone)", {
+    const serverName = SERVERS.find(s => s.id === getSelectedServerId())?.name ?? "Unknown";
+    this.zoneText = addText(scene, screenW / 2, 15, `Nexus (${serverName})`, {
         fontSize: zoneFontSize,
         color: "#44aa66",
         fontFamily: "'Press Start 2P', monospace",
@@ -422,6 +426,9 @@ export class HUD {
 
     // --- Vault UI (left panel, full height) ---
     this.vaultUI = new VaultUI(scene, this.inventoryUI.getTooltip(), this.slotSize);
+
+    // --- Trade UI (above unified panel, like loot bag) ---
+    this.tradeUI = new TradeUI(scene, this.inventoryUI.getTooltip(), this.invX, this.panelY, this.slotSize);
 
     // --- Drag Manager ---
     this.dragManager = new DragManager(scene);
@@ -630,6 +637,7 @@ export class HUD {
 
     this.lootBagUI.relayout(this.invX, this.panelY, this.slotSize);
     this.vaultUI.relayout(this.slotSize);
+    this.tradeUI.relayout(this.invX, this.panelY, this.slotSize);
 
     this.drawHealthBar(100, 100);
     this.drawManaBar(100, 100);
@@ -653,7 +661,7 @@ export class HUD {
     const fillW = Math.round(innerW * ratio);
     this.hpBarFillImg.setPosition(x + inset, y + inset);
     this.hpBarFillImg.setDisplaySize(fillW, innerH);
-    this.hpBarFillImg.setVisible(fillW > 0);
+    this.hpBarFillImg.setVisible(fillW > 0 && !this.tradeModeActive);
 
     this.hpLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.hpText.setText(`${Math.ceil(hp)} / ${maxHp}`);
@@ -678,7 +686,7 @@ export class HUD {
     const fillW = Math.round(innerW * ratio);
     this.manaBarFillImg.setPosition(x + inset, y + inset);
     this.manaBarFillImg.setDisplaySize(fillW, innerH);
-    this.manaBarFillImg.setVisible(fillW > 0);
+    this.manaBarFillImg.setVisible(fillW > 0 && !this.tradeModeActive);
 
     this.manaLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.manaText.setText(`${Math.ceil(mana)} / ${maxMana}`);
@@ -708,7 +716,7 @@ export class HUD {
     const fillW = Math.round(innerW * ratio);
     this.lvlBarFillImg.setPosition(x + inset, y + inset);
     this.lvlBarFillImg.setDisplaySize(fillW, innerH);
-    this.lvlBarFillImg.setVisible(fillW > 0);
+    this.lvlBarFillImg.setVisible(fillW > 0 && !this.tradeModeActive);
 
     this.lvlLabel.setPosition(x + labelPad, y + this.barHeight / 2);
     this.lvlText.setText(`${level}`);
@@ -733,21 +741,24 @@ export class HUD {
     dungeonPortals: Array<{ x: number; y: number; portalType: number }> = [],
     dungeonMap: DungeonMapData | null = null
   ): void {
-    // Only redraw bars when values change
-    if (hp !== this.lastHp || maxHp !== this.lastMaxHp) {
-      this.drawHealthBar(hp, maxHp);
-      this.lastHp = hp;
-      this.lastMaxHp = maxHp;
-    }
-    if (mana !== this.lastMana || maxMana !== this.lastMaxMana) {
-      this.drawManaBar(mana, maxMana);
-      this.lastMana = mana;
-      this.lastMaxMana = maxMana;
-    }
-    if (xp !== this.lastXp || level !== this.lastLevel) {
-      this.drawLvlBar(xp, level);
-      this.lastXp = xp;
-      this.lastLevel = level;
+    // Only redraw bars when values change; skip entirely during trade mode
+    // so drawXxxBar() cannot re-show fills that setBarsVisible(false) hid.
+    if (!this.tradeModeActive) {
+      if (hp !== this.lastHp || maxHp !== this.lastMaxHp) {
+        this.drawHealthBar(hp, maxHp);
+        this.lastHp = hp;
+        this.lastMaxHp = maxHp;
+      }
+      if (mana !== this.lastMana || maxMana !== this.lastMaxMana) {
+        this.drawManaBar(mana, maxMana);
+        this.lastMana = mana;
+        this.lastMaxMana = maxMana;
+      }
+      if (xp !== this.lastXp || level !== this.lastLevel) {
+        this.drawLvlBar(xp, level);
+        this.lastXp = xp;
+        this.lastLevel = level;
+      }
     }
 
     // Only update zone text when zone changes
@@ -755,7 +766,8 @@ export class HUD {
       this.lastZone = zone;
       this.lastDiffZone = -1;
       if (zone === "nexus") {
-        this.zoneText.setText("Nexus (Safe Zone)");
+        const serverName = SERVERS.find(s => s.id === getSelectedServerId())?.name ?? "Unknown";
+        this.zoneText.setText(`Nexus (${serverName})`);
         this.zoneText.setColor("#44aa66");
       } else if (isVaultZone(zone)) {
         this.zoneText.setText("Vault");
@@ -1436,6 +1448,72 @@ export class HUD {
     this.deathOverlay = null;
     this.deathText = null;
     this.deathButton = null;
+  }
+
+  // --- Trade mode ---
+
+  private tradeModeActive = false;
+
+  enterTradeMode(partnerName: string, partnerInv: import("@rotmg-lite/shared").ItemInstanceData[], partnerEq: import("@rotmg-lite/shared").ItemInstanceData[]): void {
+    this.tradeModeActive = true;
+
+    // Close any open overlays
+    this.lootBagUI.hide();
+    this.vaultUI.hide();
+
+    // Hide bars
+    this.setBarsVisible(false);
+
+    // Activate inventory trade mode (reset own confirm on selection change)
+    this.inventoryUI.enterTradeMode(() => {
+      this.tradeUI.setOwnConfirmReset();
+    });
+
+    // Show trade UI
+    this.tradeUI.show(partnerName, partnerInv, partnerEq);
+  }
+
+  exitTradeMode(): void {
+    if (!this.tradeModeActive) return;
+    this.tradeModeActive = false;
+
+    // Show bars and force redraw so fills reflect current values
+    this.setBarsVisible(true);
+    this.drawHealthBar(this.lastHp, this.lastMaxHp);
+    this.drawManaBar(this.lastMana, this.lastMaxMana);
+    this.drawLvlBar(this.lastXp, this.lastLevel);
+
+    // Deactivate inventory trade mode
+    this.inventoryUI.exitTradeMode();
+
+    // Hide trade UI
+    this.tradeUI.hide();
+  }
+
+  isInTradeMode(): boolean {
+    return this.tradeModeActive;
+  }
+
+  getPanelTop(): number {
+    return this.panelY;
+  }
+
+  private setBarsVisible(visible: boolean): void {
+    this.hpBarFrame.setVisible(visible);
+    this.hpBarBgImg.setVisible(visible);
+    this.hpBarFillImg.setVisible(visible);
+    this.hpLabel.setVisible(visible);
+    this.hpText.setVisible(visible);
+    this.manaBarFrame.setVisible(visible);
+    this.manaBarBgImg.setVisible(visible);
+    this.manaBarFillImg.setVisible(visible);
+    this.manaLabel.setVisible(visible);
+    this.manaText.setVisible(visible);
+    this.lvlBarFrame.setVisible(visible);
+    this.lvlBarBgImg.setVisible(visible);
+    this.lvlBarFillImg.setVisible(visible);
+    this.lvlLabel.setVisible(visible);
+    this.lvlText.setVisible(visible);
   }
 
   showXpGain(x: number, y: number, amount: number): void {

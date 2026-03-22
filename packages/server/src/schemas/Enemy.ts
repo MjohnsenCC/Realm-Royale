@@ -45,6 +45,13 @@ export class Enemy extends Schema {
   packLeaderId: string = ""; // minions track their leader's id
   isPackLeader: boolean = false;
 
+  // Lag compensation: previous-tick positions (server-only)
+  prevX1: number = 0;
+  prevY1: number = 0;
+  prevX2: number = 0;
+  prevY2: number = 0;
+  posHistoryReady: number = 0; // 0, 1, or 2 — how many history slots are valid
+
   // Movement tracking for filter-refresh optimization (server-only)
   lastMovedTick: number = 0;
 

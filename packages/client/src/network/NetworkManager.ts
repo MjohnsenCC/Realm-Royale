@@ -106,6 +106,10 @@ export class NetworkManager {
     this.room?.send(ClientMessage.GetFriendsList);
   }
 
+  sendGetBlockList(): void {
+    this.room?.send(ClientMessage.GetBlockList);
+  }
+
   sendAddFriend(name: string): void {
     this.room?.send(ClientMessage.AddFriend, { name });
   }
@@ -132,6 +136,38 @@ export class NetworkManager {
 
   sendRefreshAccountName(): void {
     this.room?.send(ClientMessage.RefreshAccountName);
+  }
+
+  sendTradeRequest(targetName: string): void {
+    this.room?.send(ClientMessage.TradeRequest, { targetName });
+  }
+
+  sendTradeAccept(requesterSessionId: string): void {
+    this.room?.send(ClientMessage.TradeAccept, { requesterSessionId });
+  }
+
+  sendTradeDecline(requesterSessionId: string): void {
+    this.room?.send(ClientMessage.TradeDecline, { requesterSessionId });
+  }
+
+  sendTradeSelectSlot(slotIndex: number, source: "inventory" | "equipment"): void {
+    this.room?.send(ClientMessage.TradeSelectSlot, { slotIndex, source });
+  }
+
+  sendTradeDeselectSlot(slotIndex: number, source: "inventory" | "equipment"): void {
+    this.room?.send(ClientMessage.TradeDeselectSlot, { slotIndex, source });
+  }
+
+  sendTradeConfirm(): void {
+    this.room?.send(ClientMessage.TradeConfirm);
+  }
+
+  sendTradeUnconfirm(): void {
+    this.room?.send(ClientMessage.TradeUnconfirm);
+  }
+
+  sendTradeExit(): void {
+    this.room?.send(ClientMessage.TradeExit);
   }
 
   getRoom(): Colyseus.Room | null {

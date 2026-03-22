@@ -151,7 +151,12 @@ export class CombatSystem {
 
           const def = ENEMY_DEFS[enemy.enemyType];
           const enemyRadius = def ? def.radius : 14;
-          if (circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, enemyRadius + HITBOX_PADDING)) {
+          const effectiveRadius = enemyRadius + HITBOX_PADDING;
+          if (
+            circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, effectiveRadius) ||
+            (enemy.posHistoryReady >= 1 && circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.prevX1, enemy.prevY1, effectiveRadius)) ||
+            (enemy.posHistoryReady >= 2 && circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.prevX2, enemy.prevY2, effectiveRadius))
+          ) {
             const effectiveDamage = enemy.damageResist > 0
               ? Math.round(proj.damage * (1 - enemy.damageResist / 100))
               : proj.damage;
