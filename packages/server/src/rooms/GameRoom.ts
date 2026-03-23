@@ -380,7 +380,8 @@ export class GameRoom extends Room<GameState> {
 
         if (
           portal.portalType === PortalType.InfernalPitEntrance ||
-          portal.portalType === PortalType.VoidSanctumEntrance
+          portal.portalType === PortalType.VoidSanctumEntrance ||
+          portal.portalType === PortalType.DeepJungleEntrance
         ) {
           // Enter dungeon
           const dungeonType = portal.dungeonType;
@@ -2978,32 +2979,8 @@ export class GameRoom extends Room<GameState> {
       this.globalTick
     );
 
-    // 2b. The Architect minion spawning (scales across 3 phases)
+    // 2b. Pack leader minion respawn (overworld packs)
     const now = tickNow;
-    this.state.enemies.forEach((enemy) => {
-      if (
-        enemy.enemyType === EnemyType.TheArchitect &&
-        enemy.isBoss &&
-        enemy.aiState === EnemyAIState.Aggro
-      ) {
-        let minionCooldown: number;
-        if (enemy.bossPhase === 3) minionCooldown = 1500;
-        else if (enemy.bossPhase === 2) minionCooldown = 3000;
-        else if (enemy.bossPhase === 1) minionCooldown = 5000;
-        else minionCooldown = 999999; // Phase 0 (sleeping): no minions
-        if (now - enemy.lastMinionSpawnTime >= minionCooldown) {
-          enemy.lastMinionSpawnTime = now;
-          this.dungeonSystem.spawnVoidMinion(
-            enemy.x,
-            enemy.y,
-            enemy.zone,
-            this.state
-          );
-        }
-      }
-    });
-
-    // 2c. Pack leader minion respawn (overworld packs)
     this.state.enemies.forEach((enemy) => {
       if (!enemy.isPackLeader || !isHostileZone(enemy.zone) || enemy.aiState !== EnemyAIState.Aggro) return;
       const packDef = getPackDef(enemy.enemyType);
@@ -3093,19 +3070,7 @@ export class GameRoom extends Room<GameState> {
             );
           }
         } else if (isDungeonZone(zone)) {
-          // Dungeon kill: check for switch destruction
-          if (event.enemyType === EnemyType.VoidSwitch) {
-            const remaining = this.dungeonSystem.onSwitchDestroyed(zone, this.state);
-            // Notify all players in the dungeon
-            this.state.players.forEach((p) => {
-              if (p.zone === zone) {
-                const c = this.clients.find((cl) => cl.sessionId === p.id);
-                if (c) {
-                  c.send(ServerMessage.SwitchDestroyed, { remaining });
-                }
-              }
-            });
-          }
+          // Dungeon kill handling (no special cases needed)
 
           if (event.isBoss && event.enemyX !== undefined && event.enemyY !== undefined) {
             // Boss killed: per-player loot + exit portal

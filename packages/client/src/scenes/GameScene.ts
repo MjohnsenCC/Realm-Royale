@@ -795,6 +795,8 @@ export class GameScene extends Phaser.Scene {
           this.cachedDungeonStats = {
             portalType: dt === DungeonType.InfernalPit
               ? PortalType.InfernalPitEntrance
+              : dt === DungeonType.DeepJungle
+              ? PortalType.DeepJungleEntrance
               : PortalType.VoidSanctumEntrance,
             modifierIds: data.dungeonStats.modifierIds,
             modifierTiers: data.dungeonStats.modifierTiers,
@@ -3207,6 +3209,9 @@ export class GameScene extends Phaser.Scene {
       } else if (pType === PortalType.VoidSanctumEntrance) {
         labelText = "The Void Sanctum";
         labelColor = "#6600cc";
+      } else if (pType === PortalType.DeepJungleEntrance) {
+        labelText = "The Deep Jungle";
+        labelColor = "#22aa22";
       } else if (pType === PortalType.DungeonExit) {
         labelText = "Exit";
         labelColor = "#44ff44";
@@ -3262,6 +3267,7 @@ export class GameScene extends Phaser.Scene {
   private getDungeonPortalTextureKey(portalType: number): string {
     if (portalType === PortalType.InfernalPitEntrance) return "portal-infernal-pit";
     if (portalType === PortalType.VoidSanctumEntrance) return "portal-void-sanctum";
+    if (portalType === PortalType.DeepJungleEntrance) return "portal-deep-jungle";
     return "portal-the-wild";
   }
 
@@ -3294,6 +3300,9 @@ export class GameScene extends Phaser.Scene {
       } else if (pType === PortalType.VoidSanctumEntrance) {
         labelText = "The Void Sanctum";
         labelColor = "#6600cc";
+      } else if (pType === PortalType.DeepJungleEntrance) {
+        labelText = "The Deep Jungle";
+        labelColor = "#22aa22";
       } else if (pType === PortalType.DungeonExit) {
         labelText = "Exit";
         labelColor = "#44ff44";
@@ -3334,6 +3343,7 @@ export class GameScene extends Phaser.Scene {
     const DUNGEON_SPRITE_KEYS: Record<number, string> = {
       [0]: "tile-infernalpit",   // DungeonType.InfernalPit
       [1]: "tile-voidsanctum",   // DungeonType.VoidSanctum
+      [2]: "tile-deepjungle",    // DungeonType.DeepJungle
     };
     const spriteKey = dungeonType !== undefined ? DUNGEON_SPRITE_KEYS[dungeonType] : undefined;
     if (spriteKey) {
@@ -3780,7 +3790,8 @@ export class GameScene extends Phaser.Scene {
       // Only show tooltip for entrance portals, not exit portals
       if (
         ps.portalType !== PortalType.InfernalPitEntrance &&
-        ps.portalType !== PortalType.VoidSanctumEntrance
+        ps.portalType !== PortalType.VoidSanctumEntrance &&
+        ps.portalType !== PortalType.DeepJungleEntrance
       ) {
         return;
       }

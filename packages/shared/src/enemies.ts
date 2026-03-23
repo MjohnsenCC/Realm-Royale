@@ -221,6 +221,8 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x888888,
     difficultyZone: DifficultyZone.Lowlands,
     biomeAffinity: [RealmBiome.WildMeadow, RealmBiome.WildForest],
+    dungeonDrop: DungeonType.DeepJungle,
+    dungeonDropChance: 0.3,
   },
   [EnemyType.Rattlesnake]: {
     type: EnemyType.Rattlesnake,
@@ -242,6 +244,8 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0xaa8844,
     difficultyZone: DifficultyZone.Lowlands,
     biomeAffinity: [RealmBiome.WildDesert, RealmBiome.WildPlains, RealmBiome.WildShrubland],
+    dungeonDrop: DungeonType.DeepJungle,
+    dungeonDropChance: 0.3,
   },
   [EnemyType.BogLurker]: {
     type: EnemyType.BogLurker,
@@ -264,6 +268,8 @@ export const REALM_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     difficultyZone: DifficultyZone.Lowlands,
     biomeAffinity: [RealmBiome.WildMarsh, RealmBiome.WildJungle],
     defaultDamageType: DamageType.Magic,
+    dungeonDrop: DungeonType.DeepJungle,
+    dungeonDropChance: 0.3,
   },
 
   // ===== MIDLANDS - Tier 3 (DifficultyZone.Midlands) =====
@@ -1973,6 +1979,7 @@ export function getEnemyTypesForBiomeAndZone(
 export const DungeonBiomeType = {
   InfernalPit: 100,
   VoidSanctum: 101,
+  DeepJungle: 102,
 } as const;
 
 // --- Dungeon Enemy Definitions ---
@@ -2154,24 +2161,81 @@ export const DUNGEON_ENEMY_DEFS: Record<number, EnemyDefinition> = {
     color: 0x9944ff,
     defaultDamageType: DamageType.Magic,
   },
-  // Destructible switch (stationary, no AI)
-  [EnemyType.VoidSwitch]: {
-    type: EnemyType.VoidSwitch,
-    biome: DungeonBiomeType.VoidSanctum,
-    name: "Void Switch",
-    hp: 3000,
-    speed: 0,
-    radius: 18,
-    aggroRange: 0,
-    leashRange: 0,
-    shootCooldown: 999999,
-    projectileDamage: 0,
+  // ===== DEEP JUNGLE =====
+  [EnemyType.JungleViper]: {
+    type: EnemyType.JungleViper,
+    biome: DungeonBiomeType.DeepJungle,
+    name: "Jungle Viper",
+    hp: 800,
+    speed: 110,
+    radius: 12,
+    aggroRange: 320,
+    leashRange: 800,
+    shootCooldown: 1800,
+    projectileDamage: 16,
     projectileSpeed: 120,
-    projectileRange: 0,
+    projectileRange: 200,
     shootingPattern: ShootingPatternType.SingleAimed,
-    xpValue: 100,
-    shape: "hexagon",
-    color: 0x00ccff,
+    xpValue: 120,
+    shape: "triangle",
+    color: 0x22aa44,
+  },
+  [EnemyType.JungleBrute]: {
+    type: EnemyType.JungleBrute,
+    biome: DungeonBiomeType.DeepJungle,
+    name: "Jungle Brute",
+    hp: 1500,
+    speed: 50,
+    radius: 18,
+    aggroRange: 280,
+    leashRange: 800,
+    shootCooldown: 2400,
+    projectileDamage: 22,
+    projectileSpeed: 120,
+    projectileRange: 220,
+    shootingPattern: ShootingPatternType.Spread3,
+    xpValue: 180,
+    shape: "square",
+    color: 0x886633,
+  },
+  [EnemyType.JungleShaman]: {
+    type: EnemyType.JungleShaman,
+    biome: DungeonBiomeType.DeepJungle,
+    name: "Jungle Shaman",
+    hp: 1000,
+    speed: 70,
+    radius: 14,
+    aggroRange: 350,
+    leashRange: 800,
+    shootCooldown: 2000,
+    projectileDamage: 18,
+    projectileSpeed: 120,
+    projectileRange: 250,
+    shootingPattern: ShootingPatternType.BurstRing4,
+    xpValue: 150,
+    shape: "diamond",
+    color: 0x33cc66,
+    defaultDamageType: DamageType.Magic,
+  },
+  // BOSS
+  [EnemyType.JungleWarden]: {
+    type: EnemyType.JungleWarden,
+    biome: DungeonBiomeType.DeepJungle,
+    name: "Jungle Warden",
+    hp: 12000,
+    speed: 0,
+    radius: 28,
+    aggroRange: 550,
+    leashRange: 1200,
+    shootCooldown: 1400,
+    projectileDamage: 20,
+    projectileSpeed: 120,
+    projectileRange: 300,
+    shootingPattern: ShootingPatternType.Spread3,
+    xpValue: 2000,
+    shape: "star",
+    color: 0x1a6b2a,
+    defaultDamageType: DamageType.Magic,
   },
 };
 
@@ -2195,6 +2259,12 @@ export const DUNGEON_VISUALS: Record<
     tileLineColor: 0x1a0a4e,
     tileLineAlpha: 0.4,
     name: "The Void Sanctum",
+  },
+  [DungeonType.DeepJungle]: {
+    groundFill: 0x0a2e0a,
+    tileLineColor: 0x1a4e1a,
+    tileLineAlpha: 0.4,
+    name: "The Deep Jungle",
   },
 };
 
@@ -2247,72 +2317,23 @@ export const DUNGEON_LAYOUTS: Record<number, DungeonEnemyPlacement[]> = {
 export const DUNGEON_BOSS_TYPE: Record<number, number> = {
   [DungeonType.InfernalPit]: EnemyType.MoltenWyrm,
   [DungeonType.VoidSanctum]: EnemyType.TheArchitect,
+  [DungeonType.DeepJungle]: EnemyType.JungleWarden,
 };
 
 export const ZONE_TO_DUNGEON: Record<string, number> = {
   [PlayerZone.DungeonInfernal]: DungeonType.InfernalPit,
   [PlayerZone.DungeonVoid]: DungeonType.VoidSanctum,
+  [PlayerZone.DungeonDeepJungle]: DungeonType.DeepJungle,
 };
 
 export const DUNGEON_TO_ZONE: Record<number, string> = {
   [DungeonType.InfernalPit]: PlayerZone.DungeonInfernal,
   [DungeonType.VoidSanctum]: PlayerZone.DungeonVoid,
+  [DungeonType.DeepJungle]: PlayerZone.DungeonDeepJungle,
 };
 
-// --- Room-Based Dungeon Enemy Config ---
-// Each entry corresponds to a room by index:
-// InfernalPit: [0] = spawn, [1-7] = normal rooms (3 enemies each), [8] = boss room
-// VoidSanctum: [0] = spawn, [1-3] = normal, [4] = switchA, [5] = preBoss, [6] = boss, [7-8] = switches
+// --- Normal Room Enemy Variants (cycled through for variable room counts) ---
 
-export interface DungeonRoomEnemyConfig {
-  enemies: number[]; // EnemyType values
-}
-
-export const DUNGEON_ROOM_ENEMIES: Record<number, DungeonRoomEnemyConfig[]> = {
-  [DungeonType.InfernalPit]: [
-    // Room 0: spawn room - no enemies
-    { enemies: [] },
-    // Room 1
-    { enemies: [EnemyType.InfernalHound, EnemyType.InfernalHound, EnemyType.InfernalHound] },
-    // Room 2
-    { enemies: [EnemyType.InfernalHound, EnemyType.CinderWraith, EnemyType.InfernalHound] },
-    // Room 3
-    { enemies: [EnemyType.MagmaSerpent, EnemyType.InfernalHound, EnemyType.CinderWraith] },
-    // Room 4
-    { enemies: [EnemyType.CinderWraith, EnemyType.CinderWraith, EnemyType.MagmaSerpent] },
-    // Room 5
-    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.CinderWraith] },
-    // Room 6
-    { enemies: [EnemyType.MagmaSerpent, EnemyType.CinderWraith, EnemyType.InfernalHound] },
-    // Room 7
-    { enemies: [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.MagmaSerpent] },
-    // Room 8: boss room - boss spawned separately
-    { enemies: [] },
-  ],
-  [DungeonType.VoidSanctum]: [
-    // Room 0: spawn room - no enemies
-    { enemies: [] },
-    // Room 1: first encounter
-    { enemies: [EnemyType.VoidAcolyte, EnemyType.VoidAcolyte, EnemyType.ShadowWeaver] },
-    // Room 2: mid dungeon
-    { enemies: [EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte] },
-    // Room 3: crossroads (connects to switchA and preBoss)
-    { enemies: [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte, EnemyType.VoidAcolyte] },
-    // Room 4: switchRoomA (guarded dead-end)
-    { enemies: [EnemyType.ShadowWeaver, EnemyType.VoidAcolyte] },
-    // Room 5: preBoss room (heavy guard)
-    { enemies: [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver] },
-    // Room 6: boss room - boss spawned separately after switches
-    { enemies: [] },
-    // Room 7: switchRoomB (guarded dead-end, left of boss)
-    { enemies: [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte] },
-    // Room 8: switchRoomC (guarded dead-end, right of boss)
-    { enemies: [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte] },
-  ],
-};
-
-// --- Infernal Pit Normal Room Enemy Variants ---
-// Pool of enemy lists for normal rooms (cycled through for variable room counts)
 export const INFERNAL_NORMAL_ROOM_VARIANTS: number[][] = [
   [EnemyType.InfernalHound, EnemyType.InfernalHound, EnemyType.InfernalHound],
   [EnemyType.InfernalHound, EnemyType.CinderWraith, EnemyType.InfernalHound],
@@ -2323,11 +2344,35 @@ export const INFERNAL_NORMAL_ROOM_VARIANTS: number[][] = [
   [EnemyType.MagmaSerpent, EnemyType.MagmaSerpent, EnemyType.MagmaSerpent],
 ];
 
+export const VOID_NORMAL_ROOM_VARIANTS: number[][] = [
+  [EnemyType.VoidAcolyte, EnemyType.VoidAcolyte, EnemyType.ShadowWeaver],
+  [EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte],
+  [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.VoidAcolyte, EnemyType.VoidAcolyte],
+  [EnemyType.ShadowWeaver, EnemyType.VoidAcolyte, EnemyType.VoidAcolyte],
+  [EnemyType.AbyssalSentry, EnemyType.AbyssalSentry, EnemyType.ShadowWeaver, EnemyType.ShadowWeaver],
+  [EnemyType.AbyssalSentry, EnemyType.VoidAcolyte, EnemyType.ShadowWeaver],
+];
+
+export const DEEP_JUNGLE_NORMAL_ROOM_VARIANTS: number[][] = [
+  [EnemyType.JungleViper, EnemyType.JungleViper, EnemyType.JungleBrute, EnemyType.JungleShaman],
+  [EnemyType.JungleBrute, EnemyType.JungleViper, EnemyType.JungleViper, EnemyType.JungleViper],
+  [EnemyType.JungleShaman, EnemyType.JungleShaman, EnemyType.JungleViper, EnemyType.JungleBrute],
+  [EnemyType.JungleBrute, EnemyType.JungleBrute, EnemyType.JungleViper, EnemyType.JungleShaman],
+  [EnemyType.JungleViper, EnemyType.JungleShaman, EnemyType.JungleBrute, EnemyType.JungleViper],
+];
+
+/** Per-dungeon-type variant pools for unified enemy spawning. */
+export const DUNGEON_NORMAL_ROOM_VARIANTS: Record<number, number[][]> = {
+  [DungeonType.InfernalPit]: INFERNAL_NORMAL_ROOM_VARIANTS,
+  [DungeonType.VoidSanctum]: VOID_NORMAL_ROOM_VARIANTS,
+  [DungeonType.DeepJungle]: DEEP_JUNGLE_NORMAL_ROOM_VARIANTS,
+};
+
 // --- Dungeon Helpers ---
 
 export function isDungeonZone(zone: string): boolean {
   const base = getZoneBase(zone);
-  return base === PlayerZone.DungeonInfernal || base === PlayerZone.DungeonVoid;
+  return base === PlayerZone.DungeonInfernal || base === PlayerZone.DungeonVoid || base === PlayerZone.DungeonDeepJungle;
 }
 
 export function getDungeonTypeFromZone(zone: string): number | undefined {
@@ -2335,5 +2380,5 @@ export function getDungeonTypeFromZone(zone: string): number | undefined {
 }
 
 export function isBossEnemy(enemyType: number): boolean {
-  return enemyType === EnemyType.MoltenWyrm || enemyType === EnemyType.TheArchitect;
+  return enemyType === EnemyType.MoltenWyrm || enemyType === EnemyType.TheArchitect || enemyType === EnemyType.JungleWarden;
 }

@@ -31,8 +31,21 @@ export class BootScene extends Phaser.Scene {
     }
 
     // Boss sprites (24x24 pixel art)
-    this.load.image("sprite-boss-infernal", "assets/sprites/enemies/infernal_pit_boss.png");
-    this.load.image("sprite-boss-void", "assets/sprites/enemies/void_sanctum_boss.png");
+    this.load.image("sprite-boss-infernal", "assets/sprites/enemies/Infernal Pit/infernal-pit_boss.png");
+    this.load.image("sprite-boss-void", "assets/sprites/enemies/Void Sanctum/void-sanctum_boss.png");
+    this.load.image("sprite-boss-deepjungle", "assets/sprites/enemies/Deep Jungle/deep-jungle_boss.png");
+    // Infernal Pit dungeon enemies
+    this.load.image("sprite-ip-enemy-0", "assets/sprites/enemies/Infernal Pit/infernal-pit_enemy_0.png");
+    this.load.image("sprite-ip-enemy-1", "assets/sprites/enemies/Infernal Pit/infernal-pit_enemy_1.png");
+    this.load.image("sprite-ip-enemy-2", "assets/sprites/enemies/Infernal Pit/infernal-pit_enemy_2.png");
+    // Void Sanctum dungeon enemies
+    this.load.image("sprite-vs-enemy-0", "assets/sprites/enemies/Void Sanctum/void-sanctum_enemy_0.png");
+    this.load.image("sprite-vs-enemy-1", "assets/sprites/enemies/Void Sanctum/void-sanctum_enemy_1.png");
+    this.load.image("sprite-vs-enemy-2", "assets/sprites/enemies/Void Sanctum/void-sanctum_enemy_2.png");
+    // Deep Jungle dungeon enemies
+    this.load.image("sprite-dj-enemy-0", "assets/sprites/enemies/Deep Jungle/deep-jungle_enemy_0.png");
+    this.load.image("sprite-dj-enemy-1", "assets/sprites/enemies/Deep Jungle/deep-jungle_enemy_1.png");
+    this.load.image("sprite-dj-enemy-2", "assets/sprites/enemies/Deep Jungle/deep-jungle_enemy_2.png");
 
     // Player projectile sprites (8x8 pixel art, facing RIGHT — rotated at runtime)
     this.load.image("proj-archer-attack", "assets/sprites/projectiles/archer_attack.png");
@@ -64,6 +77,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("tile-vault", "assets/sprites/tiles/Vault.png");
     this.load.image("tile-infernalpit", "assets/sprites/tiles/InfernalPit.png");
     this.load.image("tile-voidsanctum", "assets/sprites/tiles/VoidSanctum.png");
+    this.load.image("tile-deepjungle", "assets/sprites/tiles/deep-jungle.png");
 
     // Tileset spritesheets (multi-tile, loaded from Tiled exports)
     this.load.image("tileset-nexus", "assets/sprites/tiles/NexusTileset.png");
@@ -132,6 +146,7 @@ export class BootScene extends Phaser.Scene {
     this.load.image("portal-infernal-pit", "assets/sprites/decorations/portals/infernal_pit_portal.png");
     this.load.image("portal-void-sanctum", "assets/sprites/decorations/portals/void_sanctum_portal.png");
     this.load.image("portal-vault", "assets/sprites/decorations/portals/vault_portal.png");
+    this.load.image("portal-deep-jungle", "assets/sprites/decorations/portals/deep-jungle_portal.png");
     this.load.image("portal-gem", "assets/sprites/decorations/portals/portal-gem_portal.png");
 
     // Loot bag sprites

@@ -19,7 +19,7 @@ export class LootBagSprite {
     this.y = y;
     this.bagRarity = bagRarity;
     const key = BAG_TEXTURE_KEYS[bagRarity] ?? "bag-green";
-    this.sprite = scene.add.image(x, y, key).setDepth(-0.4);
+    this.sprite = scene.add.image(x, y, key).setDepth(-0.15);
   }
 
   update(x: number, y: number): void {

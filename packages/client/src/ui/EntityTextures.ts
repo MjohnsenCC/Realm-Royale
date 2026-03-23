@@ -2,19 +2,41 @@ import Phaser from "phaser";
 import { CharacterClass, CLASS_NAMES, EnemyType, PIXEL_SCALE } from "@rotmg-lite/shared";
 
 const ENEMY_SPRITE_COUNT = 6;
-const SPRITE_SOURCE_SIZE = 12;
-const BOSS_SPRITE_SOURCE_SIZE = 24;
+const CLASS_DISPLAY_BASE = 12;
+const ENEMY_SPRITE_SOURCE_SIZE = 8;
+const BOSS_SPRITE_SOURCE_SIZE = 16;
 
-/** Display size of outlined sprites (upscaled + 1px outline on each side). */
-export const OUTLINED_DISPLAY_SIZE = SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
+/** Display size of outlined class/player sprites. */
+export const OUTLINED_DISPLAY_SIZE = CLASS_DISPLAY_BASE * PIXEL_SCALE + 2;
 
-/** Display size of boss outlined sprites (24x24 source). */
+/** Display size of outlined enemy sprites. */
+export const ENEMY_OUTLINED_DISPLAY_SIZE = ENEMY_SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
+
+/** Display size of outlined boss sprites. */
 export const BOSS_OUTLINED_DISPLAY_SIZE = BOSS_SPRITE_SOURCE_SIZE * PIXEL_SCALE + 2;
 
 /** Boss enemy type → sprite key mapping. */
 const BOSS_SPRITE_KEYS: Record<number, string> = {
   [EnemyType.MoltenWyrm]: "sprite-boss-infernal",
   [EnemyType.TheArchitect]: "sprite-boss-void",
+  [EnemyType.JungleWarden]: "sprite-boss-deepjungle",
+};
+
+/** Dungeon enemy type → dedicated sprite key mapping. */
+const DUNGEON_ENEMY_SPRITE_KEYS: Record<number, string> = {
+  // Infernal Pit
+  [EnemyType.InfernalHound]: "sprite-ip-enemy-0",
+  [EnemyType.MagmaSerpent]: "sprite-ip-enemy-1",
+  [EnemyType.CinderWraith]: "sprite-ip-enemy-2",
+  // Void Sanctum
+  [EnemyType.VoidAcolyte]: "sprite-vs-enemy-0",
+  [EnemyType.ShadowWeaver]: "sprite-vs-enemy-1",
+  [EnemyType.AbyssalSentry]: "sprite-vs-enemy-2",
+  [EnemyType.VoidMinion]: "sprite-vs-enemy-0",
+  // Deep Jungle
+  [EnemyType.JungleViper]: "sprite-dj-enemy-0",
+  [EnemyType.JungleBrute]: "sprite-dj-enemy-1",
+  [EnemyType.JungleShaman]: "sprite-dj-enemy-2",
 };
 
 /** Maps a CharacterClass id to its loaded sprite texture key. */
@@ -60,13 +82,14 @@ export function getPlayerSpriteKey(characterClass: number): string {
 /** Returns the sprite texture key for a given enemy type number. */
 export function getEnemySpriteKey(enemyType: number): string {
   if (enemyType in BOSS_SPRITE_KEYS) return BOSS_SPRITE_KEYS[enemyType];
+  if (enemyType in DUNGEON_ENEMY_SPRITE_KEYS) return DUNGEON_ENEMY_SPRITE_KEYS[enemyType];
   return `sprite-enemy-${(enemyType % ENEMY_SPRITE_COUNT) + 1}`;
 }
 
 /** Returns the outlined display size for a given enemy type. */
 export function getEnemyDisplaySize(enemyType: number): number {
   if (enemyType in BOSS_SPRITE_KEYS) return BOSS_OUTLINED_DISPLAY_SIZE;
-  return OUTLINED_DISPLAY_SIZE;
+  return ENEMY_OUTLINED_DISPLAY_SIZE;
 }
 
 /**
@@ -102,8 +125,13 @@ export function generateEntityTextures(scene: Phaser.Scene): void {
     upscaleAndOutline(scene, key);
   }
 
+  // Dungeon enemy sprites
+  for (const key of Object.values(DUNGEON_ENEMY_SPRITE_KEYS)) {
+    upscaleAndOutline(scene, key);
+  }
+
   // Portal sprites
-  for (const key of ["portal-the-wild", "portal-the-ruins", "portal-devine-hell", "portal-infernal-pit", "portal-void-sanctum", "portal-vault", "portal-gem"]) {
+  for (const key of ["portal-the-wild", "portal-the-ruins", "portal-devine-hell", "portal-infernal-pit", "portal-void-sanctum", "portal-deep-jungle", "portal-vault", "portal-gem"]) {
     upscaleAndOutline(scene, key);
   }
 

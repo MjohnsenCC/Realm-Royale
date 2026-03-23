@@ -452,6 +452,7 @@ export function normalizeVector(
 const ZONE_TO_DUNGEON_TYPE: Record<string, number> = {
   [PlayerZone.DungeonInfernal]: DungeonType.InfernalPit,
   [PlayerZone.DungeonVoid]: DungeonType.VoidSanctum,
+  [PlayerZone.DungeonDeepJungle]: DungeonType.DeepJungle,
 };
 
 /** Get zone dimensions for a given zone string (supports instanced zones like "hostile:1"). */

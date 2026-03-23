@@ -1167,6 +1167,11 @@ export const BOSS_LOOT_TABLES: Record<number, LootTable> = {
       makeEquipmentTierGroup(0.15, 11, 12, 7, 7),
     ],
   },
+  [DungeonType.DeepJungle]: {
+    entries: [
+      makeEquipmentTierGroup(1.0, 2, 3, 2, 2), // 100% one item
+    ],
+  },
 };
 
 /** Per-enemy loot tables. Every enemy has its own entry. */
@@ -1518,7 +1523,17 @@ export const ENEMY_LOOT_TABLES: Partial<Record<number, LootTable>> = {
   [EnemyType.VoidMinion]: { // Spawned add — reduced drops
     entries: [makeEquipmentTierGroup(0.02, 8, 9, 4, 5), ...MINION_CONSUMABLE_ENTRIES],
   },
-  [EnemyType.VoidSwitch]: { entries: [] }, // Destructible object — no drops
+
+  // ===== DUNGEON: Deep Jungle — T2-3 drops (easy dungeon) =====
+  [EnemyType.JungleViper]: {
+    entries: [makeEquipmentTierGroup(0.075, 2, 3, 2, 2), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.JungleBrute]: {
+    entries: [makeEquipmentTierGroup(0.075, 2, 3, 2, 2), ...CONSUMABLE_ENTRIES],
+  },
+  [EnemyType.JungleShaman]: {
+    entries: [makeEquipmentTierGroup(0.075, 2, 3, 2, 2), ...CONSUMABLE_ENTRIES],
+  },
 };
 
 /** Resolve the loot table for an enemy by type. */

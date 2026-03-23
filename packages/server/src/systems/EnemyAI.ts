@@ -37,9 +37,6 @@ export class EnemyAI {
     const dt = deltaTime / 1000;
 
     state.enemies.forEach((enemy) => {
-      // Switches are stationary, no AI
-      if (enemy.isSwitch) return;
-
       // Performance: skip AI for enemies far from all players
       if (!this.isNearAnyPlayer(enemy, state, AI_UPDATE_RANGE)) return;
 
@@ -79,6 +76,16 @@ export class EnemyAI {
         if (hpRatio <= 0.3 && enemy.bossPhase < 3) {
           enemy.bossPhase = 3;
         } else if (hpRatio <= 0.6 && enemy.bossPhase < 2) {
+          enemy.bossPhase = 2;
+        }
+      }
+
+      // Boss phase transitions for Jungle Warden (3 phases)
+      if (enemy.isBoss && enemy.enemyType === EnemyType.JungleWarden && enemy.bossPhase >= 1) {
+        const hpRatio = enemy.hp / enemy.maxHp;
+        if (hpRatio <= 0.33 && enemy.bossPhase < 3) {
+          enemy.bossPhase = 3;
+        } else if (hpRatio <= 0.66 && enemy.bossPhase < 2) {
           enemy.bossPhase = 2;
         }
       }
@@ -731,6 +738,49 @@ export class EnemyAI {
         shootCooldown: 450,
         projectileDamage: 65,
         speed: 50,
+      };
+    }
+
+    if (enemy.enemyType === EnemyType.JungleWarden) {
+      if (enemy.bossPhase === 0) {
+        return { ...baseDef, shootCooldown: 999999 };
+      }
+
+      if (enemy.bossPhase === 1) {
+        // Phase 1 (100%-66%): Stationary, Spread3, moderate damage
+        return {
+          ...baseDef,
+          shootingPattern: ShootingPatternType.Spread3,
+          shootCooldown: 1400,
+          projectileDamage: 20,
+          projectileSpeed: 120,
+          projectileRange: 300,
+          speed: 0,
+        };
+      }
+
+      if (enemy.bossPhase === 2) {
+        // Phase 2 (66%-33%): Stationary, BurstRing8, higher damage
+        return {
+          ...baseDef,
+          shootingPattern: ShootingPatternType.BurstRing8,
+          shootCooldown: 1000,
+          projectileDamage: 25,
+          projectileSpeed: 120,
+          projectileRange: 350,
+          speed: 0,
+        };
+      }
+
+      // Phase 3 (<33%): Chase closest player, Spiral5, high damage
+      return {
+        ...baseDef,
+        shootingPattern: ShootingPatternType.Spiral5,
+        shootCooldown: 800,
+        projectileDamage: 30,
+        projectileSpeed: 120,
+        projectileRange: 350,
+        speed: 80,
       };
     }
 

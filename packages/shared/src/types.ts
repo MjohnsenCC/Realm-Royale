@@ -22,7 +22,11 @@ export const EnemyType = {
   AbyssalSentry: 21,
   TheArchitect: 22, // Boss
   VoidMinion: 23, // Spawned add
-  VoidSwitch: 24, // Destructible switch in Void Sanctum
+  // --- Dungeon: Deep Jungle ---
+  JungleViper: 25,
+  JungleBrute: 26,
+  JungleShaman: 27,
+  JungleWarden: 28, // Boss
   // --- Overworld: Shore (Tier 1) ---
   HermitCrab: 30,
   Frog: 31,
@@ -287,6 +291,7 @@ export const PlayerZone = {
   Hostile: "hostile",
   DungeonInfernal: "dungeon_infernal",
   DungeonVoid: "dungeon_void",
+  DungeonDeepJungle: "dungeon_deep_jungle",
   Vault: "vault",
 } as const;
 export type PlayerZone = (typeof PlayerZone)[keyof typeof PlayerZone];
@@ -346,12 +351,14 @@ export function getZoneDisplayName(zone: string): string {
   }
   if (base === PlayerZone.DungeonInfernal) return "The Infernal Pit";
   if (base === PlayerZone.DungeonVoid) return "The Void Sanctum";
+  if (base === PlayerZone.DungeonDeepJungle) return "The Deep Jungle";
   return "Unknown";
 }
 
 export const DungeonType = {
   InfernalPit: 0,
   VoidSanctum: 1,
+  DeepJungle: 2,
 } as const;
 export type DungeonType = (typeof DungeonType)[keyof typeof DungeonType];
 
@@ -361,6 +368,7 @@ export const PortalType = {
   VoidSanctumEntrance: 2,
   DungeonExit: 3,
   NexusToVault: 4,
+  DeepJungleEntrance: 5,
 } as const;
 export type PortalType = (typeof PortalType)[keyof typeof PortalType];
 

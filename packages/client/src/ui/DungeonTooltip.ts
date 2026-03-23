@@ -172,6 +172,11 @@ export class DungeonTooltip {
       nameColor = "#8833ee";
       borderColor = 0x8833ee;
       bannerColor = 0x8833ee;
+    } else if (portalType === PortalType.DeepJungleEntrance) {
+      dungeonName = "The Deep Jungle";
+      nameColor = "#22aa22";
+      borderColor = 0x22aa22;
+      bannerColor = 0x22aa22;
     }
 
     this.nameText.setText(dungeonName);
@@ -185,6 +190,9 @@ export class DungeonTooltip {
     } else if (portalType === PortalType.VoidSanctumEntrance) {
       diffLabel = "Extreme";
       diffColor = "#ff4444";
+    } else if (portalType === PortalType.DeepJungleEntrance) {
+      diffLabel = "Easy";
+      diffColor = "#44ff44";
     }
     this.difficultyBadge.setText(diffLabel);
     this.difficultyBadge.setColor(diffColor);
