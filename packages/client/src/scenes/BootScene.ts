@@ -75,9 +75,15 @@ export class BootScene extends Phaser.Scene {
     // Zone-specific floor tiles
     this.load.image("tile-nexus", "assets/sprites/tiles/Nexus.png");
     this.load.image("tile-vault", "assets/sprites/tiles/Vault.png");
-    this.load.image("tile-infernalpit", "assets/sprites/tiles/InfernalPit.png");
-    this.load.image("tile-voidsanctum", "assets/sprites/tiles/VoidSanctum.png");
-    this.load.image("tile-deepjungle", "assets/sprites/tiles/deep-jungle.png");
+    this.load.image("tile-ip-floor0", "assets/sprites/tiles/infernal-pit_floor_0.png");
+    this.load.image("tile-ip-floor1", "assets/sprites/tiles/infernal-pit_floor_1.png");
+    this.load.image("tile-ip-wall", "assets/sprites/tiles/infernal-pit_wall.png");
+    this.load.image("tile-vs-floor0", "assets/sprites/tiles/void-sanctum_floor_0.png");
+    this.load.image("tile-vs-floor1", "assets/sprites/tiles/void-sanctum_floor_1.png");
+    this.load.image("tile-vs-wall", "assets/sprites/tiles/void-sanctum_wall.png");
+    this.load.image("tile-dj-floor0", "assets/sprites/tiles/deep-jungle_floor_0.png");
+    this.load.image("tile-dj-floor1", "assets/sprites/tiles/deep-jungle_floor_1.png");
+    this.load.image("tile-dj-wall", "assets/sprites/tiles/deep-jungle_wall.png");
 
     // Tileset spritesheets (multi-tile, loaded from Tiled exports)
     this.load.image("tileset-nexus", "assets/sprites/tiles/NexusTileset.png");
@@ -205,6 +211,16 @@ export class BootScene extends Phaser.Scene {
     this.load.image("ui-scrollbar-thumb", "assets/sprites/UI/misc/ui-scrollbar-thumb.png");
     this.load.image("ui-tab-active", "assets/sprites/UI/misc/ui-tab-active.png");
     this.load.image("ui-tab-inactive", "assets/sprites/UI/misc/ui-tab-inactive.png");
+
+    // Audio — Weapon SFX
+    this.load.audio("sfx-sword-attack", "assets/audio/sfx/sword_attack.wav");
+    this.load.audio("sfx-bow-attack", "assets/audio/sfx/bow_attck.wav");
+    this.load.audio("sfx-wand-attack", "assets/audio/sfx/wand_attack.wav");
+
+    // Audio — Realm Music
+    this.load.audio("music-the-wild", "assets/audio/music/the-wild_music.mp3");
+    this.load.audio("music-the-ruins", "assets/audio/music/the-ruins_music.mp3");
+    this.load.audio("music-devine-hell", "assets/audio/music/devine-hell_music.mp3");
   }
 
   create() {

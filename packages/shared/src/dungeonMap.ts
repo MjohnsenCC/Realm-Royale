@@ -742,45 +742,68 @@ export function generateDungeonMap(seed: number, dungeonType?: number): DungeonM
   }
 
   // --- Connectivity validation via flood fill ---
-  // Verify every room is reachable from spawn; emergency-patch if not
-  const visited = new Uint8Array(W * H);
-  const floodQueue: number[] = [];
-  let fqHead = 0;
-  const startTX = Math.floor(spawnRoom.x + spawnRoom.w / 2);
-  const startTY = Math.floor(spawnRoom.y + spawnRoom.h / 2);
-  const startFIdx = startTY * W + startTX;
-  visited[startFIdx] = 1;
-  floodQueue.push(startFIdx);
+  // Verify every room is reachable from spawn; emergency-patch if not.
+  // Re-flood after each fix so later links benefit from earlier repairs.
   const floodDirs = [[1, 0], [-1, 0], [0, 1], [0, -1]];
 
-  while (fqHead < floodQueue.length) {
-    const fi = floodQueue[fqHead++];
-    const fx = fi % W;
-    const fy = Math.floor(fi / W);
-    for (const [ddx, ddy] of floodDirs) {
-      const nx = fx + ddx;
-      const ny = fy + ddy;
-      if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
-        const ni = ny * W + nx;
-        if (!visited[ni] && tiles[ni] === DungeonTile.Floor) {
-          visited[ni] = 1;
-          floodQueue.push(ni);
+  function floodFillFromSpawn(): Uint8Array {
+    const vis = new Uint8Array(W * H);
+    const queue: number[] = [];
+    let head = 0;
+    const sx = Math.floor(spawnRoom.x + spawnRoom.w / 2);
+    const sy = Math.floor(spawnRoom.y + spawnRoom.h / 2);
+    const si = sy * W + sx;
+    vis[si] = 1;
+    queue.push(si);
+    while (head < queue.length) {
+      const idx = queue[head++];
+      const fx = idx % W;
+      const fy = Math.floor(idx / W);
+      for (const [ddx, ddy] of floodDirs) {
+        const nx = fx + ddx;
+        const ny = fy + ddy;
+        if (nx >= 0 && nx < W && ny >= 0 && ny < H) {
+          const ni = ny * W + nx;
+          if (!vis[ni] && tiles[ni] === DungeonTile.Floor) {
+            vis[ni] = 1;
+            queue.push(ni);
+          }
         }
       }
     }
+    return vis;
   }
 
-  // Check each room is reachable; force-carve corridors for any that aren't
+  let visited = floodFillFromSpawn();
+
   for (const [fromIdx, toIdx] of links) {
     const room = rooms[toIdx];
     const rcx = Math.floor(room.x + room.w / 2);
     const rcy = Math.floor(room.y + room.h / 2);
     if (!visited[rcy * W + rcx]) {
-      // This room is disconnected — force-carve its link
-      const from = rooms[fromIdx];
-      const fCX = Math.floor(from.x + from.w / 2);
-      const fCY = Math.floor(from.y + from.h / 2);
-      forceCarveL(fCX, fCY, rcx, rcy);
+      // This room is disconnected — use full BFS corridor routing (not raw forceCarveL)
+      carveCorridor(fromIdx, toIdx);
+      // Re-flood so subsequent checks see the newly connected tiles
+      visited = floodFillFromSpawn();
+    }
+  }
+
+  // --- Thin-wall cleanup pass ---
+  // Remove 1-tile-thick wall strips between two floor areas to prevent
+  // player collision wedging in paper-thin walls.
+  for (let ty = 1; ty < H - 1; ty++) {
+    for (let tx = 1; tx < W - 1; tx++) {
+      const idx = ty * W + tx;
+      if (tiles[idx] !== DungeonTile.Wall) continue;
+      const floorLeft = tiles[idx - 1] === DungeonTile.Floor;
+      const floorRight = tiles[idx + 1] === DungeonTile.Floor;
+      const floorUp = tiles[(ty - 1) * W + tx] === DungeonTile.Floor;
+      const floorDown = tiles[(ty + 1) * W + tx] === DungeonTile.Floor;
+      // Wall with floor on opposite sides (horizontal or vertical)
+      if ((floorLeft && floorRight) || (floorUp && floorDown)) {
+        tiles[idx] = DungeonTile.Floor;
+        if (roomOwner[idx] === 0) roomOwner[idx] = 255;
+      }
     }
   }
 

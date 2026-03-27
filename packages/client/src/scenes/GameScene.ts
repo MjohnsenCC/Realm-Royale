@@ -18,6 +18,7 @@ import { EscapeMenuUI } from "../ui/EscapeMenuUI";
 import { OptionsUI } from "../ui/OptionsUI";
 import { generateEntityTextures, addOutlineToImageData, OUTLINED_DISPLAY_SIZE } from "../ui/EntityTextures";
 import { AuthManager } from "../auth/AuthManager";
+import { AudioManager } from "../audio/AudioManager";
 import { getUIScale, updateScreenDimensions, HUD_REF_WIDTH } from "../ui/UIScale";
 import { addText } from "../ui/TextFactory";
 import {
@@ -300,6 +301,15 @@ export class GameScene extends Phaser.Scene {
   private nexusMap: DungeonMapData = generateNexusMap();
   private vaultMap: DungeonMapData = generateVaultMap();
 
+  // Fog of War
+  private static readonly FOG_REVEAL_TILES = 16; // tile radius of revealed circle
+  private static readonly FOG_DARKNESS_ALPHA = 0.45; // semi-transparent dark filter
+  private static readonly FOG_DEPTH = 15; // above canopies (10), below UI (100+)
+
+  private fogRT: Phaser.GameObjects.RenderTexture | null = null;
+  private fogEraseImage: Phaser.GameObjects.Image | null = null;
+  private fogActive: boolean = false;
+
   // Hostile zone chunk-based tilemap system
   private static readonly CHUNK_SIZE = 64; // tiles per chunk axis
   private static readonly CHUNK_LOAD_RADIUS = 2; // load (2R+1)^2 = 25 chunks max
@@ -388,6 +398,7 @@ export class GameScene extends Phaser.Scene {
 
   create() {
     this.network = NetworkManager.getInstance();
+    AudioManager.getInstance().init(this);
     const room = this.network.getRoom();
     if (!room) {
       this.scene.start("MenuScene");
@@ -598,6 +609,10 @@ export class GameScene extends Phaser.Scene {
     this.drawGround();
     this.drawPortal();
 
+    // Fog of War overlay (must be created after ground so depth ordering is correct)
+    this.createFogCircleTexture();
+    this.createFogOfWar();
+
     // No camera bounds — camera always centers on player
     this.cameras.main.removeBounds();
     this.cameras.main.setBackgroundColor("#0a0a0a");
@@ -761,6 +776,9 @@ export class GameScene extends Phaser.Scene {
       // Set active biome layer based on realm tier
       if (isHostileZone(data.zone)) {
         setActiveRealmTier(getRealmTierFromZone(data.zone));
+        AudioManager.getInstance().onZoneChanged(getRealmTierFromZone(data.zone));
+      } else {
+        AudioManager.getInstance().onZoneChanged(null);
       }
       this.pendingInputs = [];
       this.isDead = false;
@@ -1858,7 +1876,7 @@ export class GameScene extends Phaser.Scene {
    * Uses the same extrusion technique as the hostile tileset to prevent seams.
    */
   private createZoneTilemap(
-    spriteKey: string,
+    spriteKeys: { floor0: string; floor1: string; wall: string },
     tiles: Uint8Array | number[],
     width: number,
     height: number
@@ -1867,19 +1885,23 @@ export class GameScene extends Phaser.Scene {
 
     const ts = TILE_SIZE;
     const EXTRUDE = 1;
-    const tilesetKey = `zone-tileset-${spriteKey}`;
+    const tilesetKey = `zone-tileset-${spriteKeys.floor0}`;
+    const TILE_COUNT = 3; // floor0, floor1, wall
 
     if (!this.textures.exists(tilesetKey)) {
+      const extTs = ts + EXTRUDE * 2;
       const canvas = document.createElement("canvas");
-      canvas.width = ts + EXTRUDE * 2;
-      canvas.height = ts + EXTRUDE * 2;
+      canvas.width = TILE_COUNT * extTs;
+      canvas.height = extTs;
       const ctx = canvas.getContext("2d")!;
       ctx.imageSmoothingEnabled = false;
 
-      const tex = this.textures.get(spriteKey);
-      if (tex && tex.key !== "__MISSING") {
+      const keys = [spriteKeys.floor0, spriteKeys.floor1, spriteKeys.wall];
+      for (let i = 0; i < keys.length; i++) {
+        const tex = this.textures.get(keys[i]);
+        if (!tex || tex.key === "__MISSING") continue;
         const src = tex.getSourceImage() as HTMLImageElement | HTMLCanvasElement;
-        const dx = EXTRUDE;
+        const dx = i * extTs + EXTRUDE;
         const dy = EXTRUDE;
         ctx.drawImage(src, 0, 0, src.width, src.height, dx, dy, ts, ts);
         // Extrude edges
@@ -1891,18 +1913,28 @@ export class GameScene extends Phaser.Scene {
       this.textures.addCanvas(tilesetKey, canvas);
     }
 
-    // Build tile data: 0 = floor tile, -1 = empty (wall)
+    // Build tile data: 0/1 = floor variants, 2 = wall (adjacent to floor), -1 = empty
     const tileData: number[][] = [];
     for (let ty = 0; ty < height; ty++) {
       const row: number[] = [];
       for (let tx = 0; tx < width; tx++) {
-        row.push(tiles[ty * width + tx] === DungeonTile.Floor ? 0 : -1);
+        if (tiles[ty * width + tx] === DungeonTile.Floor) {
+          row.push(tileVariantHash(tx, ty)); // 0 or 1
+        } else {
+          // Wall cell: render only if adjacent to at least one floor tile
+          const adjFloor =
+            (tx > 0 && tiles[ty * width + (tx - 1)] === DungeonTile.Floor) ||
+            (tx < width - 1 && tiles[ty * width + (tx + 1)] === DungeonTile.Floor) ||
+            (ty > 0 && tiles[(ty - 1) * width + tx] === DungeonTile.Floor) ||
+            (ty < height - 1 && tiles[(ty + 1) * width + tx] === DungeonTile.Floor);
+          row.push(adjFloor ? 2 : -1);
+        }
       }
       tileData.push(row);
     }
 
     const map = this.make.tilemap({ data: tileData, tileWidth: ts, tileHeight: ts });
-    const tileset = map.addTilesetImage("zone-tiles", tilesetKey, ts, ts, 1, 2);
+    const tileset = map.addTilesetImage("zone-tiles", tilesetKey, ts, ts, EXTRUDE, EXTRUDE * 2);
     if (!tileset) {
       map.destroy();
       return;
@@ -2676,6 +2708,7 @@ export class GameScene extends Phaser.Scene {
           if (now - this.lastLocalShootTime >= stats.shootCooldown) {
             this.lastLocalShootTime = now;
             const weaponSubtype = getItemSubtype(weaponItem.baseItemId);
+            AudioManager.getInstance().playWeaponSfx(weaponSubtype);
             let projType: number;
             let weaponPiercing = false;
             switch (weaponSubtype) {
@@ -2974,18 +3007,46 @@ export class GameScene extends Phaser.Scene {
 
     // Zone-based visibility filtering — only update when zone changes
     const inNexus = this.localZone === "nexus";
+    const isFogZone =
+      isHostileZone(this.localZone) || isDungeonZone(this.localZone);
     if (this.localZone !== this.lastVisibilityZone) {
       this.lastVisibilityZone = this.localZone;
-      this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
-      this.projectileSprites.forEach((sprite) => sprite.setVisible(true));
+      // In fog zones, skip enemy/projectile/bag visibility here — fog culling below handles it
+      if (!isFogZone) {
+        this.enemySprites.forEach((sprite) => sprite.setVisible(!inNexus));
+        this.projectileSprites.forEach((sprite) => sprite.setVisible(true));
+        this.bagSprites.forEach((sprite) => sprite.setVisible(true));
+      }
       for (const pp of this.predictedProjectiles) pp.sprite.setVisible(true);
-      this.bagSprites.forEach((sprite) => sprite.setVisible(true));
       this.dungeonPortalSprites.forEach((ps) => {
         ps.sprite.setVisible(true);
         ps.label.setVisible(true);
       });
       this.playerSprites.forEach((sprite) => {
         sprite.setVisible(sprite.zone === this.localZone);
+      });
+    }
+
+    // Fog of War entity visibility — hide enemies/projectiles/bags outside reveal radius
+    if (isFogZone && localSprite) {
+      const px = localSprite.displayX;
+      const py = localSprite.displayY;
+      const fogRadiusPx = GameScene.FOG_REVEAL_TILES * TILE_SIZE;
+      const rSq = fogRadiusPx * fogRadiusPx;
+      this.enemySprites.forEach((sprite) => {
+        const dx = sprite.x - px;
+        const dy = sprite.y - py;
+        sprite.setVisible(dx * dx + dy * dy <= rSq);
+      });
+      this.projectileSprites.forEach((sprite) => {
+        const dx = sprite.x - px;
+        const dy = sprite.y - py;
+        sprite.setVisible(dx * dx + dy * dy <= rSq);
+      });
+      this.bagSprites.forEach((sprite) => {
+        const dx = sprite.x - px;
+        const dy = sprite.y - py;
+        sprite.setVisible(dx * dx + dy * dy <= rSq);
       });
     }
 
@@ -2998,6 +3059,9 @@ export class GameScene extends Phaser.Scene {
         localSprite.displayY - this.cameras.main.height / 2
       );
     }
+
+    // Update Fog of War overlay
+    this.updateFogOfWar(localSprite);
 
     // Redraw hostile ground each frame (viewport-based biome tiles)
     if (isHostileZone(this.localZone)) {
@@ -3150,6 +3214,12 @@ export class GameScene extends Phaser.Scene {
   }
 
   private cleanup(): void {
+    this.fogRT?.destroy();
+    this.fogRT = null;
+    this.fogEraseImage?.destroy();
+    this.fogEraseImage = null;
+    this.fogActive = false;
+
     this.playerSprites.forEach((s) => s.destroy());
     this.playerSprites.clear();
     this.gravestoneSprites.forEach((g) => g.destroy());
@@ -3339,42 +3409,15 @@ export class GameScene extends Phaser.Scene {
 
     const { tiles, width, height } = mapData;
 
-    // Floor tiles via tilemap (single draw call per dungeon type)
-    const DUNGEON_SPRITE_KEYS: Record<number, string> = {
-      [0]: "tile-infernalpit",   // DungeonType.InfernalPit
-      [1]: "tile-voidsanctum",   // DungeonType.VoidSanctum
-      [2]: "tile-deepjungle",    // DungeonType.DeepJungle
+    // Floor + wall tiles via tilemap (3 tile variants per dungeon type)
+    const DUNGEON_SPRITE_KEYS: Record<number, { floor0: string; floor1: string; wall: string }> = {
+      [0]: { floor0: "tile-ip-floor0", floor1: "tile-ip-floor1", wall: "tile-ip-wall" },
+      [1]: { floor0: "tile-vs-floor0", floor1: "tile-vs-floor1", wall: "tile-vs-wall" },
+      [2]: { floor0: "tile-dj-floor0", floor1: "tile-dj-floor1", wall: "tile-dj-wall" },
     };
-    const spriteKey = dungeonType !== undefined ? DUNGEON_SPRITE_KEYS[dungeonType] : undefined;
-    if (spriteKey) {
-      this.createZoneTilemap(spriteKey, tiles, width, height);
-    }
-
-    // Draw highlighted edges where floor meets wall for visual clarity
-    this.groundGraphics.lineStyle(2, visual.tileLineColor, 0.6);
-    for (let ty = 0; ty < height; ty++) {
-      for (let tx = 0; tx < width; tx++) {
-        if (tiles[ty * width + tx] !== DungeonTile.Floor) continue;
-        const px = tx * TILE_SIZE;
-        const py = ty * TILE_SIZE;
-
-        // Left edge
-        if (tx === 0 || tiles[ty * width + (tx - 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px, py + TILE_SIZE);
-        }
-        // Right edge
-        if (tx === width - 1 || tiles[ty * width + (tx + 1)] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px + TILE_SIZE, py, px + TILE_SIZE, py + TILE_SIZE);
-        }
-        // Top edge
-        if (ty === 0 || tiles[(ty - 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py, px + TILE_SIZE, py);
-        }
-        // Bottom edge
-        if (ty === height - 1 || tiles[(ty + 1) * width + tx] === DungeonTile.Wall) {
-          this.groundGraphics.lineBetween(px, py + TILE_SIZE, px + TILE_SIZE, py + TILE_SIZE);
-        }
-      }
+    const spriteKeys = dungeonType !== undefined ? DUNGEON_SPRITE_KEYS[dungeonType] : undefined;
+    if (spriteKeys) {
+      this.createZoneTilemap(spriteKeys, tiles, width, height);
     }
 
     // Dungeon name label near spawn room
@@ -3573,6 +3616,76 @@ export class GameScene extends Phaser.Scene {
     return counts;
   }
 
+  // ── Fog of War ──────────────────────────────────────────────────────
+
+  private createFogCircleTexture(): void {
+    const r = GameScene.FOG_REVEAL_TILES;
+    const ts = TILE_SIZE;
+    const side = (2 * r + 1) * ts;
+    const canvasTexture = this.textures.createCanvas("fog-circle", side, side);
+    if (!canvasTexture) return;
+    const ctx = canvasTexture.context;
+    const rSq = r * r;
+    ctx.fillStyle = "white";
+    for (let dy = -r; dy <= r; dy++) {
+      for (let dx = -r; dx <= r; dx++) {
+        if (dx * dx + dy * dy <= rSq) {
+          ctx.fillRect((dx + r) * ts, (dy + r) * ts, ts, ts);
+        }
+      }
+    }
+    canvasTexture.refresh();
+  }
+
+  private createFogOfWar(): void {
+    const { width, height } = this.scale;
+    this.fogRT = this.add.renderTexture(0, 0, width, height);
+    this.fogRT.setOrigin(0, 0);
+    this.fogRT.setScrollFactor(0);
+    this.fogRT.setDepth(GameScene.FOG_DEPTH);
+    this.fogRT.setVisible(false);
+
+    this.fogEraseImage = this.make.image({
+      key: "fog-circle",
+      add: false,
+    });
+    this.fogEraseImage.setOrigin(0.5, 0.5);
+  }
+
+  private updateFogOfWar(localSprite: PlayerSprite | undefined): void {
+    if (!this.fogRT || !this.fogEraseImage) return;
+
+    const shouldBeActive =
+      isHostileZone(this.localZone) || isDungeonZone(this.localZone);
+
+    if (shouldBeActive !== this.fogActive) {
+      this.fogActive = shouldBeActive;
+      this.fogRT.setVisible(shouldBeActive);
+    }
+
+    if (!this.fogActive || !localSprite) return;
+
+    this.fogRT.clear();
+    this.fogRT.fill(0x000000, GameScene.FOG_DARKNESS_ALPHA);
+
+    // Snap to the player's current tile so the revealed circle aligns with
+    // the tile grid (pixelated circle, same as RotMG)
+    const ts = TILE_SIZE;
+    const tileX = Math.floor(localSprite.displayX / ts);
+    const tileY = Math.floor(localSprite.displayY / ts);
+    const cam = this.cameras.main;
+    const screenX = tileX * ts + ts / 2 - cam.scrollX;
+    const screenY = tileY * ts + ts / 2 - cam.scrollY;
+
+    this.fogRT.erase(this.fogEraseImage, screenX, screenY);
+  }
+
+  private resizeFogOfWar(): void {
+    if (!this.fogRT) return;
+    const { width, height } = this.scale;
+    this.fogRT.resize(width, height);
+  }
+
   private relayoutUI(): void {
     this.hud.relayout();
     this.statsPanel.relayout();
@@ -3583,6 +3696,7 @@ export class GameScene extends Phaser.Scene {
     this.chatUI.relayout();
     this.escapeMenuUI.relayout();
     this.optionsUI.relayout();
+    this.resizeFogOfWar();
   }
 
   private updateChatOffset(): void {
