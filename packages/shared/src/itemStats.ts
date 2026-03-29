@@ -112,8 +112,8 @@ export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]
   [StatType.AttackDamage]:  { 1: [2, 5],     2: [6, 14],    3: [15, 24],   4: [25, 34],   5: [35, 44],   6: [45, 55] },
   [StatType.AttackSpeed]:   { 1: [1, 2],     2: [2, 3],     3: [3, 5],     4: [5, 8],     5: [8, 10],    6: [10, 13] },
   [StatType.Health]:        { 1: [3, 9],     2: [10, 24],   3: [25, 39],   4: [40, 54],   5: [55, 69],   6: [70, 84] },
-  [StatType.HealthRegen]:   { 1: [1, 2],     2: [2, 3],     3: [3, 5],     4: [5, 7],     5: [7, 10],    6: [10, 14] },
-  [StatType.ManaRegen]:     { 1: [1, 3],     2: [3, 5],     3: [5, 8],     4: [8, 12],    5: [12, 17],   6: [17, 23] },
+  [StatType.HealthRegen]:   { 1: [0.1, 0.3], 2: [0.3, 0.5], 3: [0.5, 0.8], 4: [0.8, 1.2], 5: [1.2, 1.6], 6: [1.6, 2.0] },
+  [StatType.ManaRegen]:     { 1: [0.2, 0.5], 2: [0.5, 1.0], 3: [1.0, 1.5], 4: [1.5, 2.5], 5: [2.5, 3.5], 6: [3.5, 5.0] },
   [StatType.MovementSpeed]: { 1: [1, 4],     2: [4, 8],     3: [8, 12],    4: [12, 17],   5: [17, 22],   6: [22, 28] },
   [StatType.Mana]:          { 1: [15, 40],   2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260], 6: [260, 340] },
   [StatType.PhysicalDamageReduction]: { 1: [1, 4], 2: [2, 8], 3: [3, 12], 4: [3, 16], 5: [3, 20], 6: [3, 25] },
@@ -130,7 +130,7 @@ export const STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]
 export const LOCKED_STAT_RANGES_BY_TIER: Record<number, Record<number, [number, number]>> = {
   [StatType.Health]:    { 1: [80, 170], 2: [180, 370], 3: [380, 580], 4: [590, 800], 5: [810, 1030], 6: [1040, 1280] },
   [StatType.Mana]:      { 1: [15, 40],  2: [40, 80],   3: [80, 130],  4: [130, 190], 5: [190, 260],  6: [260, 340] },
-  [StatType.ManaRegen]: { 1: [3, 8],    2: [8, 16],    3: [16, 26],   4: [26, 38],   5: [38, 52],    6: [52, 68] },
+  [StatType.ManaRegen]: { 1: [0.3, 0.8], 2: [0.8, 1.6], 3: [1.6, 2.6], 4: [2.6, 3.8], 5: [3.8, 5.2], 6: [5.2, 6.8] },
 };
 
 // --- Locked Quality Multiplier (DEPRECATED — kept for backward compat) ---
@@ -208,9 +208,9 @@ export const LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number, [num
     9: [645, 770],   10: [775, 920],  11: [925, 1090],  12: [1095, 1280],
   },
   [StatType.HealthRegen]: {
-    1: [1, 2],   2: [3, 4],   3: [5, 7],   4: [8, 10],
-    5: [11, 14], 6: [15, 19], 7: [20, 25], 8: [26, 32],
-    9: [33, 40], 10: [41, 49], 11: [50, 59], 12: [60, 70],
+    1: [0.1, 0.2], 2: [0.2, 0.4], 3: [0.4, 0.6], 4: [0.6, 0.9],
+    5: [0.9, 1.2], 6: [1.2, 1.6], 7: [1.6, 2.0], 8: [2.0, 2.5],
+    9: [2.5, 3.0], 10: [3.0, 3.6], 11: [3.6, 4.3], 12: [4.3, 5.0],
   },
   [StatType.Mana]: {
     1: [15, 35],     2: [40, 65],     3: [70, 100],    4: [105, 145],
@@ -218,9 +218,9 @@ export const LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number, [num
     9: [400, 475],   10: [480, 565],  11: [570, 665],   12: [670, 770],
   },
   [StatType.ManaRegen]: {
-    1: [3, 6],     2: [7, 11],    3: [12, 18],   4: [19, 26],
-    5: [27, 36],   6: [37, 48],   7: [49, 62],   8: [63, 78],
-    9: [79, 96],   10: [97, 116], 11: [117, 138], 12: [139, 162],
+    1: [0.3, 0.6],  2: [0.7, 1.1],  3: [1.2, 1.8],  4: [1.9, 2.6],
+    5: [2.7, 3.6],  6: [3.7, 4.8],  7: [4.9, 6.2],  8: [6.3, 7.8],
+    9: [7.9, 9.6],  10: [9.7, 11.6], 11: [11.7, 13.8], 12: [13.9, 16.2],
   },
 };
 
@@ -231,17 +231,17 @@ export const RING_LOCKED_STAT_RANGES_BY_ITEM_TIER: Record<number, Record<number,
     5: [330, 475],  6: [480, 640],  7: [645, 770],
   },
   [StatType.ManaRegen]: {
-    1: [3, 11],    2: [12, 26],   3: [27, 48],   4: [49, 78],
-    5: [79, 116],  6: [117, 148], 7: [149, 162],
+    1: [0.3, 1.0],  2: [1.2, 2.5],  3: [2.7, 4.5],  4: [4.8, 7.5],
+    5: [7.8, 11.0], 6: [11.5, 14.5], 7: [15.0, 16.0],
   },
 };
 
 // UT armor/ring: single range per stat type (~T9-11 equivalent).
 export const UT_LOCKED_STAT_RANGES: Record<number, [number, number]> = {
   [StatType.Health]:     [645, 1090],
-  [StatType.HealthRegen]: [33, 59],
+  [StatType.HealthRegen]: [2.5, 4.3],
   [StatType.Mana]:       [400, 665],
-  [StatType.ManaRegen]:  [79, 138],
+  [StatType.ManaRegen]:  [7.8, 13.8],
 };
 
 /** Get the locked stat value for an item tier and roll (new system — no stat tier). */
@@ -323,21 +323,21 @@ export interface WeaponTemplate {
 export const WEAPON_TEMPLATES: Record<number, WeaponTemplate> = {
   [WeaponSubtype.Sword]: {
     baseDamage: 95,
-    baseCooldown: 667,
+    baseCooldown: 445,
     baseRange: 180,
     baseProjSpeed: 460,
     baseProjSize: 18,
   },
   [WeaponSubtype.Bow]: {
     baseDamage: 55,
-    baseCooldown: 370,
+    baseCooldown: 247,
     baseRange: 470,
     baseProjSpeed: 560,
     baseProjSize: 6,
   },
   [WeaponSubtype.Wand]: {
     baseDamage: 45,
-    baseCooldown: 435,
+    baseCooldown: 290,
     baseRange: 520,
     baseProjSpeed: 620,
     baseProjSize: 5,
@@ -853,8 +853,8 @@ export function getScaledAbilityStats(
     range: Math.round(template.baseRange * (0.8 + 0.2 * mult)),
     projectileSpeed: Math.round(template.baseProjSpeed * (0.85 + 0.15 * mult)),
     projectileSize: Math.round(template.baseProjSize * (0.85 + 0.15 * mult)),
-    manaCost: Math.round(template.baseManaCost * (1.1 - 0.1 * mult) / manaQuality),
-    cooldown: Math.round(template.baseCooldown / mult),
+    manaCost: Math.round(template.baseManaCost / manaQuality),
+    cooldown: Math.round(template.baseCooldown / (1 + 0.15 * mult)),
     piercing: template.piercing,
   };
 }

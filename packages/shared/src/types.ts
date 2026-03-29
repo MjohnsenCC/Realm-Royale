@@ -272,6 +272,48 @@ export const MovementPatternType = {
 export type MovementPatternType =
   (typeof MovementPatternType)[keyof typeof MovementPatternType];
 
+// Boss-specific movement behaviors (dungeon bosses only)
+export const BossMovementType = {
+  Orbit: 0,        // Circle spawn point at fixed radius
+  Stationary: 1,   // Don't move at all
+  Chase: 2,        // Pursue target player directly
+  Teleport: 3,     // Blink to random walkable position every N seconds
+  Charge: 4,       // Dash toward player, pause, then retreat
+  Patrol: 5,       // Move between waypoints in the boss room
+} as const;
+export type BossMovementType =
+  (typeof BossMovementType)[keyof typeof BossMovementType];
+
+// Boss special abilities (one per phase, executed on cooldown)
+export const BossAbilityType = {
+  None: 0,
+  SummonAdds: 1,    // Spawn minion enemies near boss
+  AreaDenial: 2,    // Place persistent damaging zone on the ground
+  ShieldPhase: 3,   // Brief invulnerability + telegraph before big burst
+  Enrage: 4,        // Temporary speed/damage buff
+  PullPlayers: 5,   // Slow pull toward boss center
+  VineSnare: 6,     // Root closest player in place briefly
+} as const;
+export type BossAbilityType =
+  (typeof BossAbilityType)[keyof typeof BossAbilityType];
+
+// Data-driven boss phase configuration
+export interface BossPhaseConfig {
+  hpThreshold: number;              // Enter this phase at or below this HP ratio (1.0 = phase1)
+  shootingPatterns: number[];       // ShootingPatternType values to cycle through
+  shootCooldown: number;            // ms between shots
+  projectileDamage: number;
+  projectileSpeed: number;
+  projectileRange: number;
+  speed: number;                    // movement speed override
+  movementType: number;             // BossMovementType
+  movementParam?: number;           // radius for Orbit, interval for Teleport/Patrol, etc.
+  ability: number;                  // BossAbilityType
+  abilityCooldown?: number;         // ms between ability uses
+  abilityParam?: number;            // count for SummonAdds, duration for ShieldPhase/Enrage/VineSnare, radius for AreaDenial/PullPlayers
+  abilityMinionType?: number;       // EnemyType for SummonAdds
+}
+
 // Idle movement intensity tiers (realm overworld)
 export const IdleIntensity = {
   Low: 0, // 30% speed, 30-80px range, 1-3s pause (default)

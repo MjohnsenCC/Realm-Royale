@@ -199,6 +199,11 @@ export class DungeonSystem {
       boss.isBoss = true;
       boss.bossPhase = 0;
       boss.aiState = EnemyAIState.Sleeping;
+      boss.bossAbilityCooldownTimer = 0;
+      boss.bossAbilityActiveTimer = 0;
+      boss.bossPatrolTimer = 3000;
+      boss.bossTeleportTimer = 4000;
+      boss.bossChargeTimer = 2000;
     }
   }
 
@@ -433,6 +438,39 @@ export class DungeonSystem {
         bossAwokeZones.push(zone);
       }
     }
+
+    // Boss minion spawning (from SummonAdds ability)
+    state.enemies.forEach((enemy) => {
+      if (!enemy.isBoss) return;
+      const pending = (enemy as any)._pendingMinionSpawn as { type: number; count: number } | undefined;
+      if (!pending) return;
+      delete (enemy as any)._pendingMinionSpawn;
+
+      const mapData = this.activeDungeonMaps.get(enemy.zone);
+      for (let i = 0; i < pending.count; i++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 40 + Math.random() * 60;
+        let mx = enemy.x + Math.cos(angle) * dist;
+        let my = enemy.y + Math.sin(angle) * dist;
+        if (mapData && !isTileWalkable(mx, my, mapData)) {
+          mx = enemy.x;
+          my = enemy.y;
+        }
+        const minion = this.spawnDungeonEnemy(pending.type, mx, my, enemy.zone, state);
+        minion.packLeaderId = enemy.id;
+      }
+    });
+
+    // Boss area denial projectile spawning
+    state.enemies.forEach((enemy) => {
+      if (!enemy.isBoss) return;
+      const areaDef = (enemy as any)._pendingAreaDenial as EnemyDefinition | undefined;
+      if (!areaDef) return;
+      delete (enemy as any)._pendingAreaDenial;
+      // Area denial is handled by ShootingPatternSystem via the normal update
+      // Store the override so next shot uses it
+      (enemy as any)._areaDenialDef = areaDef;
+    });
 
     // Cleanup empty dungeons (no players = remove enemies, projectiles, bags, portals)
     this.cleanupEmptyDungeons(state);

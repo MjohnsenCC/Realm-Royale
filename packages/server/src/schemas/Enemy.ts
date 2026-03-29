@@ -41,6 +41,18 @@ export class Enemy extends Schema {
   isSwitch: boolean = false;
   lastMinionSpawnTime: number = 0;
 
+  // Boss ability state (server-only)
+  bossAbilityCooldownTimer: number = 0; // ms until next ability use
+  bossAbilityActiveTimer: number = 0;   // ms remaining for active ability (enrage, shield, snare)
+  bossShieldActive: boolean = false;    // true during ShieldPhase invulnerability
+  bossEnraged: boolean = false;         // true during Enrage buff
+  bossPatrolIndex: number = 0;          // current waypoint index for Patrol movement
+  bossPatrolTimer: number = 0;          // ms remaining at current waypoint
+  bossTeleportTimer: number = 0;        // ms until next teleport
+  bossChargePhase: number = 0;          // 0=approach, 1=charging, 2=pausing
+  bossChargeTimer: number = 0;          // ms remaining in current charge phase
+  bossChargeAngle: number = 0;          // direction of current charge
+
   // Pack (cluster) tracking (server-only)
   packLeaderId: string = ""; // minions track their leader's id
   isPackLeader: boolean = false;

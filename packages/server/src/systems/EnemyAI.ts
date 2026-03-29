@@ -7,7 +7,10 @@ import {
   EnemyAIState,
   ShootingPatternType,
   MovementPatternType,
+  BossMovementType,
+  BossAbilityType,
   ENEMY_DEFS,
+  BOSS_PHASES,
   distanceBetween,
   angleBetween,
   clamp,
@@ -20,7 +23,7 @@ import {
   isDungeonZone,
   isHostileZone,
 } from "@rotmg-lite/shared";
-import type { EnemyDefinition, DungeonMapData } from "@rotmg-lite/shared";
+import type { EnemyDefinition, DungeonMapData, BossPhaseConfig } from "@rotmg-lite/shared";
 
 const AI_UPDATE_RANGE = 1500; // Only update enemies within this range of a player
 const ORBIT_RADIUS = 120; // 3 tiles — used by Orbiter movement pattern
@@ -60,33 +63,21 @@ export class EnemyAI {
 
       const mapData = dungeonMaps?.get(enemy.zone);
 
-      // Boss phase transitions for The Architect (3 phases)
-      if (enemy.isBoss && enemy.enemyType === EnemyType.TheArchitect && enemy.bossPhase >= 1) {
-        const hpRatio = enemy.hp / enemy.maxHp;
-        if (hpRatio <= 0.33 && enemy.bossPhase < 3) {
-          enemy.bossPhase = 3;
-        } else if (hpRatio <= 0.66 && enemy.bossPhase < 2) {
-          enemy.bossPhase = 2;
-        }
-      }
-
-      // Boss phase transitions for Molten Wyrm (3 phases)
-      if (enemy.isBoss && enemy.enemyType === EnemyType.MoltenWyrm && enemy.bossPhase >= 1) {
-        const hpRatio = enemy.hp / enemy.maxHp;
-        if (hpRatio <= 0.3 && enemy.bossPhase < 3) {
-          enemy.bossPhase = 3;
-        } else if (hpRatio <= 0.6 && enemy.bossPhase < 2) {
-          enemy.bossPhase = 2;
-        }
-      }
-
-      // Boss phase transitions for Jungle Warden (3 phases)
-      if (enemy.isBoss && enemy.enemyType === EnemyType.JungleWarden && enemy.bossPhase >= 1) {
-        const hpRatio = enemy.hp / enemy.maxHp;
-        if (hpRatio <= 0.33 && enemy.bossPhase < 3) {
-          enemy.bossPhase = 3;
-        } else if (hpRatio <= 0.66 && enemy.bossPhase < 2) {
-          enemy.bossPhase = 2;
+      // Data-driven boss phase transitions (HP-gated)
+      if (enemy.isBoss && enemy.bossPhase >= 1) {
+        const phases = BOSS_PHASES[enemy.enemyType];
+        if (phases) {
+          const hpRatio = enemy.hp / enemy.maxHp;
+          // Check phases in reverse order (highest phase first) so we jump to the right one
+          for (let i = phases.length - 1; i >= 0; i--) {
+            const phaseNum = i + 1;
+            if (hpRatio <= phases[i].hpThreshold && enemy.bossPhase < phaseNum) {
+              enemy.bossPhase = phaseNum;
+              // Reset ability cooldown on phase change so new ability activates soon
+              enemy.bossAbilityCooldownTimer = 2000;
+              break;
+            }
+          }
         }
       }
 
@@ -238,11 +229,20 @@ export class EnemyAI {
     // Get effective def (boss phase overrides)
     const effectiveDef = this.getBossOverrideDef(enemy, def);
 
-    // Movement dispatch
-    this.updateAggroMovement(enemy, effectiveDef, target, dt, mapData);
+    // Boss-specific movement and abilities
+    const phaseConfig = this.getBossPhaseConfig(enemy);
+    if (phaseConfig) {
+      this.updateBossMovement(enemy, effectiveDef, target, dt, phaseConfig, mapData);
+      this.updateBossAbilities(enemy, effectiveDef, target, _deltaTimeMs, phaseConfig, state, shootingSystem, mapData);
+    } else {
+      // Non-boss or no config: use standard movement
+      this.updateAggroMovement(enemy, effectiveDef, target, dt, mapData);
+    }
 
-    // Shooting
-    this.updateAggroShooting(enemy, effectiveDef, target, state, shootingSystem);
+    // Shooting (skip if boss shield is active)
+    if (!enemy.bossShieldActive) {
+      this.updateAggroShooting(enemy, effectiveDef, target, state, shootingSystem);
+    }
   }
 
   // --- Movement pattern dispatch ---
@@ -254,20 +254,6 @@ export class EnemyAI {
     dt: number,
     mapData?: DungeonMapData
   ): void {
-    // Boss-specific movement overrides
-    if (enemy.enemyType === EnemyType.MoltenWyrm && enemy.isBoss) {
-      const orbitRadius = 40;
-      const orbitSpeed = 0.8;
-      enemy.bossOrbitAngle += orbitSpeed * dt;
-      if (enemy.bossOrbitAngle > Math.PI * 2) {
-        enemy.bossOrbitAngle -= Math.PI * 2;
-      }
-      enemy.x = enemy.spawnX + Math.cos(enemy.bossOrbitAngle) * orbitRadius;
-      enemy.y = enemy.spawnY + Math.sin(enemy.bossOrbitAngle) * orbitRadius;
-      this.clampToZone(enemy, def, mapData);
-      return;
-    }
-
     const pattern = def.movementPattern ?? MovementPatternType.WanderingSprayer;
 
     switch (pattern) {
@@ -635,155 +621,378 @@ export class EnemyAI {
     return near;
   }
 
-  /** Override enemy definition for bosses based on their current phase. */
+  /** Get the current BossPhaseConfig for a boss, or null for non-bosses. */
+  private getBossPhaseConfig(enemy: Enemy): BossPhaseConfig | null {
+    if (!enemy.isBoss || enemy.bossPhase === 0) return null;
+    const phases = BOSS_PHASES[enemy.enemyType];
+    if (!phases) return null;
+    const idx = enemy.bossPhase - 1;
+    return phases[idx] ?? null;
+  }
+
+  /** Override enemy definition for bosses based on their current phase config. */
   private getBossOverrideDef(
     enemy: Enemy,
     baseDef: EnemyDefinition
   ): EnemyDefinition {
-    if (!enemy.isBoss || enemy.bossPhase === 0) return baseDef;
-
-    if (enemy.enemyType === EnemyType.MoltenWyrm) {
-      if (enemy.bossPhase === 1) {
-        // Phase 1 (100%-60%): Slow lumbering attacks — alternating aimed spread and slow ring
-        const useSpread =
-          Math.floor(enemy.spiralAngleOffset * 3) % 2 === 0;
-        return {
-          ...baseDef,
-          shootingPattern: useSpread
-            ? ShootingPatternType.Spread3
-            : ShootingPatternType.BurstRing8,
-          shootCooldown: 1200,
-          projectileSpeed: 120,
-          projectileRange: 280,
-          speed: 55,
-        };
-      } else if (enemy.bossPhase === 2) {
-        // Phase 2 (60%-30%): Eruption — fast spirals with increased speed, chases aggressively
-        const useSpiral =
-          Math.floor(enemy.spiralAngleOffset * 4) % 3 !== 0;
-        return {
-          ...baseDef,
-          shootingPattern: useSpiral
-            ? ShootingPatternType.Spiral5
-            : ShootingPatternType.Spread5,
-          shootCooldown: 800,
-          projectileDamage: 42,
-          projectileSpeed: 120,
-          projectileRange: 300,
-          speed: 80,
-        };
-      } else {
-        // Phase 3 (<30%): Meltdown — rapid rotating cross + multi-speed rings, very aggressive
-        const cycle = Math.floor(enemy.spiralAngleOffset * 5) % 3;
-        let pattern: number;
-        if (cycle === 0) pattern = ShootingPatternType.RotatingCross;
-        else if (cycle === 1) pattern = ShootingPatternType.MultiSpeedRing;
-        else pattern = ShootingPatternType.CounterSpiralDouble;
-        return {
-          ...baseDef,
-          shootingPattern: pattern,
-          shootCooldown: 500,
-          projectileDamage: 50,
-          projectileSpeed: 120,
-          projectileRange: 350,
-          speed: 100,
-        };
-      }
-    }
-
-    if (enemy.enemyType === EnemyType.TheArchitect) {
-      if (enemy.bossPhase === 0) {
-        // Sleeping -- safety fallback (should not be shooting)
+    const config = this.getBossPhaseConfig(enemy);
+    if (!config) {
+      // Sleeping boss safety fallback
+      if (enemy.isBoss && enemy.bossPhase === 0) {
         return { ...baseDef, shootCooldown: 999999 };
       }
-
-      if (enemy.bossPhase === 1) {
-        // Phase 1 (100%-66%): Alternating Spiral8 + aimed Spread5
-        const useSpiral = Math.floor(enemy.spiralAngleOffset * 3) % 2 === 0;
-        return {
-          ...baseDef,
-          shootingPattern: useSpiral
-            ? ShootingPatternType.Spiral8
-            : ShootingPatternType.Spread5,
-          shootCooldown: 900,
-          projectileDamage: 45,
-          speed: 30,
-        };
-      }
-
-      if (enemy.bossPhase === 2) {
-        // Phase 2 (66%-33%): Counter-rotating double spiral + aimed spread
-        const useSpiral = Math.floor(enemy.spiralAngleOffset * 3) % 3 !== 0;
-        return {
-          ...baseDef,
-          shootingPattern: useSpiral
-            ? ShootingPatternType.CounterSpiralDouble
-            : ShootingPatternType.Spread5,
-          shootCooldown: 650,
-          projectileDamage: 55,
-          speed: 40,
-        };
-      }
-
-      // Phase 3 (<33%): Dense multi-speed rings + rotating cross + aimed bursts
-      const patternCycle = Math.floor(enemy.spiralAngleOffset * 2) % 3;
-      let pattern: number;
-      if (patternCycle === 0) pattern = ShootingPatternType.MultiSpeedRing;
-      else if (patternCycle === 1) pattern = ShootingPatternType.RotatingCross;
-      else pattern = ShootingPatternType.Spread5;
-
-      return {
-        ...baseDef,
-        shootingPattern: pattern,
-        shootCooldown: 450,
-        projectileDamage: 65,
-        speed: 50,
-      };
+      return baseDef;
     }
 
-    if (enemy.enemyType === EnemyType.JungleWarden) {
-      if (enemy.bossPhase === 0) {
-        return { ...baseDef, shootCooldown: 999999 };
-      }
+    // Cycle through shooting patterns using spiralAngleOffset
+    const patternIdx = Math.floor(enemy.spiralAngleOffset * 3) % config.shootingPatterns.length;
 
-      if (enemy.bossPhase === 1) {
-        // Phase 1 (100%-66%): Stationary, Spread3, moderate damage
-        return {
-          ...baseDef,
-          shootingPattern: ShootingPatternType.Spread3,
-          shootCooldown: 1400,
-          projectileDamage: 20,
-          projectileSpeed: 120,
-          projectileRange: 300,
-          speed: 0,
-        };
-      }
+    // Apply enrage multipliers
+    const enrageDmgMult = enemy.bossEnraged ? 1.5 : 1;
+    const enrageSpdMult = enemy.bossEnraged ? 1.4 : 1;
 
-      if (enemy.bossPhase === 2) {
-        // Phase 2 (66%-33%): Stationary, BurstRing8, higher damage
-        return {
-          ...baseDef,
-          shootingPattern: ShootingPatternType.BurstRing8,
-          shootCooldown: 1000,
-          projectileDamage: 25,
-          projectileSpeed: 120,
-          projectileRange: 350,
-          speed: 0,
-        };
-      }
+    return {
+      ...baseDef,
+      shootingPattern: config.shootingPatterns[patternIdx],
+      shootCooldown: config.shootCooldown,
+      projectileDamage: Math.round(config.projectileDamage * enrageDmgMult),
+      projectileSpeed: config.projectileSpeed,
+      projectileRange: config.projectileRange,
+      speed: Math.round(config.speed * enrageSpdMult),
+    };
+  }
 
-      // Phase 3 (<33%): Chase closest player, Spiral5, high damage
-      return {
-        ...baseDef,
-        shootingPattern: ShootingPatternType.Spiral5,
-        shootCooldown: 800,
-        projectileDamage: 30,
-        projectileSpeed: 120,
-        projectileRange: 350,
-        speed: 80,
-      };
+  // --- Boss movement dispatch (replaces hardcoded per-boss movement) ---
+
+  private updateBossMovement(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    config: BossPhaseConfig,
+    mapData?: DungeonMapData
+  ): void {
+    switch (config.movementType) {
+      case BossMovementType.Orbit:
+        this.moveBossOrbit(enemy, def, dt, config.movementParam ?? 40, mapData);
+        break;
+      case BossMovementType.Stationary:
+        // Do nothing — boss stays exactly at its current position.
+        // Calling clampToZone here would introduce floating-point drift
+        // from wall collision resolution, causing visible micro-shaking.
+        break;
+      case BossMovementType.Chase:
+        this.moveBossChase(enemy, def, target, dt, mapData);
+        break;
+      case BossMovementType.Teleport:
+        this.moveBossTeleport(enemy, def, target, dt, config.movementParam ?? 4000, mapData);
+        break;
+      case BossMovementType.Charge:
+        this.moveBossCharge(enemy, def, target, dt, config.movementParam ?? 1500, mapData);
+        break;
+      case BossMovementType.Patrol:
+        this.moveBossPatrol(enemy, def, dt, config.movementParam ?? 3000, mapData);
+        break;
+      default:
+        this.moveBossChase(enemy, def, target, dt, mapData);
+        break;
+    }
+  }
+
+  private moveBossOrbit(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    dt: number,
+    radius: number,
+    mapData?: DungeonMapData
+  ): void {
+    const orbitSpeed = 0.8;
+    enemy.bossOrbitAngle += orbitSpeed * dt;
+    if (enemy.bossOrbitAngle > Math.PI * 2) {
+      enemy.bossOrbitAngle -= Math.PI * 2;
+    }
+    enemy.x = enemy.spawnX + Math.cos(enemy.bossOrbitAngle) * radius;
+    enemy.y = enemy.spawnY + Math.sin(enemy.bossOrbitAngle) * radius;
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  private moveBossChase(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    mapData?: DungeonMapData
+  ): void {
+    const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+    if (dist > def.radius + 10) {
+      const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+      enemy.x += Math.cos(angle) * def.speed * dt;
+      enemy.y += Math.sin(angle) * def.speed * dt;
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  private moveBossTeleport(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    interval: number,
+    mapData?: DungeonMapData
+  ): void {
+    enemy.bossTeleportTimer -= dt * 1000;
+    if (enemy.bossTeleportTimer <= 0) {
+      enemy.bossTeleportTimer = interval;
+      // Teleport to a random walkable position within aggro range of spawn
+      for (let attempt = 0; attempt < 15; attempt++) {
+        const angle = Math.random() * Math.PI * 2;
+        const dist = 80 + Math.random() * 200;
+        const nx = enemy.spawnX + Math.cos(angle) * dist;
+        const ny = enemy.spawnY + Math.sin(angle) * dist;
+        if (!mapData || isTileWalkable(nx, ny, mapData)) {
+          enemy.x = nx;
+          enemy.y = ny;
+          break;
+        }
+      }
+    } else {
+      // Slow drift toward target between teleports
+      const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+      if (dist > 100) {
+        const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+        enemy.x += Math.cos(angle) * def.speed * 0.3 * dt;
+        enemy.y += Math.sin(angle) * def.speed * 0.3 * dt;
+      }
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  private moveBossCharge(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    dt: number,
+    chargeDuration: number,
+    mapData?: DungeonMapData
+  ): void {
+    enemy.bossChargeTimer -= dt * 1000;
+
+    switch (enemy.bossChargePhase) {
+      case 0: {
+        // Approach: slowly move toward target until close or timer expires
+        const dist = distanceBetween(enemy.x, enemy.y, target.x, target.y);
+        const angle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+        enemy.x += Math.cos(angle) * def.speed * 0.4 * dt;
+        enemy.y += Math.sin(angle) * def.speed * 0.4 * dt;
+        if (dist <= 150 || enemy.bossChargeTimer <= 0) {
+          enemy.bossChargePhase = 1;
+          enemy.bossChargeTimer = chargeDuration;
+          enemy.bossChargeAngle = angleBetween(enemy.x, enemy.y, target.x, target.y);
+        }
+        break;
+      }
+      case 1: {
+        // Charge: dash in locked direction at 2.5x speed
+        enemy.x += Math.cos(enemy.bossChargeAngle) * def.speed * 2.5 * dt;
+        enemy.y += Math.sin(enemy.bossChargeAngle) * def.speed * 2.5 * dt;
+        if (enemy.bossChargeTimer <= 0) {
+          enemy.bossChargePhase = 2;
+          enemy.bossChargeTimer = 1000; // pause after charge
+        }
+        break;
+      }
+      case 2: {
+        // Pause: brief recovery, then restart cycle
+        if (enemy.bossChargeTimer <= 0) {
+          enemy.bossChargePhase = 0;
+          enemy.bossChargeTimer = 2000; // approach time
+        }
+        break;
+      }
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  private moveBossPatrol(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    dt: number,
+    waypointDelay: number,
+    mapData?: DungeonMapData
+  ): void {
+    // Generate 4 waypoints around spawn (corners of boss room area)
+    const offsets = [
+      { x: -100, y: -100 },
+      { x: 100, y: -100 },
+      { x: 100, y: 100 },
+      { x: -100, y: 100 },
+    ];
+    const wp = offsets[enemy.bossPatrolIndex % offsets.length];
+    const targetX = enemy.spawnX + wp.x;
+    const targetY = enemy.spawnY + wp.y;
+
+    const dist = distanceBetween(enemy.x, enemy.y, targetX, targetY);
+    if (dist > 15) {
+      const angle = angleBetween(enemy.x, enemy.y, targetX, targetY);
+      enemy.x += Math.cos(angle) * def.speed * dt;
+      enemy.y += Math.sin(angle) * def.speed * dt;
+    } else {
+      // At waypoint — pause then advance
+      enemy.bossPatrolTimer -= dt * 1000;
+      if (enemy.bossPatrolTimer <= 0) {
+        enemy.bossPatrolIndex = (enemy.bossPatrolIndex + 1) % offsets.length;
+        enemy.bossPatrolTimer = waypointDelay;
+      }
+    }
+    this.clampToZone(enemy, def, mapData);
+  }
+
+  // --- Boss ability system ---
+
+  private updateBossAbilities(
+    enemy: Enemy,
+    def: EnemyDefinition,
+    target: Player,
+    deltaTimeMs: number,
+    config: BossPhaseConfig,
+    state: GameState,
+    shootingSystem: ShootingPatternSystem,
+    mapData?: DungeonMapData
+  ): void {
+    // Tick down active ability timers
+    if (enemy.bossAbilityActiveTimer > 0) {
+      enemy.bossAbilityActiveTimer -= deltaTimeMs;
+      if (enemy.bossAbilityActiveTimer <= 0) {
+        enemy.bossAbilityActiveTimer = 0;
+        // End active abilities
+        if (enemy.bossShieldActive) {
+          enemy.bossShieldActive = false;
+          // Fire a big burst when shield drops
+          shootingSystem.executePattern(enemy, target, { ...def, shootingPattern: ShootingPatternType.BurstRing16 }, state);
+        }
+        if (enemy.bossEnraged) {
+          enemy.bossEnraged = false;
+        }
+      }
     }
 
-    return baseDef;
+    if (config.ability === BossAbilityType.None) return;
+    if (!config.abilityCooldown) return;
+
+    // Tick down ability cooldown
+    enemy.bossAbilityCooldownTimer -= deltaTimeMs;
+    if (enemy.bossAbilityCooldownTimer > 0) return;
+
+    // Fire ability
+    enemy.bossAbilityCooldownTimer = config.abilityCooldown;
+
+    switch (config.ability) {
+      case BossAbilityType.SummonAdds:
+        this.abilitySpawnMinions(enemy, config, state);
+        break;
+      case BossAbilityType.AreaDenial:
+        this.abilityAreaDenial(enemy, config, state);
+        break;
+      case BossAbilityType.ShieldPhase:
+        this.abilityShieldPhase(enemy, config);
+        break;
+      case BossAbilityType.Enrage:
+        this.abilityEnrage(enemy, config);
+        break;
+      case BossAbilityType.PullPlayers:
+        this.abilityPullPlayers(enemy, config, state);
+        break;
+      case BossAbilityType.VineSnare:
+        this.abilityVineSnare(enemy, config, target, state);
+        break;
+    }
+  }
+
+  private abilitySpawnMinions(enemy: Enemy, config: BossPhaseConfig, state: GameState): void {
+    const count = config.abilityParam ?? 2;
+    const minionType = config.abilityMinionType;
+    if (minionType === undefined) return;
+
+    // Count existing boss minions
+    let existing = 0;
+    state.enemies.forEach((e) => {
+      if (e.packLeaderId === enemy.id) existing++;
+    });
+    // Cap total minions at count * 2
+    const toSpawn = Math.min(count, count * 2 - existing);
+    if (toSpawn <= 0) return;
+
+    // Store spawn request on enemy for DungeonSystem to pick up
+    enemy.lastMinionSpawnTime = Date.now();
+    // We use a convention: store count in movementPhaseTimer temporarily
+    // DungeonSystem will read this — see bossMinionsToSpawn handling
+    (enemy as any)._pendingMinionSpawn = { type: minionType, count: toSpawn };
+  }
+
+  private abilityAreaDenial(enemy: Enemy, config: BossPhaseConfig, state: GameState): void {
+    // Create a ring of projectiles at the boss's current position that expand outward slowly
+    // This uses BurstRing8 at reduced speed to simulate a lingering danger zone
+    const fakeDef: EnemyDefinition = {
+      ...ENEMY_DEFS[enemy.enemyType],
+      shootingPattern: ShootingPatternType.BurstRing8,
+      projectileSpeed: 30, // very slow expanding pool
+      projectileRange: config.abilityParam ?? 60,
+      projectileDamage: Math.round((config.projectileDamage ?? 20) * 0.5),
+      shootCooldown: 999999,
+    };
+    // Find any target for aiming (not actually used by BurstRing)
+    let target: Player | null = null;
+    state.players.forEach((p) => {
+      if (!target && p.alive && p.zone === enemy.zone) target = p;
+    });
+    if (target) {
+      const { ShootingPatternSystem: _unused, ...rest } = {} as any;
+      // We'll queue the pattern through the normal shooting path
+      (enemy as any)._pendingAreaDenial = fakeDef;
+    }
+  }
+
+  private abilityShieldPhase(enemy: Enemy, config: BossPhaseConfig): void {
+    enemy.bossShieldActive = true;
+    enemy.bossAbilityActiveTimer = config.abilityParam ?? 2000;
+  }
+
+  private abilityEnrage(enemy: Enemy, config: BossPhaseConfig): void {
+    enemy.bossEnraged = true;
+    enemy.bossAbilityActiveTimer = config.abilityParam ?? 3000;
+  }
+
+  private abilityPullPlayers(enemy: Enemy, config: BossPhaseConfig, state: GameState): void {
+    const pullRadius = config.abilityParam ?? 200;
+    state.players.forEach((player) => {
+      if (!player.alive || player.zone !== enemy.zone) return;
+      const dist = distanceBetween(enemy.x, enemy.y, player.x, player.y);
+      if (dist > pullRadius || dist < 20) return;
+      // Pull player 30% closer to boss
+      const angle = angleBetween(player.x, player.y, enemy.x, enemy.y);
+      const pullStrength = dist * 0.3;
+      player.x += Math.cos(angle) * pullStrength;
+      player.y += Math.sin(angle) * pullStrength;
+    });
+  }
+
+  private abilityVineSnare(enemy: Enemy, config: BossPhaseConfig, target: Player, state: GameState): void {
+    // Find closest player and briefly slow them (via speed debuff)
+    // We mark the snare duration on the player — CombatSystem can check this
+    const snareDuration = config.abilityParam ?? 1500;
+    let closest: Player | null = null;
+    let closestDist = Infinity;
+    state.players.forEach((player) => {
+      if (!player.alive || player.zone !== enemy.zone) return;
+      const dist = distanceBetween(enemy.x, enemy.y, player.x, player.y);
+      if (dist < closestDist) {
+        closestDist = dist;
+        closest = player;
+      }
+    });
+    if (closest) {
+      // Apply snare as a speed debuff timer on the player
+      (closest as any).vineSnareTimer = snareDuration;
+    }
   }
 }

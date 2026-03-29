@@ -45,7 +45,7 @@ export const SPEED_PER_LEVEL = 1;
 export const MAX_SPEED = 300; // hard ceiling
 export const ROAD_SPEED_MULTIPLIER = 1.3; // 30% faster on roads
 export const RIVER_SPEED_MULTIPLIER = 0.5; // 50% slower in rivers
-export const HP_REGEN_PER_LEVEL = 0.1; // hp/s per level
+export const HP_REGEN_PER_LEVEL = 0.04; // hp/s per level
 
 // Server
 export const TICK_RATE = 20; // updates per second
@@ -90,9 +90,9 @@ export const EQUIPMENT_SLOTS = 4; // weapon, ability, armor, ring
 
 // Mana
 export const BASE_MAX_MANA = 100;
-export const BASE_MANA_REGEN = 5; // mana/s
+export const BASE_MANA_REGEN = 3; // mana/s
 export const MANA_PER_LEVEL = 2; // bonus max mana per level
-export const MANA_REGEN_PER_LEVEL = 0.2; // bonus mana regen per level
+export const MANA_REGEN_PER_LEVEL = 0.06; // bonus mana regen per level
 
 // Default starting equipment (tier 1 of each)
 export const DEFAULT_WEAPON = 11; // Bow T1

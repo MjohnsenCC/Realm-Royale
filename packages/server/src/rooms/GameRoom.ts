@@ -2656,6 +2656,17 @@ export class GameRoom extends Room<GameState> {
 
       const inputCount = player.pendingInputs.length;
 
+      // Aim state used for projectile creation — captured from the first
+      // input in the batch that triggers shooting / ability so the angle
+      // matches the moment the player actually clicked, not a later input
+      // in the same batch where they may have rotated.
+      let shootAimAngle = player.aimAngle;
+      let shootAimX = player.inputAimX;
+      let shootAimY = player.inputAimY;
+      let abilityAimAngle = player.aimAngle;
+      let abilityAimX = player.inputAimX;
+      let abilityAimY = player.inputAimY;
+
       if (inputCount > 0) {
         player.pendingInputs.sort((a, b) => a.seq - b.seq);
 
@@ -2683,6 +2694,9 @@ export class GameRoom extends Room<GameState> {
           : isVaultZone(player.zone)
             ? getVaultDecorations()
             : undefined;
+
+        let shootCaptured = false;
+        let abilityCaptured = false;
 
         for (const input of player.pendingInputs) {
           // Terrain speed modifiers in hostile zone
@@ -2743,12 +2757,31 @@ export class GameRoom extends Room<GameState> {
           player.inputShooting = input.shooting;
           player.inputUseAbility = input.useAbility;
           player.lastProcessedInput = input.seq;
+
+          // Capture aim state from the FIRST input with shooting/ability
+          if (input.shooting && !shootCaptured) {
+            shootCaptured = true;
+            shootAimAngle = player.aimAngle;
+            shootAimX = player.inputAimX;
+            shootAimY = player.inputAimY;
+          }
+          if (input.useAbility && !abilityCaptured) {
+            abilityCaptured = true;
+            abilityAimAngle = player.aimAngle;
+            abilityAimX = player.inputAimX;
+            abilityAimY = player.inputAimY;
+          }
         }
+
+        // If ANY input in the batch had shooting/ability, ensure the flag
+        // is set — prevents dropped shots when a later input clears the flag.
+        if (shootCaptured) player.inputShooting = true;
+        if (abilityCaptured) player.inputUseAbility = true;
 
         player.pendingInputs.length = 0;
       }
 
-      // Handle shooting
+      // Handle shooting — use the aim angle captured from the shooting input
       if (player.inputShooting) {
         const now = tickNow;
         if (now - player.lastShootTime >= player.cachedShootCooldown) {
@@ -2770,9 +2803,9 @@ export class GameRoom extends Room<GameState> {
             }
 
             for (let p = 0; p < projectileCount; p++) {
-              let angle = player.aimAngle;
+              let angle = shootAimAngle;
               if (projectileCount > 1 && spreadAngle > 0) {
-                const startAngle = player.aimAngle - spreadAngle / 2;
+                const startAngle = shootAimAngle - spreadAngle / 2;
                 angle = startAngle + (spreadAngle / (projectileCount - 1)) * p;
               }
 
@@ -2890,15 +2923,15 @@ export class GameRoom extends Room<GameState> {
                 // Expanding AoE: stationary circle that grows over time at cursor position
                 const proj = new Projectile();
                 proj.id = generateId("aproj");
-                proj.x = player.inputAimX;
-                proj.y = player.inputAimY;
+                proj.x = abilityAimX;
+                proj.y = abilityAimY;
                 proj.angle = 0;
                 proj.ownerType = EntityType.Player;
                 proj.ownerId = player.id;
                 proj.speed = abilityProjSpeed; // expansion rate
                 proj.damage = abilityDamage;
-                proj.startX = player.inputAimX;
-                proj.startY = player.inputAimY;
+                proj.startX = abilityAimX;
+                proj.startY = abilityAimY;
                 proj.maxRange = abilityRange; // max radius
                 proj.collisionRadius = abilityProjSize; // starting radius
                 proj.projType = ProjectileType.RelicExpand;
@@ -2909,8 +2942,8 @@ export class GameRoom extends Room<GameState> {
               } else if (isAoeRing) {
                 // AoE ring: fire projectiles evenly spaced in a full circle
                 // Relic spawns at cursor position, Helm spawns around the player
-                const ringCenterX = abilitySubtype === AbilitySubtype.Relic ? player.inputAimX : player.x;
-                const ringCenterY = abilitySubtype === AbilitySubtype.Relic ? player.inputAimY : player.y;
+                const ringCenterX = abilitySubtype === AbilitySubtype.Relic ? abilityAimX : player.x;
+                const ringCenterY = abilitySubtype === AbilitySubtype.Relic ? abilityAimY : player.y;
                 for (let pi = 0; pi < projCount; pi++) {
                   const angle = (2 * Math.PI / projCount) * pi;
                   const proj = new Projectile();
@@ -2939,7 +2972,7 @@ export class GameRoom extends Room<GameState> {
                 proj.id = generateId("aproj");
                 proj.x = player.x;
                 proj.y = player.y;
-                proj.angle = player.aimAngle;
+                proj.angle = abilityAimAngle;
                 proj.ownerType = EntityType.Player;
                 proj.ownerId = player.id;
                 proj.speed = abilityProjSpeed;

@@ -13,7 +13,6 @@ import {
   isWaterTile,
   getRealmMap,
   distanceBetween,
-  circlesOverlap,
   getPlayerLevel,
   computePlayerStats,
   getZoneDimensions,
@@ -43,6 +42,42 @@ export interface CombatEvent {
 // Matches ENEMY_SYNC_RADIUS so every client-visible enemy is in the grid.
 const COMBAT_GRID_RADIUS = 1600;
 const COMBAT_GRID_RADIUS_SQ = COMBAT_GRID_RADIUS * COMBAT_GRID_RADIUS;
+
+/**
+ * Squared distance from point (px,py) to the closest point on the line
+ * segment (x1,y1)→(x2,y2).  Used for swept (continuous) collision detection
+ * so projectiles cannot tunnel through targets between ticks.
+ */
+function segmentPointDistSq(
+  x1: number, y1: number, x2: number, y2: number,
+  px: number, py: number
+): number {
+  const dx = x2 - x1;
+  const dy = y2 - y1;
+  const lenSq = dx * dx + dy * dy;
+  if (lenSq === 0) {
+    const ex = px - x1;
+    const ey = py - y1;
+    return ex * ex + ey * ey;
+  }
+  let t = ((px - x1) * dx + (py - y1) * dy) / lenSq;
+  if (t < 0) t = 0;
+  else if (t > 1) t = 1;
+  const cx = x1 + t * dx;
+  const cy = y1 + t * dy;
+  const ex = px - cx;
+  const ey = py - cy;
+  return ex * ex + ey * ey;
+}
+
+/** Does a circle swept along a segment overlap a stationary circle? */
+function sweptCirclesOverlap(
+  segX1: number, segY1: number, segX2: number, segY2: number, r1: number,
+  px: number, py: number, r2: number
+): boolean {
+  const combined = r1 + r2;
+  return segmentPointDistSq(segX1, segY1, segX2, segY2, px, py) < combined * combined;
+}
 
 export class CombatSystem {
   private events: CombatEvent[] = [];
@@ -83,6 +118,12 @@ export class CombatSystem {
 
     // Move projectiles and check collisions
     state.projectiles.forEach((proj, id) => {
+      // Save pre-movement position for swept collision detection.
+      // For AoE projectiles (stationary), prevX/Y equal current position so
+      // the swept check degrades to a normal point check — no special case needed.
+      const prevX = proj.x;
+      const prevY = proj.y;
+
       if (proj.expandingAoe) {
         // Expanding AoE: grow collision radius instead of moving
         proj.collisionRadius += proj.speed * dt;
@@ -141,7 +182,10 @@ export class CombatSystem {
 
       if (proj.ownerType === EntityType.Player) {
         // Player projectile → check enemy collisions using spatial grid
-        const queryRadius = proj.expandingAoe ? proj.collisionRadius + 50 : 50;
+        // Expand query radius by distance traveled this tick so enemies along
+        // the full swept path are included in the candidate set.
+        const travelDist = proj.expandingAoe ? 0 : proj.speed * dt;
+        const queryRadius = proj.expandingAoe ? proj.collisionRadius + 50 : 50 + travelDist;
         const nearby = this.enemyGrid.query(proj.x, proj.y, queryRadius);
         for (const enemy of nearby) {
           // Only collide with enemies in the same zone
@@ -153,10 +197,27 @@ export class CombatSystem {
           const enemyRadius = def ? def.radius : 14;
           const effectiveRadius = enemyRadius + HITBOX_PADDING;
           if (
-            circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, effectiveRadius) ||
-            (enemy.posHistoryReady >= 1 && circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.prevX1, enemy.prevY1, effectiveRadius)) ||
-            (enemy.posHistoryReady >= 2 && circlesOverlap(proj.x, proj.y, proj.collisionRadius, enemy.prevX2, enemy.prevY2, effectiveRadius))
+            sweptCirclesOverlap(prevX, prevY, proj.x, proj.y, proj.collisionRadius, enemy.x, enemy.y, effectiveRadius) ||
+            (enemy.posHistoryReady >= 1 && sweptCirclesOverlap(prevX, prevY, proj.x, proj.y, proj.collisionRadius, enemy.prevX1, enemy.prevY1, effectiveRadius)) ||
+            (enemy.posHistoryReady >= 2 && sweptCirclesOverlap(prevX, prevY, proj.x, proj.y, proj.collisionRadius, enemy.prevX2, enemy.prevY2, effectiveRadius))
           ) {
+            // Sleeping boss: trigger wake but take no damage
+            if (enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
+              this.events.push({
+                type: "bossHit",
+                enemyZone: enemy.zone,
+                isBoss: true,
+              });
+              if (!proj.piercing) break;
+              continue;
+            }
+
+            // Boss shield phase: immune to damage, still consume projectile
+            if (enemy.bossShieldActive) {
+              if (!proj.piercing) break;
+              continue;
+            }
+
             const effectiveDamage = enemy.damageResist > 0
               ? Math.round(proj.damage * (1 - enemy.damageResist / 100))
               : proj.damage;
@@ -164,15 +225,6 @@ export class CombatSystem {
 
             // Track damage per player for loot eligibility
             enemy.damageMap.set(proj.ownerId, (enemy.damageMap.get(proj.ownerId) || 0) + effectiveDamage);
-
-            // Wake sleeping boss on first hit
-            if (enemy.isBoss && enemy.aiState === EnemyAIState.Sleeping) {
-              this.events.push({
-                type: "bossHit",
-                enemyZone: enemy.zone,
-                isBoss: true,
-              });
-            }
 
             if (proj.piercing) {
               proj.hitEnemies.add(enemy.id);
@@ -245,14 +297,15 @@ export class CombatSystem {
         }
       } else {
         // Enemy projectile → check player collisions using spatial grid
-        const nearbyPlayers = this.playerGrid.query(proj.x, proj.y, 50);
+        const enemyTravelDist = proj.speed * dt;
+        const nearbyPlayers = this.playerGrid.query(proj.x, proj.y, 50 + enemyTravelDist);
         for (const player of nearbyPlayers) {
           if (player.invulnerable) continue;
           if (player.zone !== proj.zone) continue;
           if (proj.ownerId === player.id) continue;
 
           if (
-            circlesOverlap(proj.x, proj.y, proj.collisionRadius, player.x, player.y, PLAYER_RADIUS)
+            sweptCirclesOverlap(prevX, prevY, proj.x, proj.y, proj.collisionRadius, player.x, player.y, PLAYER_RADIUS)
           ) {
             const reduction = proj.damageType === DamageType.Magic
               ? player.cachedMagicDmgReduce
